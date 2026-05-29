@@ -28,6 +28,7 @@ src/
   components/
     AdoptCard.jsx
     CoachConversationPanel.jsx
+    DataTransferPanel.jsx
     ExerciseEditor.jsx
     PlanDayCard.jsx
     PromptPreviewPanel.jsx
@@ -45,6 +46,7 @@ src/
     chatHistory.js
     coachChat.js
     dailyLog.js
+    dataTransfer.js
     defaultData.js
     exerciseForm.js
     profileForm.js
@@ -78,6 +80,7 @@ docs/
 - `src/tabs/ProfileTab.jsx`
   - 维护用户基础档案
   - 维护训练目标与三大项 1RM
+  - 提供本地数据备份导出与导入恢复入口
 
 - `src/tabs/PlanTab.jsx`
   - 维护一周训练计划
@@ -107,6 +110,10 @@ docs/
 - `src/components/AdoptCard.jsx`
   - 展示 AI 建议中的日期、摘要和字段变化
   - 触发“采纳”与“忽略”回调，不直接处理写回逻辑
+
+- `src/components/DataTransferPanel.jsx`
+  - 负责触发本地 JSON 备份导出与导入
+  - 展示导入成功或失败提示
 
 - `src/components/WeightChart.jsx`
   - 负责渲染今日日志页的体重趋势折线图
@@ -143,6 +150,9 @@ docs/
   - 校验建议中的 `day / exerciseName / field`
   - 只支持对**已有动作的已有字段**执行 `update`
   - 任一变更不合法时整次采纳失败，避免部分写回
+- `src/utils/dataTransfer.js`
+  - 统一生成备份 JSON 结构和文件名
+  - 负责导入前的最小字段校验
 - `src/utils/weightChart.js`
   - 统一整理近 14 天体重图表数据
   - 过滤空体重和超出时间范围的日志记录
@@ -176,6 +186,18 @@ ProfileTab / PlanTab
 ```
 
 这里没有远端存储，也没有服务端校验，因此数据保存结果完全以浏览器本地为准。
+
+ProfileTab 中的数据备份面板还支持：
+
+```text
+DataTransferPanel
+  -> buildBackupPayload(appState)
+  -> 下载 JSON 备份文件
+  -> 读取用户选择的 JSON 文件
+  -> parseBackupJson(rawText)
+  -> App 顶层 state 整体替换
+  -> useEffect 分别写回四类 localStorage 数据
+```
 
 ### 4.3 用户保存今日日志
 

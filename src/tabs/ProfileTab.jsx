@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DataTransferPanel from '../components/DataTransferPanel.jsx'
 import {
   basicFields,
   draftToProfile,
@@ -7,7 +8,7 @@ import {
   sexOptions,
 } from '../utils/profileForm.js'
 
-function ProfileTab({ profile, onProfileChange }) {
+function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
   const [draft, setDraft] = useState(() => profileToDraft(profile))
 
   useEffect(() => {
@@ -26,6 +27,13 @@ function ProfileTab({ profile, onProfileChange }) {
         ...draft[group],
         [key]: value,
       },
+    })
+  }
+
+  function updateTopLevelField(key, value) {
+    commitDraft({
+      ...draft,
+      [key]: value,
     })
   }
 
@@ -69,84 +77,70 @@ function ProfileTab({ profile, onProfileChange }) {
       <p className="text-sm font-semibold text-fitloop-mint">Tab 1</p>
       <h2 className="mt-3 text-2xl font-bold text-white">我的档案</h2>
       <p className="mt-4 max-w-2xl leading-7 text-slate-300">
-        这里直接编辑并保存用户档案，所有数字字段都会以数字形式写入 `fitloop_profile`，
-        刷新后仍然保留。
+        这里直接编辑并保存用户档案，所有数字字段都会以数字形式写入
+        <code>fitloop_profile</code>，刷新后仍会保留。
       </p>
 
-      <form className="mt-8 space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {basicFields.map(renderBasicField)}
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <label className="space-y-2">
-            <span className="text-sm text-slate-300">目标体重 (kg)</span>
-            <input
-              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-              inputMode="numeric"
-              onChange={(event) =>
-                setDraft((current) => {
-                  const nextDraft = { ...current, targetWeight: event.target.value }
-                  onProfileChange(draftToProfile(nextDraft))
-                  return nextDraft
-                })
-              }
-              step="0.1"
-              type="number"
-              value={draft.targetWeight}
-            />
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm text-slate-300">训练目标</span>
-            <input
-              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-              onChange={(event) =>
-                setDraft((current) => {
-                  const nextDraft = { ...current, goal: event.target.value }
-                  onProfileChange(draftToProfile(nextDraft))
-                  return nextDraft
-                })
-              }
-              value={draft.goal}
-            />
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm text-slate-300">备注</span>
-            <textarea
-              className="min-h-24 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-              onChange={(event) =>
-                setDraft((current) => {
-                  const nextDraft = { ...current, notes: event.target.value }
-                  onProfileChange(draftToProfile(nextDraft))
-                  return nextDraft
-                })
-              }
-              value={draft.notes}
-            />
-          </label>
-        </div>
-
-        <div className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-          <p className="text-sm font-semibold text-slate-100">三大项 1RM</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            {oneRmFields.map((field) => (
-              <label className="space-y-2" key={field.key}>
-                <span className="text-sm text-slate-300">{field.label}</span>
-                <input
-                  className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-                  inputMode="numeric"
-                  onChange={(event) => updateNestedField('oneRM', field.key, event.target.value)}
-                  step="0.1"
-                  type="number"
-                  value={draft.oneRM[field.key]}
-                />
-              </label>
-            ))}
+      <div className="mt-8 space-y-6">
+        <form className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {basicFields.map(renderBasicField)}
           </div>
-        </div>
-      </form>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">目标体重 (kg)</span>
+              <input
+                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                inputMode="numeric"
+                onChange={(event) => updateTopLevelField('targetWeight', event.target.value)}
+                step="0.1"
+                type="number"
+                value={draft.targetWeight}
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">训练目标</span>
+              <input
+                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                onChange={(event) => updateTopLevelField('goal', event.target.value)}
+                value={draft.goal}
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">备注</span>
+              <textarea
+                className="min-h-24 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                onChange={(event) => updateTopLevelField('notes', event.target.value)}
+                value={draft.notes}
+              />
+            </label>
+          </div>
+
+          <div className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+            <p className="text-sm font-semibold text-slate-100">三大项 1RM</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {oneRmFields.map((field) => (
+                <label className="space-y-2" key={field.key}>
+                  <span className="text-sm text-slate-300">{field.label}</span>
+                  <input
+                    className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                    inputMode="numeric"
+                    onChange={(event) => updateNestedField('oneRM', field.key, event.target.value)}
+                    step="0.1"
+                    type="number"
+                    value={draft.oneRM[field.key]}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </form>
+
+        <DataTransferPanel appState={appState} onImportData={onImportData} />
+      </div>
     </section>
   )
 }

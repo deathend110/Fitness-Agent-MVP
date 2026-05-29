@@ -41,11 +41,30 @@ function App() {
     saveStorage(storageKeys.chatHistory, chatHistory)
   }, [chatHistory])
 
+  function handleImportData({
+    profile: nextProfile,
+    weeklyPlan: nextWeeklyPlan,
+    dailyLog: nextDailyLog,
+    chatHistory: nextChatHistory,
+  }) {
+    setProfile(nextProfile)
+    setWeeklyPlan(nextWeeklyPlan)
+    setDailyLog(nextDailyLog)
+    setChatHistory(nextChatHistory)
+  }
+
   const tabs = [
     {
       id: 'profile',
       label: '我的档案',
-      component: <ProfileTab profile={profile} onProfileChange={setProfile} />,
+      component: (
+        <ProfileTab
+          appState={{ profile, weeklyPlan, dailyLog, chatHistory }}
+          onImportData={handleImportData}
+          onProfileChange={setProfile}
+          profile={profile}
+        />
+      ),
     },
     {
       id: 'plan',
