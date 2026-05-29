@@ -23,6 +23,7 @@ const defaultProfile = {
     age: 23,
     height: 178,
     weight: 82.1,
+    waist: 82,
   },
   oneRM: {
     squat: 120,

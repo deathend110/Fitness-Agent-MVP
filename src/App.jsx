@@ -14,7 +14,7 @@ import { loadStorage, saveStorage } from './utils/storage.js'
 
 function App() {
   const [activeTabId, setActiveTabId] = useState('profile')
-  const [profile] = useState(() => loadStorage(storageKeys.profile, defaultProfile))
+  const [profile, setProfile] = useState(() => loadStorage(storageKeys.profile, defaultProfile))
   const [weeklyPlan] = useState(() =>
     loadStorage(storageKeys.weeklyPlan, defaultWeeklyPlan),
   )
@@ -43,7 +43,7 @@ function App() {
     {
       id: 'profile',
       label: '我的档案',
-      component: <ProfileTab profile={profile} />,
+      component: <ProfileTab profile={profile} onProfileChange={setProfile} />,
     },
     {
       id: 'plan',
@@ -76,8 +76,7 @@ function App() {
               AI 健身教练与训练记录闭环
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-              当前已接入 localStorage 默认数据。即使浏览器里还没有任何记录，也能直接看到档案、
-              训练计划、今日日志和 AI 对话摘要，方便后续继续做编辑和闭环能力。
+              当前已接入 localStorage 默认数据。即使浏览器里还没有任何记录，也能直接看到档案、训练计划、今日日志和 AI 对话摘要，方便后续继续做编辑和闭环能力。
             </p>
           </div>
 
@@ -105,7 +104,7 @@ function App() {
         </header>
 
         <section className="flex-1 py-10">
-          {/* App 统一注入本地数据，Tab 先专注展示各自的业务摘要。 */}
+          {/* App 统一注入本地状态，Tab 只负责呈现和提交变更。 */}
           {activeTab.component}
         </section>
       </section>

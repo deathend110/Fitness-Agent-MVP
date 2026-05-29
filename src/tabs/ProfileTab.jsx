@@ -1,42 +1,152 @@
-function ProfileTab({ profile }) {
-  const { basic, oneRM, goal, targetWeight, notes } = profile
+import { useEffect, useState } from 'react'
+import {
+  basicFields,
+  draftToProfile,
+  oneRmFields,
+  profileToDraft,
+  sexOptions,
+} from '../utils/profileForm.js'
+
+function ProfileTab({ profile, onProfileChange }) {
+  const [draft, setDraft] = useState(() => profileToDraft(profile))
+
+  useEffect(() => {
+    setDraft(profileToDraft(profile))
+  }, [profile])
+
+  function commitDraft(nextDraft) {
+    setDraft(nextDraft)
+    onProfileChange(draftToProfile(nextDraft))
+  }
+
+  function updateNestedField(group, key, value) {
+    commitDraft({
+      ...draft,
+      [group]: {
+        ...draft[group],
+        [key]: value,
+      },
+    })
+  }
+
+  function renderBasicField(field) {
+    if (field.type === 'select') {
+      return (
+        <label className="space-y-2" key={field.key}>
+          <span className="text-sm text-slate-300">{field.label}</span>
+          <select
+            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            onChange={(event) => updateNestedField('basic', field.key, event.target.value)}
+            value={draft.basic[field.key]}
+          >
+            {sexOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )
+    }
+
+    return (
+      <label className="space-y-2" key={field.key}>
+        <span className="text-sm text-slate-300">{field.label}</span>
+        <input
+          className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+          inputMode={field.inputMode}
+          onChange={(event) => updateNestedField('basic', field.key, event.target.value)}
+          step={field.step}
+          type={field.type}
+          value={field.key === 'name' ? draft.basic.name : draft.basic[field.key]}
+        />
+      </label>
+    )
+  }
 
   return (
     <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
       <p className="text-sm font-semibold text-fitloop-mint">Tab 1</p>
       <h2 className="mt-3 text-2xl font-bold text-white">我的档案</h2>
       <p className="mt-4 max-w-2xl leading-7 text-slate-300">
-        当前先接入默认档案摘要，后续任务再在这里补完整编辑表单和实时保存交互。
+        这里直接编辑并保存用户档案，所有数字字段都会以数字形式写入 `fitloop_profile`，
+        刷新后仍然保留。
       </p>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">基本信息</p>
-          <p className="mt-3 text-lg font-semibold text-white">{basic.name}</p>
-          <p className="mt-2 text-sm text-slate-300">
-            {basic.age} 岁 · {basic.sex === 'male' ? '男' : '女'} · {basic.height} cm ·{' '}
-            {basic.weight} kg
-          </p>
-        </article>
+      <form className="mt-8 space-y-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {basicFields.map(renderBasicField)}
+        </div>
 
-        <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">三大项 1RM</p>
-          <p className="mt-3 text-sm text-slate-200">深蹲 {oneRM.squat} kg</p>
-          <p className="mt-2 text-sm text-slate-200">卧推 {oneRM.bench} kg</p>
-          <p className="mt-2 text-sm text-slate-200">硬拉 {oneRM.deadlift} kg</p>
-        </article>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">目标体重 (kg)</span>
+            <input
+              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+              inputMode="numeric"
+              onChange={(event) =>
+                setDraft((current) => {
+                  const nextDraft = { ...current, targetWeight: event.target.value }
+                  onProfileChange(draftToProfile(nextDraft))
+                  return nextDraft
+                })
+              }
+              step="0.1"
+              type="number"
+              value={draft.targetWeight}
+            />
+          </label>
 
-        <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">目标</p>
-          <p className="mt-3 text-lg font-semibold text-white">{goal}</p>
-          <p className="mt-2 text-sm text-slate-300">目标体重 {targetWeight} kg</p>
-        </article>
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">训练目标</span>
+            <input
+              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+              onChange={(event) =>
+                setDraft((current) => {
+                  const nextDraft = { ...current, goal: event.target.value }
+                  onProfileChange(draftToProfile(nextDraft))
+                  return nextDraft
+                })
+              }
+              value={draft.goal}
+            />
+          </label>
 
-        <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">备注</p>
-          <p className="mt-3 text-sm leading-6 text-slate-300">{notes}</p>
-        </article>
-      </div>
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">备注</span>
+            <textarea
+              className="min-h-24 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+              onChange={(event) =>
+                setDraft((current) => {
+                  const nextDraft = { ...current, notes: event.target.value }
+                  onProfileChange(draftToProfile(nextDraft))
+                  return nextDraft
+                })
+              }
+              value={draft.notes}
+            />
+          </label>
+        </div>
+
+        <div className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+          <p className="text-sm font-semibold text-slate-100">三大项 1RM</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {oneRmFields.map((field) => (
+              <label className="space-y-2" key={field.key}>
+                <span className="text-sm text-slate-300">{field.label}</span>
+                <input
+                  className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                  inputMode="numeric"
+                  onChange={(event) => updateNestedField('oneRM', field.key, event.target.value)}
+                  step="0.1"
+                  type="number"
+                  value={draft.oneRM[field.key]}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      </form>
     </section>
   )
 }
