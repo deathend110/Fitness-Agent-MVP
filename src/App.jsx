@@ -78,6 +78,7 @@ function App() {
           chatHistory={chatHistory}
           dailyLog={dailyLog}
           onChatHistoryChange={setChatHistory}
+          onWeeklyPlanChange={setWeeklyPlan}
           profile={profile}
           weeklyPlan={weeklyPlan}
         />

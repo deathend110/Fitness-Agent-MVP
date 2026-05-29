@@ -20,6 +20,7 @@ src/
     TodayTab.jsx
   utils/
     adoptCard.js
+    adoptPlan.js
     aiResponse.js
     calc.js
     chatHistory.js
@@ -35,6 +36,7 @@ src/
     weeklyPlan.js
 tests/
   adoptCard.test.js
+  adoptPlan.test.js
   aiResponse.test.js
   chatHistory.test.js
   coachChat.test.js
@@ -63,6 +65,7 @@ tests/
 - `src/tabs/CoachTab.jsx`
   - 维护 AI 教练输入草稿、发送状态和页内错误
   - 维护当前待采纳 suggestion 的本地展示状态
+  - 接收 `onWeeklyPlanChange`，负责在采纳时给出成功/失败反馈
   - 读取最新 `profile / weeklyPlan / dailyLog`
   - 组合最近日志摘要、聊天区、采纳卡片和上下文预览面板
 - `src/components/AdoptCard.jsx`
@@ -86,6 +89,9 @@ tests/
 - `src/utils/adoptCard.js`
   - 统一把 suggestion 里的 `day / summary / changes` 转成卡片展示模型
   - 负责星期映射、字段标签和前后值格式化，避免 UI 组件直接拼文案
+- `src/utils/adoptPlan.js`
+  - 统一校验 suggestion 里的目标日期、动作名和字段
+  - 负责返回“成功写回 / 失败提示 / 不部分写回”的结果对象
 - `src/utils/coachChat.js`
   - 每次请求前调用 `buildSystemPrompt()`
   - 按 `system -> history -> user` 顺序组装 DeepSeek messages
@@ -135,7 +141,10 @@ CoachTab 用户点击“发送”
   -> buildAdoptCardModel(reply.suggestion)
       -> 有合法建议时显示 AdoptCard
       -> 点击“忽略”后仅清除当前本地 suggestion
-      -> 点击“采纳并更新计划”当前只触发占位提示，真正写回放到 Task 4.6
+      -> 点击“采纳并更新计划”时调用 adoptPlanChange(weeklyPlan, day, changes)
+      -> 成功时 onWeeklyPlanChange(nextPlan) 更新 App 顶层 state
+      -> App useEffect(saveStorage) 写回 fitloop_weeklyPlan
+      -> 失败时保留卡片并显示明确错误提示
   -> appendChatMessages(nextHistory, [assistantTextMessage])
   -> useEffect(saveStorage) 写回 fitloop_chatHistory
 ```
@@ -202,6 +211,7 @@ CoachTab 用户点击“发送”
 - 当前仍只持久化 `role + content` 文本消息
 - `suggestion` 不持久化到 localStorage，只在 `CoachTab` 当前会话状态里临时保留
 - 点击“忽略”只会清除当前页面中的 suggestion，不影响既有聊天文本
+- 点击“采纳并更新计划”后，真正持久化的仍然只有更新后的 `fitloop_weeklyPlan`
 
 ## AI 调用链路
 
@@ -216,7 +226,9 @@ CoachTab
       -> parseAiResponse(content)
   -> buildAdoptCardModel(suggestion)
       -> AdoptCard 渲染建议日期 / summary / changes
-      -> onAdopt() 当前仅给出占位提示
+      -> onAdopt() -> adoptPlanChange()
+          -> 成功：更新 weeklyPlan 顶层 state、清除卡片、显示成功提示
+          -> 失败：保留卡片并显示失败提示
       -> onDismiss() 清除当前 suggestion
   -> appendChatMessages()
   -> saveStorage(fitloop_chatHistory)
@@ -226,6 +238,5 @@ CoachTab
 
 ## 后续扩展方向
 
-- 一键采纳训练建议并写回 `fitloop_weeklyPlan`
 - 体重趋势图、训练热力图、数据导入导出
 - 流式输出与更细粒度的错误处理

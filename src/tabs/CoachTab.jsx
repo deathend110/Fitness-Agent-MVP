@@ -4,6 +4,7 @@ import CoachConversationPanel from '../components/CoachConversationPanel.jsx'
 import PromptPreviewPanel from '../components/PromptPreviewPanel.jsx'
 import { deepSeekDefaults, getDeepSeekApiKeyStatus } from '../api/deepseek.js'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
+import { adoptPlanChange } from '../utils/adoptPlan.js'
 import { requestCoachReply } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import { buildPromptPreviewModel } from '../utils/promptPreview.js'
@@ -18,11 +19,12 @@ function CoachTab({
   chatHistory,
   dailyLog,
   onChatHistoryChange,
+  onWeeklyPlanChange,
   profile,
   weeklyPlan,
 }) {
   const [draft, setDraft] = useState('')
-  const [coachNotice, setCoachNotice] = useState('')
+  const [adoptFeedback, setAdoptFeedback] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [pendingSuggestion, setPendingSuggestion] = useState(null)
@@ -37,6 +39,10 @@ function CoachTab({
   const statusTone = apiKeyStatus.hasKey
     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
     : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+  const adoptFeedbackTone =
+    adoptFeedback?.tone === 'success'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+      : 'border-rose-500/30 bg-rose-500/10 text-rose-100'
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -50,7 +56,7 @@ function CoachTab({
     const nextHistory = appendChatMessages(chatHistory, [userMessage])
 
     setErrorMessage('')
-    setCoachNotice('')
+    setAdoptFeedback(null)
     setIsSending(true)
     setDraft('')
     onChatHistoryChange(nextHistory)
@@ -76,12 +82,28 @@ function CoachTab({
   }
 
   function handleAdoptSuggestion() {
-    // Task 4.5 先把采纳入口接通，真正写回 weeklyPlan 放在 4.6 完成。
-    setCoachNotice('当前仅触发采纳入口；训练计划写回会在 Task 4.6 接入。')
+    if (!pendingSuggestion) {
+      return
+    }
+
+    // 采纳动作只更新顶层 weeklyPlan state，持久化仍走 App 统一的 useEffect 流程。
+    const result = adoptPlanChange(weeklyPlan, pendingSuggestion.day, pendingSuggestion.changes)
+
+    setAdoptFeedback({
+      tone: result.ok ? 'success' : 'error',
+      message: result.message,
+    })
+
+    if (!result.ok) {
+      return
+    }
+
+    onWeeklyPlanChange(result.nextPlan)
+    setPendingSuggestion(null)
   }
 
   function handleDismissSuggestion() {
-    setCoachNotice('')
+    setAdoptFeedback(null)
     setPendingSuggestion(null)
   }
 
@@ -90,9 +112,9 @@ function CoachTab({
       <p className="text-sm font-semibold text-fitloop-mint">Tab 4</p>
       <h2 className="mt-3 text-2xl font-bold text-white">AI 教练</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
-        这里已经接入真实对话流程。每次发送都会重新构建最新训练上下文，再调用
-        DeepSeek 聊天接口；聊天历史会写入 <code>fitloop_chatHistory</code>
-        ，刷新后仍会保留最近 20 条消息。
+        这里已经接入真实对话流程。每次发送都会重新构建最新训练上下文，再调用 DeepSeek
+        聊天接口；聊天历史会写入 <code>fitloop_chatHistory</code>，刷新后仍会保留最近 20
+        条消息。
       </p>
 
       <article className={`mt-6 rounded-md border p-4 ${statusTone}`}>
@@ -127,12 +149,12 @@ function CoachTab({
             onDraftChange={setDraft}
             onSubmit={handleSubmit}
           />
-          <AdoptCard
-            card={adoptCard}
-            noticeMessage={coachNotice}
-            onAdopt={handleAdoptSuggestion}
-            onDismiss={handleDismissSuggestion}
-          />
+          <AdoptCard card={adoptCard} onAdopt={handleAdoptSuggestion} onDismiss={handleDismissSuggestion} />
+          {adoptFeedback ? (
+            <p className={`rounded-md border px-3 py-2 text-sm leading-6 ${adoptFeedbackTone}`}>
+              {adoptFeedback.message}
+            </p>
+          ) : null}
         </div>
 
         <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">

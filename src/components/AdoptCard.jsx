@@ -1,4 +1,4 @@
-function AdoptCard({ card, noticeMessage = '', onAdopt, onDismiss }) {
+function AdoptCard({ card, onAdopt, onDismiss }) {
   if (!card) {
     return null
   }
@@ -42,12 +42,6 @@ function AdoptCard({ card, noticeMessage = '', onAdopt, onDismiss }) {
           </div>
         ))}
       </div>
-
-      {noticeMessage ? (
-        <p className="mt-4 rounded-md border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-sm leading-6 text-sky-100">
-          {noticeMessage}
-        </p>
-      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-3">
         <button
