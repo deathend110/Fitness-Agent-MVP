@@ -3,6 +3,7 @@
 - **估时**：45 分钟
 - **依赖**：Task 3.3
 - **目标**：统一调用 AI 接口。
+- **额外提醒**：本节开发涉及deepseek api，请多多查看官方文档[https://api-docs.deepseek.com/  ](https://api-docs.deepseek.com/  )
 - **主要操作**：
   - 创建 `src/api/deepseek.js`。
   - 从 `import.meta.env.VITE_DEEPSEEK_API_KEY` 读取 API Key。
