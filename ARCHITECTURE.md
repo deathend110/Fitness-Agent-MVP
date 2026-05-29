@@ -174,3 +174,34 @@ CoachTab
 - 基于今日日志和计划的 AI 上下文注入
 - AI 返回结构化 JSON 建议并一键写回训练计划
 - 体重趋势图、训练热力图、数据导入导出
+
+## Task 4.1 补充结构
+
+### 新增模块
+
+- `src/api/deepseek.js`
+  - 负责读取 `import.meta.env.VITE_DEEPSEEK_API_KEY`
+  - 统一向 `POST https://api.deepseek.com/chat/completions` 发起请求
+  - 默认模型使用 `deepseek-v4-flash`
+  - 将缺少 API Key、网络失败、HTTP 非 2xx 响应统一转换为可直接展示的错误消息
+
+### CoachTab 当前状态
+
+- `src/tabs/CoachTab.jsx`
+  - 继续展示本地对话预览、最近日志摘要和 system prompt 预览
+  - 额外展示 DeepSeek 配置/调用状态，避免 `.env` 未配置时用户不知道问题出在哪里
+  - 当前不直接发起正式聊天请求，后续 Task 4.2 再接入发送流程
+
+### Task 4.1 调用链
+
+```text
+CoachTab
+  -> getDeepSeekApiKeyStatus()
+  -> 显示“已配置 / 未配置”状态提示
+
+后续对话发送（预留）
+  -> requestDeepSeekChat(messages, options)
+  -> POST https://api.deepseek.com/chat/completions
+  -> 返回 data.choices[0].message.content
+  -> 若失败则抛出可展示错误，由 UI 接住并提示
+```

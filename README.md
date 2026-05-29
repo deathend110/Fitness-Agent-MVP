@@ -89,3 +89,16 @@ npm run build
 - `fitloop_weeklyPlan`
 - `fitloop_dailyLog`
 - `fitloop_chatHistory`
+
+## Task 4.1 补充说明
+
+- 新增 `src/api/deepseek.js`，统一封装 DeepSeek Chat Completions 调用。
+- 默认接口地址为 `https://api.deepseek.com/chat/completions`。
+- 默认模型为 `deepseek-v4-flash`，未再使用即将弃用的 `deepseek-chat` / `deepseek-reasoner`。
+- `CoachTab` 现会显示 API Key 配置状态；如果未配置 `.env`，AI 教练页会直接提示缺少 `VITE_DEEPSEEK_API_KEY`。
+
+## Task 4.1 测试命令
+
+```bash
+node --test tests/deepseek.test.js
+```
