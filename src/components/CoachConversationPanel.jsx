@@ -17,6 +17,7 @@ function CoachConversationPanel({
   isSending,
   onDraftChange,
   onSubmit,
+  streamingText,
 }) {
   return (
     <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
@@ -45,8 +46,8 @@ function CoachConversationPanel({
         {isSending ? (
           <article className="mr-auto w-full max-w-[85%] rounded-md border border-fitloop-line bg-fitloop-panel/80 p-3">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">AI 教练</p>
-            <p className="mt-2 text-sm leading-6 text-slate-100">
-              正在整理你的最新训练上下文，请稍等……
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">
+              {streamingText || '正在整理你的最新训练上下文，请稍等...'}
             </p>
           </article>
         ) : null}
@@ -75,7 +76,9 @@ function CoachConversationPanel({
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-slate-400">
-            {isSending ? '请求发送中，暂时不能重复提交。' : '发送前会自动注入最新档案、计划和日志。'}
+            {isSending
+              ? '正在优先尝试流式输出；如果流式失败，会自动回退到普通回复。'
+              : '发送前会自动注入最新档案、计划和日志。'}
           </p>
           <button
             className="rounded-md bg-fitloop-orange px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"

@@ -4,7 +4,19 @@ import test from 'node:test'
 import {
   getDeepSeekApiKeyStatus,
   requestDeepSeekChat,
+  streamDeepSeekChat,
 } from '../src/api/deepseek.js'
+
+function createSseBody(chunks) {
+  const encoder = new TextEncoder()
+
+  return new ReadableStream({
+    start(controller) {
+      chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)))
+      controller.close()
+    },
+  })
+}
 
 test('getDeepSeekApiKeyStatus 在未配置 API Key 时返回明确错误提示', () => {
   const status = getDeepSeekApiKeyStatus({})
@@ -100,4 +112,33 @@ test('requestDeepSeekChat 在成功时返回首条消息 content', async () => {
   )
 
   assert.equal(content, '今天建议把深蹲降到 70%。')
+})
+
+test('streamDeepSeekChat 会按 SSE 增量拼接文本并回调 onDelta', async () => {
+  const deltas = []
+
+  const content = await streamDeepSeekChat(
+    [{ role: 'user', content: '给我今天的训练建议' }],
+    {
+      env: { VITE_DEEPSEEK_API_KEY: 'sk-test' },
+      fetchImpl: async () => ({
+        ok: true,
+        body: createSseBody([
+          ': keep-alive\n\n',
+          'data: {"choices":[{"delta":{"content":"先把"}}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"周一主项降一点。"}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      }),
+      onDelta: (delta, fullText) => {
+        deltas.push({ delta, fullText })
+      },
+    },
+  )
+
+  assert.equal(content, '先把周一主项降一点。')
+  assert.deepEqual(deltas, [
+    { delta: '先把', fullText: '先把' },
+    { delta: '周一主项降一点。', fullText: '先把周一主项降一点。' },
+  ])
 })

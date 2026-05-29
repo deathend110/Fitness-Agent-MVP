@@ -97,6 +97,7 @@ docs/
   - 在发送前读取最新 `profile / weeklyPlan / dailyLog`
   - 展示聊天区、上下文预览和建议采纳卡片
   - 在采纳成功时推动训练计划更新
+  - 优先消费流式回复，失败时自动回退到普通回复
 
 ### 3.3 关键复用组件
 
@@ -136,7 +137,7 @@ docs/
 
 - `src/utils/coachChat.js`
   - 按 `system -> history -> user` 顺序组装消息
-  - 调用 DeepSeek 接口
+  - 调用 DeepSeek 普通接口或流式接口
   - 调用 AI 响应解析逻辑，返回安全文本与 suggestion
 
 - `src/utils/aiResponse.js`
@@ -150,6 +151,7 @@ docs/
   - 校验建议中的 `day / exerciseName / field`
   - 只支持对**已有动作的已有字段**执行 `update`
   - 任一变更不合法时整次采纳失败，避免部分写回
+
 - `src/utils/dataTransfer.js`
   - 统一生成备份 JSON 结构和文件名
   - 负责导入前的最小字段校验
@@ -159,6 +161,7 @@ docs/
 
 - `src/api/deepseek.js`
   - 统一处理 API Key 检查、请求发送和错误归一化
+  - 同时封装普通聊天请求与基于 SSE 的流式请求
   - 当前默认模型为 `deepseek-v4-flash`
 
 ## 4. 数据流说明
@@ -230,7 +233,8 @@ CoachTab
 用户点击发送
   -> requestCoachReply()
       -> buildSystemPrompt()
-      -> requestDeepSeekChat(messages)
+      -> 优先 streamDeepSeekChat(messages)
+      -> 失败时回退 requestDeepSeekChat(messages)
       -> parseAiResponse(content)
   -> 返回 { text, suggestion }
   -> 展示聊天消息
@@ -363,7 +367,11 @@ CoachTab
 CoachTab
   -> requestCoachReply()
       -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
-      -> requestDeepSeekChat(messages)
+      -> 优先 streamDeepSeekChat(messages)
+          -> POST https://api.deepseek.com/chat/completions
+          -> stream: true
+          -> 返回 data-only SSE 增量片段
+      -> 失败时回退 requestDeepSeekChat(messages)
           -> POST https://api.deepseek.com/chat/completions
           -> model: deepseek-v4-flash
       -> parseAiResponse(content)

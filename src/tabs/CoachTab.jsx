@@ -5,7 +5,7 @@ import PromptPreviewPanel from '../components/PromptPreviewPanel.jsx'
 import { deepSeekDefaults, getDeepSeekApiKeyStatus } from '../api/deepseek.js'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import { adoptPlanChange } from '../utils/adoptPlan.js'
-import { requestCoachReply } from '../utils/coachChat.js'
+import { requestCoachReply, requestCoachReplyStream } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import { buildPromptPreviewModel } from '../utils/promptPreview.js'
 
@@ -13,6 +13,16 @@ function buildRecentDates(dailyLog) {
   return Object.keys(dailyLog)
     .sort((left, right) => right.localeCompare(left))
     .slice(0, 3)
+}
+
+function getVisibleStreamText(fullText) {
+  const markerIndex = fullText.indexOf('---JSON---')
+
+  if (markerIndex === -1) {
+    return fullText
+  }
+
+  return fullText.slice(0, markerIndex).trimEnd()
 }
 
 function CoachTab({
@@ -28,6 +38,7 @@ function CoachTab({
   const [errorMessage, setErrorMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [pendingSuggestion, setPendingSuggestion] = useState(null)
+  const [streamingText, setStreamingText] = useState('')
 
   const recentDates = useMemo(() => buildRecentDates(dailyLog), [dailyLog])
   const apiKeyStatus = getDeepSeekApiKeyStatus()
@@ -44,6 +55,19 @@ function CoachTab({
       ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
       : 'border-rose-500/30 bg-rose-500/10 text-rose-100'
 
+  async function requestReplyWithFallback(payload) {
+    try {
+      return await requestCoachReplyStream(payload, {
+        onText: (fullText) => {
+          setStreamingText(getVisibleStreamText(fullText))
+        },
+      })
+    } catch {
+      setStreamingText('')
+      return requestCoachReply(payload)
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
 
@@ -54,23 +78,24 @@ function CoachTab({
 
     const userMessage = { role: 'user', content: userInput }
     const nextHistory = appendChatMessages(chatHistory, [userMessage])
+    const requestPayload = {
+      chatHistory,
+      dailyLog,
+      profile,
+      userInput,
+      weeklyPlan,
+    }
 
     setErrorMessage('')
     setAdoptFeedback(null)
     setIsSending(true)
+    setStreamingText('')
     setDraft('')
     onChatHistoryChange(nextHistory)
 
     try {
-      const reply = await requestCoachReply({
-        chatHistory,
-        dailyLog,
-        profile,
-        userInput,
-        weeklyPlan,
-      })
+      const reply = await requestReplyWithFallback(requestPayload)
       setPendingSuggestion(reply.suggestion)
-
       onChatHistoryChange(
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
@@ -78,6 +103,7 @@ function CoachTab({
       setErrorMessage(error?.message || 'AI 教练暂时不可用，请稍后重试。')
     } finally {
       setIsSending(false)
+      setStreamingText('')
     }
   }
 
@@ -86,7 +112,6 @@ function CoachTab({
       return
     }
 
-    // 采纳动作只更新顶层 weeklyPlan state，持久化仍走 App 统一的 useEffect 流程。
     const result = adoptPlanChange(weeklyPlan, pendingSuggestion.day, pendingSuggestion.changes)
 
     setAdoptFeedback({
@@ -113,8 +138,8 @@ function CoachTab({
       <h2 className="mt-3 text-2xl font-bold text-white">AI 教练</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
         这里已经接入真实对话流程。每次发送都会重新构建最新训练上下文，再调用 DeepSeek
-        聊天接口；聊天历史会写入 <code>fitloop_chatHistory</code>，刷新后仍会保留最近 20
-        条消息。
+        聊天接口；默认优先尝试流式输出，失败时自动回退到普通回复。聊天历史会写入
+        <code>fitloop_chatHistory</code>，刷新后仍会保留最近 20 条消息。
       </p>
 
       <article className={`mt-6 rounded-md border p-4 ${statusTone}`}>
@@ -148,8 +173,13 @@ function CoachTab({
             isSending={isSending}
             onDraftChange={setDraft}
             onSubmit={handleSubmit}
+            streamingText={streamingText}
           />
-          <AdoptCard card={adoptCard} onAdopt={handleAdoptSuggestion} onDismiss={handleDismissSuggestion} />
+          <AdoptCard
+            card={adoptCard}
+            onAdopt={handleAdoptSuggestion}
+            onDismiss={handleDismissSuggestion}
+          />
           {adoptFeedback ? (
             <p className={`rounded-md border px-3 py-2 text-sm leading-6 ${adoptFeedbackTone}`}>
               {adoptFeedback.message}

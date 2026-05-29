@@ -59,40 +59,27 @@ function buildHttpErrorMessage(status, detail = '') {
 }
 
 async function readResponseData(response) {
-  if (typeof response.json === 'function') {
-    try {
-      return await response.json()
-    } catch (error) {
-      return null
-    }
+  if (typeof response.json !== 'function') {
+    return null
   }
 
-  return null
+  try {
+    return await response.json()
+  } catch {
+    return null
+  }
 }
 
-/**
- * 返回当前 DeepSeek API Key 的最小状态，供页面显示配置提示使用。
- */
-export function getDeepSeekApiKeyStatus(env = import.meta.env ?? {}) {
-  const apiKey = readApiKey(env)
-
-  if (!apiKey) {
-    return {
-      hasKey: false,
-      message: buildMissingKeyMessage(),
-    }
-  }
-
+function buildRequestPayload(messages, model, payloadOptions, forceStream = false) {
   return {
-    hasKey: true,
-    message: 'DeepSeek API Key 已配置，AI 教练后续可以基于该配置发起调用。',
+    model,
+    messages,
+    ...payloadOptions,
+    ...(forceStream ? { stream: true } : {}),
   }
 }
 
-/**
- * 统一封装 DeepSeek Chat Completions 调用，后续 CoachTab 可以直接复用。
- */
-export async function requestDeepSeekChat(messages, options = {}) {
+async function performDeepSeekRequest(messages, options = {}, forceStream = false) {
   const {
     apiKey = readApiKey(options.env ?? import.meta.env ?? {}),
     baseUrl = DEFAULT_BASE_URL,
@@ -115,39 +102,141 @@ export async function requestDeepSeekChat(messages, options = {}) {
     })
   }
 
-  let response
-
   try {
-    response = await fetchImpl(`${baseUrl}/chat/completions`, {
+    return await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
         ...headers,
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        ...payloadOptions,
-      }),
+      body: JSON.stringify(buildRequestPayload(messages, model, payloadOptions, forceStream)),
       signal,
     })
   } catch (error) {
-    throw new DeepSeekApiError(`DeepSeek 网络连接失败，请检查网络后重试：${error.message}`, {
-      code: 'network_error',
-      cause: error,
-    })
+    throw new DeepSeekApiError(
+      `DeepSeek 网络连接失败，请检查网络后重试：${error.message}`,
+      {
+        code: 'network_error',
+        cause: error,
+      },
+    )
+  }
+}
+
+async function assertOkResponse(response) {
+  if (response.ok) {
+    return
   }
 
   const data = await readResponseData(response)
 
-  if (!response.ok) {
-    throw new DeepSeekApiError(buildHttpErrorMessage(response.status, readErrorDetail(data)), {
-      code: 'http_error',
-      status: response.status,
+  throw new DeepSeekApiError(buildHttpErrorMessage(response.status, readErrorDetail(data)), {
+    code: 'http_error',
+    status: response.status,
+  })
+}
+
+function parseStreamLine(line) {
+  const trimmedLine = line.trim()
+
+  if (!trimmedLine || trimmedLine.startsWith(':') || !trimmedLine.startsWith('data:')) {
+    return null
+  }
+
+  return trimmedLine.slice(5).trim()
+}
+
+function readDeltaContent(payload) {
+  return payload?.choices?.[0]?.delta?.content
+}
+
+async function consumeDeepSeekStream(response, onDelta) {
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    throw new DeepSeekApiError('DeepSeek 流式响应不可读，当前无法使用流式输出。', {
+      code: 'stream_unavailable',
     })
   }
 
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullText = ''
+
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      const data = parseStreamLine(line)
+
+      if (!data) {
+        continue
+      }
+
+      if (data === '[DONE]') {
+        return fullText
+      }
+
+      let payload
+
+      try {
+        payload = JSON.parse(data)
+      } catch (error) {
+        throw new DeepSeekApiError('DeepSeek 流式响应解析失败，请稍后重试。', {
+          code: 'stream_parse_error',
+          cause: error,
+        })
+      }
+
+      const delta = readDeltaContent(payload)
+
+      if (typeof delta !== 'string' || !delta) {
+        continue
+      }
+
+      fullText += delta
+      onDelta?.(delta, fullText)
+    }
+
+    if (done) {
+      break
+    }
+  }
+
+  if (!fullText.trim()) {
+    throw new DeepSeekApiError('DeepSeek 流式响应已结束，但没有返回可展示的消息内容。', {
+      code: 'empty_content',
+    })
+  }
+
+  return fullText
+}
+
+export function getDeepSeekApiKeyStatus(env = import.meta.env ?? {}) {
+  const apiKey = readApiKey(env)
+
+  if (!apiKey) {
+    return {
+      hasKey: false,
+      message: buildMissingKeyMessage(),
+    }
+  }
+
+  return {
+    hasKey: true,
+    message: 'DeepSeek API Key 已配置，AI 教练后续可以基于该配置发起调用。',
+  }
+}
+
+export async function requestDeepSeekChat(messages, options = {}) {
+  const response = await performDeepSeekRequest(messages, options)
+  await assertOkResponse(response)
+
+  const data = await readResponseData(response)
   const content = data?.choices?.[0]?.message?.content
 
   if (typeof content !== 'string' || !content.trim()) {
@@ -157,6 +246,15 @@ export async function requestDeepSeekChat(messages, options = {}) {
   }
 
   return content
+}
+
+// DeepSeek 官方流式接口返回 data-only SSE，这里统一负责增量拼接文本。
+export async function streamDeepSeekChat(messages, options = {}) {
+  const { onDelta, ...requestOptions } = options
+  const response = await performDeepSeekRequest(messages, requestOptions, true)
+  await assertOkResponse(response)
+
+  return consumeDeepSeekStream(response, onDelta)
 }
 
 export const deepSeekDefaults = {
