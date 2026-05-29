@@ -1,17 +1,4 @@
-function getTodayDateString() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = `${now.getMonth() + 1}`.padStart(2, '0')
-  const day = `${now.getDate()}`.padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
-function getTodayPlanKey() {
-  return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
-    new Date().getDay()
-  ]
-}
+import { getExerciseKg, getTodayKey, getTodayStr } from '../utils/calc.js'
 
 function getTodayPlanSummary(plan, profile) {
   if (!plan || plan.exercises.length === 0) {
@@ -20,18 +7,15 @@ function getTodayPlanSummary(plan, profile) {
 
   return plan.exercises
     .map((exercise) => {
-      const actualKg = exercise.ref1RM
-        ? Math.round((profile.oneRM?.[exercise.ref1RM] ?? 0) * exercise.pct)
-        : exercise.kg
-
+      const actualKg = getExerciseKg(exercise, profile.oneRM)
       return `${exercise.name} ${actualKg}kg × ${exercise.sets} × ${exercise.reps}`
     })
     .join(' | ')
 }
 
 function TodayTab({ dailyLog, weeklyPlan, profile }) {
-  const todayDate = getTodayDateString()
-  const todayPlanKey = getTodayPlanKey()
+  const todayDate = getTodayStr()
+  const todayPlanKey = getTodayKey()
   const todayLog = dailyLog[todayDate]
   const todayPlan = weeklyPlan[todayPlanKey]
 

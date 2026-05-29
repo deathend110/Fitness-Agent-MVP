@@ -1,12 +1,13 @@
+import { getExerciseKg } from '../utils/calc.js'
+
 function getExerciseDisplay(profile, exercise) {
   if (exercise.ref1RM) {
-    const baseValue = profile.oneRM?.[exercise.ref1RM] ?? 0
-    const actualKg = Math.round(baseValue * exercise.pct)
+    const actualKg = getExerciseKg(exercise, profile.oneRM)
 
     return `${Math.round(exercise.pct * 100)}% → ${actualKg}kg`
   }
 
-  return `${exercise.kg ?? 0}kg`
+  return `${getExerciseKg(exercise, profile.oneRM)}kg`
 }
 
 function PlanTab({ profile, weeklyPlan }) {
@@ -17,7 +18,7 @@ function PlanTab({ profile, weeklyPlan }) {
       <p className="text-sm font-semibold text-fitloop-mint">Tab 2</p>
       <h2 className="mt-3 text-2xl font-bold text-white">训练计划</h2>
       <p className="mt-4 max-w-2xl leading-7 text-slate-300">
-        当前页面已能从 localStorage 读取默认周计划，并根据 1RM 百分比展示实际训练重量。
+        当前页面已经接入统一的重量计算工具，会根据 1RM 百分比或固定 kg 展示实际训练重量。
       </p>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
@@ -44,8 +45,8 @@ function PlanTab({ profile, weeklyPlan }) {
                   >
                     <p className="text-sm font-semibold text-slate-100">{exercise.name}</p>
                     <p className="mt-1 text-sm text-slate-300">
-                      {getExerciseDisplay(profile, exercise)} · {exercise.sets} 组 ×{' '}
-                      {exercise.reps} 次
+                      {getExerciseDisplay(profile, exercise)} · {exercise.sets} 组 × {exercise.reps}{' '}
+                      次
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
                       {exercise.note || '当前没有补充备注'}
