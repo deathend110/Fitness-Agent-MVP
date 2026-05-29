@@ -102,3 +102,26 @@ npm run build
 ```bash
 node --test tests/deepseek.test.js
 ```
+
+## Task 4.2 补充说明
+
+- `src/App.jsx` 现在把 `chatHistory` 维护成可写的顶层 state，并继续持久化到 `fitloop_chatHistory`
+- `src/tabs/CoachTab.jsx` 已接入聊天气泡区、输入框、发送按钮、加载状态和页内错误提示
+- 每次发送都会先调用 `buildSystemPrompt()`，再通过 `requestDeepSeekChat()` 发起请求
+- 聊天历史只保留最近 20 条，刷新页面后仍会从 `localStorage` 恢复
+- 缺少 API Key、网络失败或接口报错时，错误会直接显示在 AI 教练页内，页面不会崩溃
+
+## Task 4.2 Demo 补充
+
+1. 切换到 `AI 教练`
+2. 如果 `.env` 没有 `VITE_DEEPSEEK_API_KEY`，确认页面会直接显示错误提示
+3. 在输入框输入 `最近疲劳度有点高，要不要调整计划`
+4. 点击“发送”，确认按钮进入加载状态，且同一时间不能重复发送
+5. 观察用户消息先出现在对话区，AI 回复成功后追加到同一段历史
+6. 刷新页面，确认 `fitloop_chatHistory` 中的最近 20 条聊天记录仍然保留
+
+## Task 4.2 测试命令
+
+```bash
+node --test tests/chatHistory.test.js tests/coachChat.test.js
+```

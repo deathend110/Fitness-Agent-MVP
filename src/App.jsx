@@ -21,7 +21,7 @@ function App() {
   const [dailyLog, setDailyLog] = useState(() =>
     loadStorage(storageKeys.dailyLog, defaultDailyLog),
   )
-  const [chatHistory] = useState(() =>
+  const [chatHistory, setChatHistory] = useState(() =>
     loadStorage(storageKeys.chatHistory, defaultChatHistory),
   )
 
@@ -77,6 +77,7 @@ function App() {
         <CoachTab
           chatHistory={chatHistory}
           dailyLog={dailyLog}
+          onChatHistoryChange={setChatHistory}
           profile={profile}
           weeklyPlan={weeklyPlan}
         />
