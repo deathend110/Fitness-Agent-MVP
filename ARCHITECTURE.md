@@ -18,6 +18,7 @@ src/
     ProfileTab.jsx
     TodayTab.jsx
   utils/
+    aiResponse.js
     calc.js
     chatHistory.js
     coachChat.js
@@ -31,6 +32,7 @@ src/
     todayPlan.js
     weeklyPlan.js
 tests/
+  aiResponse.test.js
   chatHistory.test.js
   coachChat.test.js
   dailyLog.test.js
@@ -70,9 +72,14 @@ tests/
 - `src/utils/promptPreview.js`
   - 整理上下文预览标题、默认折叠状态和 prompt 文本
   - 让 `CoachTab` 保持页面协调职责，避免同时处理展示文案和 prompt 细节
+- `src/utils/aiResponse.js`
+  - 统一检测 `---JSON---` 分隔符
+  - 负责拆分 AI 正文与结构化 suggestion
+  - JSON 非法时回退为纯文本，保证页面消费安全
 - `src/utils/coachChat.js`
   - 每次请求前调用 `buildSystemPrompt()`
   - 按 `system -> history -> user` 顺序组装 DeepSeek messages
+  - 使用 `parseAiResponse()` 返回安全文本和 suggestion
 - `src/utils/chatHistory.js`
   - 统一追加聊天消息
   - 只保留最近 20 条会话记录
@@ -114,7 +121,8 @@ CoachTab 用户点击“发送”
   -> requestCoachReply()
       -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
       -> requestDeepSeekChat(messages)
-  -> appendChatMessages(nextHistory, [assistantMessage])
+      -> parseAiResponse(content)
+  -> appendChatMessages(nextHistory, [assistantTextMessage])
   -> useEffect(saveStorage) 写回 fitloop_chatHistory
 ```
 
@@ -175,6 +183,11 @@ CoachTab 用户点击“发送”
 
 保存 AI 教练会话记录，最多保留最近 20 条。
 
+说明：
+
+- 当前仍只持久化 `role + content` 文本消息
+- `suggestion` 仅在本次回复解析阶段保留，供后续 4.5 渲染采纳卡片时接入
+
 ## AI 调用链路
 
 ```text
@@ -185,6 +198,7 @@ CoachTab
       -> requestDeepSeekChat(messages)
           -> POST https://api.deepseek.com/chat/completions
           -> 返回 data.choices[0].message.content
+      -> parseAiResponse(content)
   -> appendChatMessages()
   -> saveStorage(fitloop_chatHistory)
 ```

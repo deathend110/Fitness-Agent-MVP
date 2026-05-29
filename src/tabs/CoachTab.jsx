@@ -59,7 +59,7 @@ function CoachTab({
       })
 
       onChatHistoryChange(
-        appendChatMessages(nextHistory, [{ role: 'assistant', content: reply }]),
+        appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
     } catch (error) {
       setErrorMessage(error?.message || 'AI 教练暂时不可用，请稍后重试。')
