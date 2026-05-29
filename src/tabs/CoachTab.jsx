@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import AdoptCard from '../components/AdoptCard.jsx'
 import CoachConversationPanel from '../components/CoachConversationPanel.jsx'
 import PromptPreviewPanel from '../components/PromptPreviewPanel.jsx'
 import { deepSeekDefaults, getDeepSeekApiKeyStatus } from '../api/deepseek.js'
+import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import { requestCoachReply } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import { buildPromptPreviewModel } from '../utils/promptPreview.js'
@@ -20,11 +22,14 @@ function CoachTab({
   weeklyPlan,
 }) {
   const [draft, setDraft] = useState('')
+  const [coachNotice, setCoachNotice] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [pendingSuggestion, setPendingSuggestion] = useState(null)
 
   const recentDates = useMemo(() => buildRecentDates(dailyLog), [dailyLog])
   const apiKeyStatus = getDeepSeekApiKeyStatus()
+  const adoptCard = useMemo(() => buildAdoptCardModel(pendingSuggestion), [pendingSuggestion])
   const promptPreview = useMemo(
     () => buildPromptPreviewModel(profile, weeklyPlan, dailyLog),
     [dailyLog, profile, weeklyPlan],
@@ -45,6 +50,7 @@ function CoachTab({
     const nextHistory = appendChatMessages(chatHistory, [userMessage])
 
     setErrorMessage('')
+    setCoachNotice('')
     setIsSending(true)
     setDraft('')
     onChatHistoryChange(nextHistory)
@@ -57,6 +63,7 @@ function CoachTab({
         userInput,
         weeklyPlan,
       })
+      setPendingSuggestion(reply.suggestion)
 
       onChatHistoryChange(
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
@@ -66,6 +73,16 @@ function CoachTab({
     } finally {
       setIsSending(false)
     }
+  }
+
+  function handleAdoptSuggestion() {
+    // Task 4.5 先把采纳入口接通，真正写回 weeklyPlan 放在 4.6 完成。
+    setCoachNotice('当前仅触发采纳入口；训练计划写回会在 Task 4.6 接入。')
+  }
+
+  function handleDismissSuggestion() {
+    setCoachNotice('')
+    setPendingSuggestion(null)
   }
 
   return (
@@ -101,14 +118,22 @@ function CoachTab({
       </article>
 
       <div className="mt-8 grid gap-4 xl:grid-cols-[1.05fr_0.85fr_1.1fr]">
-        <CoachConversationPanel
-          chatHistory={chatHistory}
-          draft={draft}
-          errorMessage={errorMessage}
-          isSending={isSending}
-          onDraftChange={setDraft}
-          onSubmit={handleSubmit}
-        />
+        <div className="space-y-4">
+          <CoachConversationPanel
+            chatHistory={chatHistory}
+            draft={draft}
+            errorMessage={errorMessage}
+            isSending={isSending}
+            onDraftChange={setDraft}
+            onSubmit={handleSubmit}
+          />
+          <AdoptCard
+            card={adoptCard}
+            noticeMessage={coachNotice}
+            onAdopt={handleAdoptSuggestion}
+            onDismiss={handleDismissSuggestion}
+          />
+        </div>
 
         <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
           <h3 className="text-lg font-semibold text-white">最近日志摘要</h3>

@@ -8,6 +8,7 @@ src/
   api/
     deepseek.js
   components/
+    AdoptCard.jsx
     CoachConversationPanel.jsx
     ExerciseEditor.jsx
     PlanDayCard.jsx
@@ -18,6 +19,7 @@ src/
     ProfileTab.jsx
     TodayTab.jsx
   utils/
+    adoptCard.js
     aiResponse.js
     calc.js
     chatHistory.js
@@ -32,6 +34,7 @@ src/
     todayPlan.js
     weeklyPlan.js
 tests/
+  adoptCard.test.js
   aiResponse.test.js
   chatHistory.test.js
   coachChat.test.js
@@ -59,8 +62,12 @@ tests/
   - 展示已保存摘要与今日计划只读视图
 - `src/tabs/CoachTab.jsx`
   - 维护 AI 教练输入草稿、发送状态和页内错误
+  - 维护当前待采纳 suggestion 的本地展示状态
   - 读取最新 `profile / weeklyPlan / dailyLog`
-  - 组合最近日志摘要、聊天区和上下文预览面板
+  - 组合最近日志摘要、聊天区、采纳卡片和上下文预览面板
+- `src/components/AdoptCard.jsx`
+  - 负责渲染建议日期、summary、changes 前后对比
+  - 只触发“采纳并更新计划 / 忽略”回调，不直接处理 API 或计划写回
 - `src/components/CoachConversationPanel.jsx`
   - 负责渲染聊天气泡区、输入区、发送按钮和加载态
 - `src/components/PromptPreviewPanel.jsx`
@@ -76,6 +83,9 @@ tests/
   - 统一检测 `---JSON---` 分隔符
   - 负责拆分 AI 正文与结构化 suggestion
   - JSON 非法时回退为纯文本，保证页面消费安全
+- `src/utils/adoptCard.js`
+  - 统一把 suggestion 里的 `day / summary / changes` 转成卡片展示模型
+  - 负责星期映射、字段标签和前后值格式化，避免 UI 组件直接拼文案
 - `src/utils/coachChat.js`
   - 每次请求前调用 `buildSystemPrompt()`
   - 按 `system -> history -> user` 顺序组装 DeepSeek messages
@@ -122,6 +132,10 @@ CoachTab 用户点击“发送”
       -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
       -> requestDeepSeekChat(messages)
       -> parseAiResponse(content)
+  -> buildAdoptCardModel(reply.suggestion)
+      -> 有合法建议时显示 AdoptCard
+      -> 点击“忽略”后仅清除当前本地 suggestion
+      -> 点击“采纳并更新计划”当前只触发占位提示，真正写回放到 Task 4.6
   -> appendChatMessages(nextHistory, [assistantTextMessage])
   -> useEffect(saveStorage) 写回 fitloop_chatHistory
 ```
@@ -186,7 +200,8 @@ CoachTab 用户点击“发送”
 说明：
 
 - 当前仍只持久化 `role + content` 文本消息
-- `suggestion` 仅在本次回复解析阶段保留，供后续 4.5 渲染采纳卡片时接入
+- `suggestion` 不持久化到 localStorage，只在 `CoachTab` 当前会话状态里临时保留
+- 点击“忽略”只会清除当前页面中的 suggestion，不影响既有聊天文本
 
 ## AI 调用链路
 
@@ -199,6 +214,10 @@ CoachTab
           -> POST https://api.deepseek.com/chat/completions
           -> 返回 data.choices[0].message.content
       -> parseAiResponse(content)
+  -> buildAdoptCardModel(suggestion)
+      -> AdoptCard 渲染建议日期 / summary / changes
+      -> onAdopt() 当前仅给出占位提示
+      -> onDismiss() 清除当前 suggestion
   -> appendChatMessages()
   -> saveStorage(fitloop_chatHistory)
 ```
@@ -207,7 +226,6 @@ CoachTab
 
 ## 后续扩展方向
 
-- AI 返回结构化 JSON 建议并渲染采纳卡片
 - 一键采纳训练建议并写回 `fitloop_weeklyPlan`
 - 体重趋势图、训练热力图、数据导入导出
 - 流式输出与更细粒度的错误处理
