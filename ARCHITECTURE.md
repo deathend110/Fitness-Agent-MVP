@@ -18,12 +18,14 @@ src/
     dailyLog.js
     defaultData.js
     exerciseForm.js
+    prompt.js
     profileForm.js
     storage.js
     todayPlan.js
     weeklyPlan.js
 tests/
   dailyLog.test.js
+  prompt.test.js
   todayPlan.test.js
   weeklyPlan.test.js
 ```
@@ -43,10 +45,18 @@ tests/
   - 维护今日日志表单
   - 读取 `weeklyPlan[todayKey]`，只读展示当日训练类型与动作摘要
   - 展示已保存摘要与今日计划，避免表单录入与只读信息割裂
+- `src/tabs/CoachTab.jsx`
+  - 读取最新 `profile / weeklyPlan / dailyLog`
+  - 调用 `buildSystemPrompt()` 生成临时上下文预览
+  - 当前只做本地预览，不发起真实 DeepSeek 请求
 - `src/utils/dailyLog.js`
   - 将已保存的今日日志转成受控表单草稿
   - 将表单输入规范化为可安全保存的数据结构
   - 使用当天日期键生成新的 `dailyLog` 对象
+- `src/utils/prompt.js`
+  - 统一拼装系统提示词文本
+  - 汇总用户档案、三大项 1RM、本周计划、近 14 天体重、近 7 天饮食/训练和今日 TDEE
+  - 对空数据输出“暂无记录 / 未记录”兜底文案
 - `src/utils/todayPlan.js`
   - 统一整理 TodayTab 的只读计划摘要结构
   - 区分训练日、休息日和“有训练类型但暂无动作”的空计划场景
@@ -74,6 +84,11 @@ TodayTab 展示今日计划摘要
   -> 读取 weeklyPlan[todayKey]
   -> buildTodayPlanSummary() 生成训练类型、休息提示或动作摘要列表
   -> 页面以只读方式渲染，不在此处承担训练计划编辑职责
+
+CoachTab 临时上下文预览
+  -> 读取 profile / weeklyPlan / dailyLog
+  -> buildSystemPrompt() 格式化完整 system prompt
+  -> 将 prompt 文本直接渲染到预览面板，供 Task 3.3 验收
 
 App 状态变化
   -> useEffect(saveStorage)
@@ -141,12 +156,13 @@ App 状态变化
 
 ## AI 调用链路
 
-当前项目仅保留 AI 页面骨架，正式链路仍按以下方向扩展：
+当前项目已经补齐 system prompt 构建与本地预览，正式调用链路仍按以下方向扩展：
 
 ```text
 CoachTab
   -> 读取最新 profile / weeklyPlan / dailyLog
-  -> 组装上下文 prompt
+  -> buildSystemPrompt() 组装上下文 prompt
+  -> 当前阶段先本地展示预览，不发送请求
   -> 调用 DeepSeek Chat Completions
   -> 解析建议
   -> 在后续 Sprint 中支持结构化建议采纳

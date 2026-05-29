@@ -73,7 +73,14 @@ function App() {
     {
       id: 'coach',
       label: 'AI 教练',
-      component: <CoachTab chatHistory={chatHistory} dailyLog={dailyLog} />,
+      component: (
+        <CoachTab
+          chatHistory={chatHistory}
+          dailyLog={dailyLog}
+          profile={profile}
+          weeklyPlan={weeklyPlan}
+        />
+      ),
     },
   ]
 
