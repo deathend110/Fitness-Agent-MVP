@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/RepMind note.md",
+                "file": "task/tasks.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "RepMind note"
+              "title": "tasks"
             }
           },
           {
@@ -41,16 +41,16 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/RepMind note.md",
+                "file": "docs/RepMind 修改意见记录.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "RepMind note"
+              "title": "RepMind 修改意见记录"
             }
           }
         ],
-        "currentTab": 2
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -123,7 +123,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "docs/RepMind note.md",
+                "file": "task/Sprint 2 - 档案与训练计划.md",
                 "collapseAll": true,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -133,7 +133,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "RepMind note 的反向链接列表"
+              "title": "Sprint 2 - 档案与训练计划 的反向链接列表"
             }
           },
           {
@@ -142,12 +142,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/RepMind note.md",
+                "file": "task/Sprint 2 - 档案与训练计划.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "RepMind note 的出链列表"
+              "title": "Sprint 2 - 档案与训练计划 的出链列表"
             }
           },
           {
@@ -185,13 +185,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/RepMind note.md",
+                "file": "task/Sprint 2 - 档案与训练计划.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "RepMind note 的大纲"
+              "title": "Sprint 2 - 档案与训练计划 的大纲"
             }
           }
         ],
@@ -212,8 +212,12 @@
       "bases:新建数据库": false
     }
   },
-  "active": "ca8c17a023e9b963",
+  "active": "d6f33b42babcf1cb",
   "lastOpenFiles": [
+    "task/Sprint 3 - 今日日志与上下文数据.md",
+    "task/tasks.md",
+    "docs/RepMind 修改意见记录.md",
+    "task/Sprint 2 - 档案与训练计划.md",
     "dist/assets/index-CpVTxjjz.js",
     "dist/assets/index-CFu6AJUB.css",
     "dist/assets",
@@ -224,14 +228,10 @@
     "node_modules/@nodelib/fs.walk/package.json",
     "node_modules/@alloc/quick-lru/index.js",
     "node_modules/@alloc/quick-lru/package.json",
-    "node_modules/@rolldown/pluginutils/package.json",
-    "task/Sprint 2 - 档案与训练计划.md",
     "ARCHITECTURE.md",
     "README.md",
-    "docs/RepMind note.md",
     "task/Sprint 1 - 核心骨架与本地数据.md",
     "AGENTS.md",
-    "task/Sprint 3 - 今日日志与上下文数据.md",
     "docs/MVP项目要求.md",
     "docs/fitness_coach_mvp_spec.md",
     "task/Sprint 0 - 项目准备.md",
