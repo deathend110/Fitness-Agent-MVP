@@ -1,0 +1,173 @@
+import ExerciseEditor from './ExerciseEditor.jsx'
+import { createExerciseDraft } from '../utils/exerciseForm.js'
+
+function getButtonClassName(kind = 'secondary') {
+  if (kind === 'danger') {
+    return 'rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-200 transition hover:border-rose-400 hover:bg-rose-500/20'
+  }
+
+  if (kind === 'primary') {
+    return 'rounded-md border border-fitloop-orange bg-fitloop-orange px-3 py-2 text-sm font-medium text-white transition hover:opacity-90'
+  }
+
+  return 'rounded-md border border-fitloop-line bg-fitloop-panel/70 px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-400 hover:text-white'
+}
+
+function ExerciseItem({
+  exercise,
+  exerciseSummary,
+  isEditing,
+  draft,
+  onEdit,
+  onDraftChange,
+  onSave,
+  onCancel,
+  onDelete,
+  oneRmOptions,
+}) {
+  return (
+    <li className="rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-3">
+      {isEditing ? (
+        <div className="space-y-3">
+          <ExerciseEditor oneRmOptions={oneRmOptions} onChange={onDraftChange} value={draft} />
+          <div className="flex flex-wrap gap-2">
+            <button className={getButtonClassName('primary')} onClick={onSave} type="button">
+              保存动作
+            </button>
+            <button className={getButtonClassName()} onClick={onCancel} type="button">
+              取消
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-100">{exercise.name || '未命名动作'}</p>
+            <p className="mt-1 text-sm text-slate-300">{exerciseSummary}</p>
+            <p className="mt-1 text-xs text-slate-400">{exercise.note || '当前没有补充备注'}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className={getButtonClassName()} onClick={onEdit} type="button">
+              编辑
+            </button>
+            <button className={getButtonClassName('danger')} onClick={onDelete} type="button">
+              删除
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
+  )
+}
+
+function PlanDayCard({
+  dayKey,
+  plan,
+  expanded,
+  dayTypeOptions,
+  editingExerciseId,
+  exerciseDraft,
+  exerciseSummaries,
+  oneRmOptions,
+  onToggle,
+  onDayTypeChange,
+  onStartAdd,
+  onEditExercise,
+  onDraftChange,
+  onSaveExercise,
+  onCancelEditing,
+  onDeleteExercise,
+}) {
+  return (
+    <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+      <button
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-3 text-left"
+        onClick={onToggle}
+        type="button"
+      >
+        <div>
+          <h3 className="text-lg font-semibold text-white">{dayKey}</h3>
+          <p className="mt-1 text-sm text-slate-400">{plan.exercises.length} 个动作</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-md bg-fitloop-orange/15 px-2 py-1 text-xs font-medium text-fitloop-orange">
+            {plan.type}
+          </span>
+          <span className="text-xs text-slate-400">{expanded ? '收起' : '展开'}</span>
+        </div>
+      </button>
+
+      {expanded ? (
+        <div className="mt-4 space-y-4">
+          <label className="block space-y-2">
+            <span className="text-sm text-slate-300">训练类型</span>
+            <select
+              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+              onChange={(event) => onDayTypeChange(event.target.value)}
+              value={plan.type}
+            >
+              {dayTypeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex flex-wrap gap-2">
+            <button className={getButtonClassName('primary')} onClick={onStartAdd} type="button">
+              新增动作
+            </button>
+          </div>
+
+          {editingExerciseId === '__new__' ? (
+            <div className="space-y-3 rounded-md border border-dashed border-fitloop-line p-3">
+              <ExerciseEditor oneRmOptions={oneRmOptions} onChange={onDraftChange} value={exerciseDraft} />
+              <div className="flex flex-wrap gap-2">
+                <button className={getButtonClassName('primary')} onClick={onSaveExercise} type="button">
+                  保存新增动作
+                </button>
+                <button className={getButtonClassName()} onClick={onCancelEditing} type="button">
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {plan.exercises.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              当前还没有安排动作。即使训练类型设为 rest，也会保留已有动作，避免误删历史计划。
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {plan.exercises.map((exercise) => (
+                <ExerciseItem
+                  draft={exerciseDraft}
+                  exercise={exercise}
+                  exerciseSummary={exerciseSummaries[exercise.id]}
+                  isEditing={editingExerciseId === exercise.id}
+                  key={exercise.id}
+                  onCancel={onCancelEditing}
+                  onDelete={() => onDeleteExercise(exercise.id)}
+                  onDraftChange={onDraftChange}
+                  onEdit={() => onEditExercise(exercise)}
+                  onSave={onSaveExercise}
+                  oneRmOptions={oneRmOptions}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+export function createEmptyExerciseDraft(oneRmOptions = []) {
+  const fallbackRef = oneRmOptions[0]?.value ?? 'squat'
+
+  return createExerciseDraft({}, fallbackRef)
+}
+
+export default PlanDayCard

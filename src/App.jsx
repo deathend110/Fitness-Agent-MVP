@@ -15,7 +15,7 @@ import { loadStorage, saveStorage } from './utils/storage.js'
 function App() {
   const [activeTabId, setActiveTabId] = useState('profile')
   const [profile, setProfile] = useState(() => loadStorage(storageKeys.profile, defaultProfile))
-  const [weeklyPlan] = useState(() =>
+  const [weeklyPlan, setWeeklyPlan] = useState(() =>
     loadStorage(storageKeys.weeklyPlan, defaultWeeklyPlan),
   )
   const [dailyLog] = useState(() => loadStorage(storageKeys.dailyLog, defaultDailyLog))
@@ -48,7 +48,13 @@ function App() {
     {
       id: 'plan',
       label: '训练计划',
-      component: <PlanTab profile={profile} weeklyPlan={weeklyPlan} />,
+      component: (
+        <PlanTab
+          onWeeklyPlanChange={setWeeklyPlan}
+          profile={profile}
+          weeklyPlan={weeklyPlan}
+        />
+      ),
     },
     {
       id: 'today',

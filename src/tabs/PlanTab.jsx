@@ -1,17 +1,17 @@
-import { useState } from 'react'
-import ExerciseEditor from '../components/ExerciseEditor.jsx'
+import { useMemo, useState } from 'react'
+import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard.jsx'
 import { createExerciseDraft, draftToExercise } from '../utils/exerciseForm.js'
 import { getExerciseKg, getTodayKey } from '../utils/calc.js'
+import {
+  addExerciseToDay,
+  getPlanDayTypes,
+  getWeekdayOrder,
+  removeExerciseFromDay,
+  updateDayType,
+  updateExerciseInDay,
+} from '../utils/weeklyPlan.js'
 
-const WEEKDAY_ORDER = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-]
+const NEW_EXERCISE_ID = '__new__'
 
 function getExerciseDisplay(profile, exercise) {
   if (exercise.ref1RM) {
@@ -30,156 +30,146 @@ function getOneRmOptions(profile) {
   ]
 }
 
-function createDemoDrafts() {
-  return {
-    squat: createExerciseDraft({
-      name: '深蹲',
-      ref1RM: 'squat',
-      pct: 0.75,
-      kg: null,
-      sets: 4,
-      reps: 6,
-      rpe: null,
-      note: '百分比模式示例',
-    }),
-    rdl: createExerciseDraft({
-      name: '罗马尼亚硬拉',
-      ref1RM: null,
-      pct: null,
-      kg: 80,
-      sets: 3,
-      reps: 10,
-      rpe: null,
-      note: '固定 kg 模式示例',
-    }),
-  }
-}
-
-function ExercisePreview({ exercise, profile }) {
-  return (
-    <div className="rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-3">
-      <p className="text-sm font-semibold text-slate-100">{exercise.name || '未命名动作'}</p>
-      <p className="mt-1 text-sm text-slate-300">
-        {getExerciseDisplay(profile, exercise)} · {exercise.sets} 组 × {exercise.reps} 次
-      </p>
-      <p className="mt-1 text-xs text-slate-400">
-        {exercise.note || '当前没有补充备注'}
-      </p>
-      <pre className="mt-3 overflow-x-auto rounded-md bg-black/30 p-3 text-xs leading-5 text-slate-200">
-        {JSON.stringify(exercise, null, 2)}
-      </pre>
-    </div>
-  )
-}
-
-function PlanTab({ profile, weeklyPlan }) {
+function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const [expandedDay, setExpandedDay] = useState(() => getTodayKey())
-  const [demoDrafts, setDemoDrafts] = useState(() => createDemoDrafts())
+  const [editingState, setEditingState] = useState({
+    dayKey: null,
+    exerciseId: null,
+    draft: null,
+  })
   const oneRmOptions = getOneRmOptions(profile)
-  const demoExercises = {
-    squat: draftToExercise(demoDrafts.squat),
-    rdl: draftToExercise(demoDrafts.rdl),
-  }
-  const days = WEEKDAY_ORDER.map((day) => [
-    day,
-    weeklyPlan?.[day] ?? { type: 'rest', exercises: [] },
+  const dayTypeOptions = getPlanDayTypes()
+  const days = getWeekdayOrder().map((dayKey) => [
+    dayKey,
+    weeklyPlan?.[dayKey] ?? { type: 'rest', exercises: [] },
   ])
 
-  function toggleDay(day) {
-    setExpandedDay((currentDay) => (currentDay === day ? null : day))
+  const exerciseSummaries = useMemo(() => {
+    const summaries = {}
+
+    days.forEach(([, plan]) => {
+      plan.exercises.forEach((exercise) => {
+        summaries[exercise.id] = `${getExerciseDisplay(profile, exercise)} · ${exercise.sets} 组 × ${exercise.reps} 次`
+      })
+    })
+
+    return summaries
+  }, [days, profile])
+
+  function toggleDay(dayKey) {
+    setExpandedDay((currentDay) => (currentDay === dayKey ? null : dayKey))
   }
 
-  function updateDemoDraft(key, nextDraft) {
-    setDemoDrafts((current) => ({
+  function handleDayTypeChange(dayKey, nextType) {
+    onWeeklyPlanChange((currentPlan) => updateDayType(currentPlan, dayKey, nextType))
+  }
+
+  function startAddExercise(dayKey) {
+    setEditingState({
+      dayKey,
+      exerciseId: NEW_EXERCISE_ID,
+      draft: createEmptyExerciseDraft(oneRmOptions),
+    })
+  }
+
+  function startEditExercise(dayKey, exercise) {
+    setEditingState({
+      dayKey,
+      exerciseId: exercise.id,
+      draft: createExerciseDraft(exercise, oneRmOptions[0]?.value ?? 'squat'),
+    })
+  }
+
+  function updateDraft(nextDraft) {
+    setEditingState((current) => ({
       ...current,
-      [key]: nextDraft,
+      draft: nextDraft,
     }))
+  }
+
+  function cancelEditing() {
+    setEditingState({
+      dayKey: null,
+      exerciseId: null,
+      draft: null,
+    })
+  }
+
+  function saveExercise() {
+    if (!editingState.dayKey || !editingState.draft) {
+      return
+    }
+
+    const nextExercise = draftToExercise(editingState.draft)
+
+    if (!nextExercise.name) {
+      return
+    }
+
+    if (editingState.exerciseId === NEW_EXERCISE_ID) {
+      onWeeklyPlanChange((currentPlan) =>
+        addExerciseToDay(currentPlan, editingState.dayKey, nextExercise),
+      )
+    } else {
+      onWeeklyPlanChange((currentPlan) =>
+        updateExerciseInDay(
+          currentPlan,
+          editingState.dayKey,
+          editingState.exerciseId,
+          {
+            ...nextExercise,
+            id: editingState.exerciseId,
+          },
+        ),
+      )
+    }
+
+    cancelEditing()
+  }
+
+  function deleteExercise(dayKey, exerciseId) {
+    onWeeklyPlanChange((currentPlan) => removeExerciseFromDay(currentPlan, dayKey, exerciseId))
+
+    setEditingState((current) => {
+      if (current.dayKey === dayKey && current.exerciseId === exerciseId) {
+        return { dayKey: null, exerciseId: null, draft: null }
+      }
+
+      return current
+    })
   }
 
   return (
     <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
       <p className="text-sm font-semibold text-fitloop-mint">Tab 2</p>
       <h2 className="mt-3 text-2xl font-bold text-white">训练计划</h2>
-      <p className="mt-4 max-w-2xl leading-7 text-slate-300">
-        当前页面已经接入统一的重量计算工具，会根据 1RM 百分比或固定 kg 展示实际训练重量。
+      <p className="mt-4 max-w-3xl leading-7 text-slate-300">
+        这里已经接入真实的训练计划维护能力。你可以修改每天训练类型，新增、编辑、删除动作，
+        每次保存都会写回 <code>fitloop_weeklyPlan</code>，刷新页面后仍然保留。
       </p>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        {days.map(([day, plan]) => (
-          <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4" key={day}>
-            <button
-              className="flex w-full items-center justify-between gap-3 text-left"
-              aria-expanded={expandedDay === day}
-              onClick={() => toggleDay(day)}
-              type="button"
-            >
-              <div>
-                <h3 className="text-lg font-semibold text-white">{day}</h3>
-                <p className="mt-1 text-sm text-slate-400">{plan.exercises.length} 个动作</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-fitloop-orange/15 px-2 py-1 text-xs font-medium text-fitloop-orange">
-                  {plan.type}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {expandedDay === day ? '收起' : '展开'}
-                </span>
-              </div>
-            </button>
-
-            {expandedDay === day ? (
-              plan.exercises.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-400">休息日，当前没有安排动作。</p>
-              ) : (
-                <ul className="mt-4 space-y-3">
-                  {plan.exercises.map((exercise) => (
-                    <li
-                      className="rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-3"
-                      key={exercise.id}
-                    >
-                      <p className="text-sm font-semibold text-slate-100">{exercise.name}</p>
-                      <p className="mt-1 text-sm text-slate-300">
-                        {getExerciseDisplay(profile, exercise)} · {exercise.sets} 组 × {exercise.reps} 次
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {exercise.note || '当前没有补充备注'}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )
-            ) : null}
-          </article>
+        {days.map(([dayKey, plan]) => (
+          <PlanDayCard
+            dayKey={dayKey}
+            dayTypeOptions={dayTypeOptions}
+            editingExerciseId={editingState.dayKey === dayKey ? editingState.exerciseId : null}
+            exerciseDraft={editingState.dayKey === dayKey ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)}
+            exerciseSummaries={exerciseSummaries}
+            expanded={expandedDay === dayKey}
+            key={dayKey}
+            onCancelEditing={cancelEditing}
+            onDayTypeChange={(nextType) => handleDayTypeChange(dayKey, nextType)}
+            onDeleteExercise={(exerciseId) => deleteExercise(dayKey, exerciseId)}
+            onDraftChange={updateDraft}
+            onEditExercise={(exercise) => startEditExercise(dayKey, exercise)}
+            onSaveExercise={saveExercise}
+            onStartAdd={() => startAddExercise(dayKey)}
+            onToggle={() => toggleDay(dayKey)}
+            oneRmOptions={oneRmOptions}
+            plan={plan}
+          />
         ))}
-      </div>
-
-      <div className="mt-8 rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-        <p className="text-sm font-semibold text-fitloop-orange">动作编辑演示</p>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
-          下面两个示例只在当前页面内编辑，用来验证单动作的规范化结果，不会写回整周计划。
-        </p>
-
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
-          <div className="space-y-3">
-            <h3 className="text-base font-semibold text-white">百分比模式</h3>
-            <ExerciseEditor
-              oneRmOptions={oneRmOptions}
-              onChange={(nextDraft) => updateDemoDraft('squat', nextDraft)}
-              value={demoDrafts.squat}
-            />
-            <ExercisePreview exercise={demoExercises.squat} profile={profile} />
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-base font-semibold text-white">固定重量模式</h3>
-            <ExerciseEditor
-              oneRmOptions={oneRmOptions}
-              onChange={(nextDraft) => updateDemoDraft('rdl', nextDraft)}
-              value={demoDrafts.rdl}
-            />
-            <ExercisePreview exercise={demoExercises.rdl} profile={profile} />
-          </div>
-        </div>
       </div>
     </section>
   )
