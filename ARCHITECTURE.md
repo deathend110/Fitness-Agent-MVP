@@ -4,87 +4,160 @@
 
 ```text
 Fitness Agent MVP/
-├── docs/                  # SDD 文档、课程要求和参考资料
-├── task/                  # 按 Sprint 拆分的开发任务
-├── src/
-│   ├── App.jsx            # 当前 React 主入口和 Sprint 0 初始界面
-│   ├── main.jsx           # React 挂载入口
-│   ├── index.css          # Tailwind CSS 入口和全局样式
-│   ├── tabs/              # 四个主 Tab 页面
-│   │   ├── ProfileTab.jsx # 我的档案入口
-│   │   ├── PlanTab.jsx    # 训练计划入口
-│   │   ├── TodayTab.jsx   # 今日日志入口
-│   │   └── CoachTab.jsx   # AI 教练入口
-│   ├── components/        # 后续放置可复用 UI 组件
-│   ├── utils/             # 后续放置存储、计算、Prompt 构建工具
-│   └── api/               # 后续放置 DeepSeek API 调用封装
-├── index.html             # Vite HTML 入口
-├── package.json           # npm 脚本和依赖
-├── tailwind.config.js     # Tailwind 配置
-├── postcss.config.cjs     # PostCSS 配置
-├── vite.config.js         # Vite 配置
-└── README.md              # 运行说明和 demo 路径
+├─ docs/                  # SDD 文档、课程要求和参考资料
+├─ task/                  # 按 Sprint 拆分的开发任务
+├─ src/
+│  ├─ App.jsx             # 主入口，统一读取 localStorage 并向 4 个 Tab 注入数据
+│  ├─ main.jsx            # React 挂载入口
+│  ├─ index.css           # Tailwind CSS 入口和全局样式
+│  ├─ tabs/
+│  │  ├─ ProfileTab.jsx   # 档案摘要展示
+│  │  ├─ PlanTab.jsx      # 周计划摘要展示
+│  │  ├─ TodayTab.jsx     # 今日日志摘要展示
+│  │  └─ CoachTab.jsx     # AI 对话与日志摘要展示
+│  ├─ utils/
+│  │  ├─ storage.js       # localStorage 读写工具
+│  │  └─ defaultData.js   # 默认 profile / weeklyPlan / dailyLog / chatHistory
+│  ├─ components/         # 后续可复用 UI 组件
+│  └─ api/                # 后续 DeepSeek API 封装
+├─ index.html
+├─ package.json
+├─ tailwind.config.js
+├─ vite.config.js
+├─ README.md
+└─ ARCHITECTURE.md
 ```
 
 ## 核心模块职责
 
-- `App.jsx`：当前负责顶部导航、Tab 状态切换和页面容器协调。
-- `tabs/ProfileTab.jsx`：当前是我的档案占位页，后续负责用户档案、三大项 1RM、训练目标和备注录入。
-- `tabs/PlanTab.jsx`：当前是训练计划占位页，后续负责一周训练计划展示和动作增删改。
-- `tabs/TodayTab.jsx`：当前是今日日志占位页，后续负责今日日志录入和今日计划只读摘要。
-- `tabs/CoachTab.jsx`：当前是 AI 教练占位页，后续负责 AI 对话、上下文预览、采纳卡片接入。
-- `components/ExerciseEditor.jsx`：后续负责单个训练动作编辑。
-- `components/AdoptCard.jsx`：后续负责 AI 结构化建议展示和采纳交互。
-- `utils/storage.js`：后续统一封装 localStorage 读写。
-- `utils/calc.js`：后续封装 1RM 重量、BMR、TDEE 和日期计算。
-- `utils/prompt.js`：后续将档案、计划、日志格式化为 AI system prompt。
-- `api/deepseek.js`：后续封装 DeepSeek `/chat/completions` 调用。
+- `App.jsx`
+  - 统一读取 `profile / weeklyPlan / dailyLog / chatHistory`
+  - 当 localStorage 为空时回退到默认数据
+  - 将读取结果传给四个 Tab 做只读摘要展示
+  - 在首次渲染后把当前数据写回 localStorage
+
+- `src/utils/storage.js`
+  - 提供 `loadStorage(key, fallback)`
+  - 提供 `saveStorage(key, value)`
+  - 处理空值、非法 JSON、非浏览器环境这三类边界情况
+
+- `src/utils/defaultData.js`
+  - 集中维护 `fitloop_profile`
+  - 集中维护 `fitloop_weeklyPlan`
+  - 集中维护 `fitloop_dailyLog`
+  - 集中维护 `fitloop_chatHistory`
+  - 字段严格对齐 `docs/plan.md` 与 `docs/fitness_coach_mvp_spec.md`
+
+- `tabs/ProfileTab.jsx`
+  - 展示默认档案摘要
+  - 展示基本信息、三大项 1RM、目标和备注
+
+- `tabs/PlanTab.jsx`
+  - 展示默认一周训练计划
+  - 处理 `ref1RM + pct -> 实际重量` 的只读换算展示
+
+- `tabs/TodayTab.jsx`
+  - 展示当天默认日志摘要
+  - 展示根据当天星期匹配出的只读计划摘要
+
+- `tabs/CoachTab.jsx`
+  - 展示默认聊天历史
+  - 展示最近几天的日志摘要
+  - 为后续 AI 上下文注入和建议采纳预留页面位置
 
 ## 数据流说明
 
-MVP 数据流设计为本地闭环：
+当前 MVP 数据流保持本地闭环：
 
 ```text
-用户输入档案/计划/日志
-        ↓
-localStorage
-        ↓
-buildSystemPrompt()
-        ↓
-DeepSeek API
-        ↓
-AI 回复文本 + 可选 JSON 建议
-        ↓
-采纳卡片
-        ↓
-写回 fitloop_weeklyPlan
+App 启动
+  -> loadStorage(key, fallback)
+  -> localStorage 中已有数据则直接读取
+  -> localStorage 为空或 JSON 非法则回退默认数据
+  -> 将数据注入 Profile / Plan / Today / Coach 四个 Tab
+  -> useEffect 持久化到 localStorage
+  -> 后续任务继续接入表单编辑、AI 对话和采纳写回
 ```
 
 ## localStorage 数据结构
 
-后续实现会使用以下 key：
+### `fitloop_profile`
 
-- `fitloop_profile`：用户基本信息、三大项 1RM、训练目标和备注。
-- `fitloop_weeklyPlan`：一周训练计划，按 Monday 到 Sunday 存储。
-- `fitloop_dailyLog`：按日期存储体重、热量、蛋白质、睡眠、疲劳度和训练备注。
-- `fitloop_chatHistory`：AI 对话历史，最多保留最近 20 条。
+```json
+{
+  "basic": { "name": "小林", "sex": "male", "age": 23, "height": 178, "weight": 82.1 },
+  "oneRM": { "squat": 120, "bench": 90, "deadlift": 150 },
+  "goal": "增肌减脂",
+  "targetWeight": 78,
+  "notes": "工作日容易睡眠不足，当前每周训练 3 次，希望先把恢复节奏稳定下来。"
+}
+```
+
+### `fitloop_weeklyPlan`
+
+```json
+{
+  "Monday": {
+    "type": "腿日",
+    "exercises": [
+      {
+        "id": "monday-squat",
+        "name": "深蹲",
+        "ref1RM": "squat",
+        "pct": 0.75,
+        "kg": null,
+        "sets": 4,
+        "reps": 6,
+        "rpe": null,
+        "note": "主项"
+      }
+    ]
+  }
+}
+```
+
+### `fitloop_dailyLog`
+
+```json
+{
+  "2026-05-29": {
+    "weight": 82.1,
+    "kcal": 2150,
+    "protein": 165,
+    "trainingDone": true,
+    "trainingNotes": "深蹲第三组没有按计划完成，膝盖有一点紧。",
+    "fatigue": 4,
+    "sleep": 6.8
+  }
+}
+```
+
+### `fitloop_chatHistory`
+
+```json
+[
+  { "role": "user", "content": "最近训练后疲劳感有点高，需要调整计划吗？" },
+  { "role": "assistant", "content": "可以先从下肢主项强度和睡眠恢复一起看，后续我会结合训练计划给你建议。" }
+]
+```
 
 ## AI 调用链路
 
-后续 AI 教练功能使用 DeepSeek 原生 OpenAI 格式：
+后续 AI 教练功能的调用链路保持不变：
 
 ```text
 CoachTab
   -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
   -> callDeepSeek(userMessage, chatHistory, systemPrompt)
   -> parseAiResponse(content)
-  -> AdoptCard 或纯文本回复
+  -> 纯文本回复 或 结构化建议卡片
+  -> 用户采纳后写回 fitloop_weeklyPlan
 ```
 
-## 扩展方向
+## 后续扩展方向
 
-- Sprint 1-4：完成核心闭环。
-- Sprint 5：补齐验证记录和课堂 demo 脚本。
-- Sprint 6：加入体重趋势图、数据导入导出和流式输出。
-
-当前项目是最简 MVP，后续模块超过 200 行时需要拆分，保持高内聚、低耦合。
+- 为四个 Tab 接入编辑表单与实时保存
+- 增加 `utils/calc.js` 和 `utils/prompt.js`
+- 接入 DeepSeek `/chat/completions`
+- 支持 AI 结构化 JSON 建议解析与一键采纳
+- 补充最小验证记录、截图和课程演示材料
