@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import CoachConversationPanel from '../components/CoachConversationPanel.jsx'
+import PromptPreviewPanel from '../components/PromptPreviewPanel.jsx'
 import { deepSeekDefaults, getDeepSeekApiKeyStatus } from '../api/deepseek.js'
 import { requestCoachReply } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
-import { buildSystemPrompt } from '../utils/prompt.js'
+import { buildPromptPreviewModel } from '../utils/promptPreview.js'
 
 function buildRecentDates(dailyLog) {
   return Object.keys(dailyLog)
@@ -24,8 +25,8 @@ function CoachTab({
 
   const recentDates = useMemo(() => buildRecentDates(dailyLog), [dailyLog])
   const apiKeyStatus = getDeepSeekApiKeyStatus()
-  const contextPreview = useMemo(
-    () => buildSystemPrompt(profile, weeklyPlan, dailyLog),
+  const promptPreview = useMemo(
+    () => buildPromptPreviewModel(profile, weeklyPlan, dailyLog),
     [dailyLog, profile, weeklyPlan],
   )
   const statusTone = apiKeyStatus.hasKey
@@ -73,8 +74,8 @@ function CoachTab({
       <h2 className="mt-3 text-2xl font-bold text-white">AI 教练</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
         这里已经接入真实对话流程。每次发送都会重新构建最新训练上下文，再调用
-        DeepSeek 聊天接口；聊天历史会写入 <code>fitloop_chatHistory</code>，刷新后仍会保留最近
-        20 条消息。
+        DeepSeek 聊天接口；聊天历史会写入 <code>fitloop_chatHistory</code>
+        ，刷新后仍会保留最近 20 条消息。
       </p>
 
       <article className={`mt-6 rounded-md border p-4 ${statusTone}`}>
@@ -138,20 +139,7 @@ function CoachTab({
           )}
         </article>
 
-        <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4 xl:min-h-[32rem]">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-white">临时上下文预览</h3>
-            <span className="text-xs uppercase tracking-[0.16em] text-fitloop-mint">
-              buildSystemPrompt()
-            </span>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            这里继续保留原始预览，方便检查每次正式发送前注入给 AI 的 system prompt 内容。
-          </p>
-          <pre className="mt-4 overflow-x-auto whitespace-pre-wrap rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-4 text-xs leading-6 text-slate-200">
-            {contextPreview}
-          </pre>
-        </article>
+        <PromptPreviewPanel previewModel={promptPreview} />
       </div>
     </section>
   )
