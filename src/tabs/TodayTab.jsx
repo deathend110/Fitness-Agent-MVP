@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getExerciseKg, getTodayKey, getTodayStr } from '../utils/calc.js'
+import { getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildTodayLogPayload, readTodayLogForm } from '../utils/dailyLog.js'
+import { buildTodayPlanSummary } from '../utils/todayPlan.js'
 
 const metricFields = [
   { key: 'weight', label: '体重 (kg)', inputMode: 'decimal', step: '0.1' },
@@ -9,19 +10,6 @@ const metricFields = [
   { key: 'sleep', label: '睡眠 (h)', inputMode: 'decimal', step: '0.1' },
   { key: 'fatigue', label: '疲劳度 (1-5)', inputMode: 'numeric', step: '1', min: '1', max: '5' },
 ]
-
-function getTodayPlanSummary(plan, profile) {
-  if (!plan || !Array.isArray(plan.exercises) || plan.exercises.length === 0) {
-    return '今天是休息日，当前没有训练动作安排。'
-  }
-
-  return plan.exercises
-    .map((exercise) => {
-      const actualKg = getExerciseKg(exercise, profile.oneRM)
-      return `${exercise.name} ${actualKg}kg × ${exercise.sets} × ${exercise.reps}`
-    })
-    .join(' | ')
-}
 
 function formatMetric(value, suffix = '') {
   if (value === null || value === undefined || value === '') {
@@ -36,6 +24,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
   const todayPlanKey = getTodayKey()
   const todayLog = dailyLog?.[todayDate]
   const todayPlan = weeklyPlan?.[todayPlanKey] ?? { type: 'rest', exercises: [] }
+  const todayPlanSummary = buildTodayPlanSummary(todayPlan, profile?.oneRM)
   const [draft, setDraft] = useState(() => readTodayLogForm(todayLog))
   const [saveHint, setSaveHint] = useState('')
 
@@ -66,8 +55,8 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
       <p className="text-sm font-semibold text-fitloop-mint">Tab 3</p>
       <h2 className="mt-3 text-2xl font-bold text-white">今日日志</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
-        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要和今天的训练计划。
-        保存后会写回 <code>fitloop_dailyLog</code>，刷新页面后仍然保留。
+        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要和今日训练计划。保存后会写回
+        <code>fitloop_dailyLog</code>，刷新页面后仍然保留。
       </p>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -154,10 +143,27 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
           <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayPlanKey}</p>
             <h3 className="mt-3 text-lg font-semibold text-white">今日计划</h3>
-            <p className="mt-4 text-sm text-slate-300">训练类型：{todayPlan?.type ?? 'rest'}</p>
-            <p className="mt-4 text-sm leading-6 text-slate-300">
-              {getTodayPlanSummary(todayPlan, profile)}
+            <p className="mt-4 text-sm text-slate-300">
+              训练类型：{todayPlanSummary.typeLabel}
             </p>
+
+            {todayPlanSummary.isRestDay ? (
+              <p className="mt-4 text-sm leading-6 text-slate-300">
+                {todayPlanSummary.message}
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {todayPlanSummary.exercises.map((exercise) => (
+                  <li
+                    className="rounded-md border border-fitloop-line/80 bg-fitloop-ink/50 px-3 py-3"
+                    key={exercise.id}
+                  >
+                    <p className="text-sm font-medium text-white">{exercise.name}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-300">{exercise.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </article>
         </div>
       </div>

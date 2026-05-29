@@ -20,9 +20,11 @@ src/
     exerciseForm.js
     profileForm.js
     storage.js
+    todayPlan.js
     weeklyPlan.js
 tests/
   dailyLog.test.js
+  todayPlan.test.js
   weeklyPlan.test.js
 ```
 
@@ -39,11 +41,15 @@ tests/
   - 协调训练日展开、动作编辑、新增与删除
 - `src/tabs/TodayTab.jsx`
   - 维护今日日志表单
+  - 读取 `weeklyPlan[todayKey]`，只读展示当日训练类型与动作摘要
   - 展示已保存摘要与今日计划，避免表单录入与只读信息割裂
 - `src/utils/dailyLog.js`
   - 将已保存的今日日志转成受控表单草稿
   - 将表单输入规范化为可安全保存的数据结构
   - 使用当天日期键生成新的 `dailyLog` 对象
+- `src/utils/todayPlan.js`
+  - 统一整理 TodayTab 的只读计划摘要结构
+  - 区分训练日、休息日和“有训练类型但暂无动作”的空计划场景
 - `src/utils/weeklyPlan.js`
   - 封装周计划的新增、修改、删除逻辑
 - `src/utils/storage.js`
@@ -62,6 +68,12 @@ TodayTab 录入今日日志
   -> 用户编辑体重、热量、蛋白质、睡眠、疲劳度、训练完成状态和备注
   -> buildTodayLogPayload() 使用 getTodayStr() 作为日期键生成新 dailyLog
   -> onDailyLogChange(setDailyLog) 更新 App 顶层状态
+
+TodayTab 展示今日计划摘要
+  -> getTodayKey() 计算今天对应的 weekday key
+  -> 读取 weeklyPlan[todayKey]
+  -> buildTodayPlanSummary() 生成训练类型、休息提示或动作摘要列表
+  -> 页面以只读方式渲染，不在此处承担训练计划编辑职责
 
 App 状态变化
   -> useEffect(saveStorage)
