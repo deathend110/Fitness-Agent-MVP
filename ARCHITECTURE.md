@@ -10,7 +10,11 @@ Fitness Agent MVP/
 │   ├── App.jsx            # 当前 React 主入口和 Sprint 0 初始界面
 │   ├── main.jsx           # React 挂载入口
 │   ├── index.css          # Tailwind CSS 入口和全局样式
-│   ├── tabs/              # 后续放置四个主 Tab 页面
+│   ├── tabs/              # 四个主 Tab 页面
+│   │   ├── ProfileTab.jsx # 我的档案入口
+│   │   ├── PlanTab.jsx    # 训练计划入口
+│   │   ├── TodayTab.jsx   # 今日日志入口
+│   │   └── CoachTab.jsx   # AI 教练入口
 │   ├── components/        # 后续放置可复用 UI 组件
 │   ├── utils/             # 后续放置存储、计算、Prompt 构建工具
 │   └── api/               # 后续放置 DeepSeek API 调用封装
@@ -24,11 +28,11 @@ Fitness Agent MVP/
 
 ## 核心模块职责
 
-- `App.jsx`：当前负责展示 Sprint 0 初始界面；后续负责 Tab 容器和全局状态协调。
-- `tabs/ProfileTab.jsx`：后续负责用户档案、三大项 1RM、训练目标和备注录入。
-- `tabs/PlanTab.jsx`：后续负责一周训练计划展示和动作增删改。
-- `tabs/TodayTab.jsx`：后续负责今日日志录入和今日计划只读摘要。
-- `tabs/CoachTab.jsx`：后续负责 AI 对话、上下文预览、采纳卡片接入。
+- `App.jsx`：当前负责顶部导航、Tab 状态切换和页面容器协调。
+- `tabs/ProfileTab.jsx`：当前是我的档案占位页，后续负责用户档案、三大项 1RM、训练目标和备注录入。
+- `tabs/PlanTab.jsx`：当前是训练计划占位页，后续负责一周训练计划展示和动作增删改。
+- `tabs/TodayTab.jsx`：当前是今日日志占位页，后续负责今日日志录入和今日计划只读摘要。
+- `tabs/CoachTab.jsx`：当前是 AI 教练占位页，后续负责 AI 对话、上下文预览、采纳卡片接入。
 - `components/ExerciseEditor.jsx`：后续负责单个训练动作编辑。
 - `components/AdoptCard.jsx`：后续负责 AI 结构化建议展示和采纳交互。
 - `utils/storage.js`：后续统一封装 localStorage 读写。

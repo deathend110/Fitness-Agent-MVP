@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/note.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "note"
+              "title": "README"
             }
           },
           {
@@ -41,16 +41,30 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "task/Sprint 0 - 项目准备.md",
+                "file": "task/Sprint 1 - 核心骨架与本地数据.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Sprint 0 - 项目准备"
+              "title": "Sprint 1 - 核心骨架与本地数据"
+            }
+          },
+          {
+            "id": "6ac1432d447c496f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "task/Sprint 2 - 档案与训练计划.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Sprint 2 - 档案与训练计划"
             }
           }
         ],
-        "currentTab": 2
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -123,7 +137,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "task/Sprint 0 - 项目准备.md",
+                "file": "README.md",
                 "collapseAll": true,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -133,7 +147,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Sprint 0 - 项目准备 的反向链接列表"
+              "title": "README 的反向链接列表"
             }
           },
           {
@@ -142,12 +156,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "task/Sprint 0 - 项目准备.md",
+                "file": "README.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Sprint 0 - 项目准备 的出链列表"
+              "title": "README 的出链列表"
             }
           },
           {
@@ -185,13 +199,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "task/Sprint 0 - 项目准备.md",
+                "file": "README.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Sprint 0 - 项目准备 的大纲"
+              "title": "README 的大纲"
             }
           }
         ],
@@ -212,20 +226,24 @@
       "bases:新建数据库": false
     }
   },
-  "active": "d6f33b42babcf1cb",
+  "active": "d46c282da3ffcb20",
   "lastOpenFiles": [
+    "dist/assets/index-D_64g0Pk.js",
+    "dist/assets/index-DqowuhJT.css",
     "docs/note.md",
+    "task/Sprint 2 - 档案与训练计划.md",
+    "src/tabs/CoachTab.jsx",
+    "src/tabs/TodayTab.jsx",
+    "src/tabs/PlanTab.jsx",
+    "src/tabs/ProfileTab.jsx",
+    "task/Sprint 1 - 核心骨架与本地数据.md",
+    "task/Sprint 0 - 项目准备.md",
     "node_modules/convert-source-map/README.md",
     "node_modules/convert-source-map/package.json",
     "node_modules/convert-source-map/LICENSE",
     "node_modules/convert-source-map/index.js",
     "node_modules/convert-source-map",
     "dist/assets/index-mVCC9JE4.css",
-    "dist/assets/index-DMscsv-1.js",
-    "dist/assets",
-    "dist/index.html",
-    "dist",
-    "package-lock.json",
     "node_modules/@esbuild/win32-x64/README.md",
     "node_modules/react-dom/README.md",
     "node_modules/tailwindcss/README.md",
@@ -246,10 +264,6 @@
     "node_modules/tailwindcss/lib/postcss-plugins/nesting/README.md",
     "node_modules/tailwindcss/lib/value-parser/README.md",
     "node_modules/@babel/plugin-transform-react-jsx-self/README.md",
-    "node_modules/@babel/code-frame/README.md",
-    "node_modules/@babel/helper-module-transforms/README.md",
-    "node_modules/@babel/helpers/README.md",
-    "node_modules/gensync/README.md",
     "docs/SDD四件套.jpg"
   ]
 }

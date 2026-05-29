@@ -40,7 +40,7 @@ VITE_DEEPSEEK_API_KEY=你的DeepSeek_API_Key
 
 ## 首次使用路径
 
-当前 Sprint 0 只完成项目骨架。后续 MVP 的目标使用路径是：
+当前已完成 Sprint 1 Task 1.1，应用具备 4 个主 Tab 入口。后续 MVP 的目标使用路径是：
 
 1. 填写我的档案和三大项 1RM。
 2. 设置一周训练计划。
@@ -63,4 +63,6 @@ VITE_DEEPSEEK_API_KEY=你的DeepSeek_API_Key
 
 - 已完成 Vite + React + Tailwind CSS 基础骨架。
 - 已创建 `src/tabs`、`src/components`、`src/utils`、`src/api` 目录。
+- 已完成 4 个主 Tab 页面入口：我的档案、训练计划、今日日志、AI 教练。
+- 已实现顶部导航点击切换 Tab，切换过程不会刷新页面。
 - 后续开发按 `task/Sprint 0 - 项目准备.md` 和 `docs/tasks.md` 推进。
