@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildTodayLogPayload, readTodayLogForm } from '../utils/dailyLog.js'
 import { buildTodayPlanSummary } from '../utils/todayPlan.js'
+import { buildWeightChartModel } from '../utils/weightChart.js'
+
+const WeightChart = lazy(() => import('../components/WeightChart.jsx'))
 
 const metricFields = [
   { key: 'weight', label: '体重 (kg)', inputMode: 'decimal', step: '0.1' },
@@ -25,6 +28,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
   const todayLog = dailyLog?.[todayDate]
   const todayPlan = weeklyPlan?.[todayPlanKey] ?? { type: 'rest', exercises: [] }
   const todayPlanSummary = buildTodayPlanSummary(todayPlan, profile?.oneRM)
+  const weightChartModel = buildWeightChartModel(dailyLog, todayDate)
   const [draft, setDraft] = useState(() => readTodayLogForm(todayLog))
   const [saveHint, setSaveHint] = useState('')
 
@@ -44,9 +48,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
   function handleSubmit(event) {
     event.preventDefault()
 
-    onDailyLogChange((currentDailyLog) =>
-      buildTodayLogPayload(currentDailyLog, todayDate, draft),
-    )
+    onDailyLogChange((currentDailyLog) => buildTodayLogPayload(currentDailyLog, todayDate, draft))
     setSaveHint('今日日志已保存到本地。')
   }
 
@@ -55,8 +57,8 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
       <p className="text-sm font-semibold text-fitloop-mint">Tab 3</p>
       <h2 className="mt-3 text-2xl font-bold text-white">今日日志</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
-        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要和今日训练计划。保存后会写回
-        <code>fitloop_dailyLog</code>，刷新页面后仍然保留。
+        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要、近 14 天体重趋势和今日训练计划。
+        保存后会写回 <code>fitloop_dailyLog</code>，刷新页面后仍会保留。
       </p>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -111,7 +113,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
             <textarea
               className="min-h-28 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
               onChange={(event) => updateDraftField('trainingNotes', event.target.value)}
-              placeholder="例如：主项速度下降、哪里紧、是否需要下调训练量。"
+              placeholder="例如：主项速度下降、哪个部位发紧、是否需要下调训练量。"
               value={draft.trainingNotes}
             />
           </label>
@@ -140,17 +142,24 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
             </p>
           </article>
 
+          <Suspense
+            fallback={(
+              <article className="rounded-md border border-fitloop-line bg-fitloop-ink/30 p-4">
+                <p className="text-sm font-medium text-white">体重趋势</p>
+                <p className="mt-3 text-sm leading-6 text-slate-300">图表组件加载中...</p>
+              </article>
+            )}
+          >
+            <WeightChart model={weightChartModel} />
+          </Suspense>
+
           <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayPlanKey}</p>
             <h3 className="mt-3 text-lg font-semibold text-white">今日计划</h3>
-            <p className="mt-4 text-sm text-slate-300">
-              训练类型：{todayPlanSummary.typeLabel}
-            </p>
+            <p className="mt-4 text-sm text-slate-300">训练类型：{todayPlanSummary.typeLabel}</p>
 
             {todayPlanSummary.isRestDay ? (
-              <p className="mt-4 text-sm leading-6 text-slate-300">
-                {todayPlanSummary.message}
-              </p>
+              <p className="mt-4 text-sm leading-6 text-slate-300">{todayPlanSummary.message}</p>
             ) : (
               <ul className="mt-4 space-y-3">
                 {todayPlanSummary.exercises.map((exercise) => (

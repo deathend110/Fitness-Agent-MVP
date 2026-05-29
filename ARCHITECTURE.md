@@ -31,6 +31,7 @@ src/
     ExerciseEditor.jsx
     PlanDayCard.jsx
     PromptPreviewPanel.jsx
+    WeightChart.jsx
   tabs/
     CoachTab.jsx
     PlanTab.jsx
@@ -51,6 +52,7 @@ src/
     promptPreview.js
     storage.js
     todayPlan.js
+    weightChart.js
     weeklyPlan.js
 tests/
   *.test.js
@@ -85,6 +87,7 @@ docs/
   - 维护今日日志录入
   - 展示今日计划只读摘要
   - 展示已保存的当日信息
+  - 展示近 14 天体重趋势图或空状态
 
 - `src/tabs/CoachTab.jsx`
   - 维护 AI 教练聊天输入、加载态和错误提示
@@ -104,6 +107,10 @@ docs/
 - `src/components/AdoptCard.jsx`
   - 展示 AI 建议中的日期、摘要和字段变化
   - 触发“采纳”与“忽略”回调，不直接处理写回逻辑
+
+- `src/components/WeightChart.jsx`
+  - 负责渲染今日日志页的体重趋势折线图
+  - 当记录不足时显示友好的空状态提示
 
 - `src/components/PlanDayCard.jsx`、`src/components/ExerciseEditor.jsx`
   - 负责训练计划的按天展示和动作编辑交互
@@ -136,6 +143,9 @@ docs/
   - 校验建议中的 `day / exerciseName / field`
   - 只支持对**已有动作的已有字段**执行 `update`
   - 任一变更不合法时整次采纳失败，避免部分写回
+- `src/utils/weightChart.js`
+  - 统一整理近 14 天体重图表数据
+  - 过滤空体重和超出时间范围的日志记录
 
 - `src/api/deepseek.js`
   - 统一处理 API Key 检查、请求发送和错误归一化
@@ -175,6 +185,8 @@ TodayTab
   -> 生成以当天日期为 key 的日志 payload
   -> 更新 dailyLog 顶层 state
   -> App useEffect 写回 fitloop_dailyLog
+  -> buildWeightChartModel(dailyLog, todayDate)
+  -> WeightChart 展示近 14 天体重趋势或空状态
 ```
 
 今日日志不会覆盖其他日期的数据，而是按 `YYYY-MM-DD` 组织。
