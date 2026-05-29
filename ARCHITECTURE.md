@@ -94,6 +94,7 @@ docs/
 
 - `src/tabs/CoachTab.jsx`
   - 维护 AI 教练聊天输入、加载态和错误提示
+  - 发送前校验档案最小必填字段，避免在空上下文下发起 AI 请求
   - 在发送前读取最新 `profile / weeklyPlan / dailyLog`
   - 展示聊天区、上下文预览和建议采纳卡片
   - 在采纳成功时推动训练计划更新
@@ -139,6 +140,10 @@ docs/
   - 按 `system -> history -> user` 顺序组装消息
   - 调用 DeepSeek 普通接口或流式接口
   - 调用 AI 响应解析逻辑，返回安全文本与 suggestion
+
+- `src/utils/coachGuard.js`
+  - 统一定义 AI 教练发送前的最小档案校验规则
+  - 当前要求姓名、当前体重、训练目标和深蹲 1RM 均已填写
 
 - `src/utils/aiResponse.js`
   - 解析 AI 回复中的纯文本与 `---JSON---` 结构化建议
@@ -396,6 +401,7 @@ CoachTab
 - suggestion 目前只支持 `action: "update"`
 - 只支持更新已存在动作的已存在字段
 - 不支持通过 suggestion 新增动作、删除动作或批量改造一整周计划
+- 档案缺少关键字段时，AI 教练会直接阻止发送，避免生成误导性建议
 - 当前更偏向演示闭环，不追求复杂训练编程能力
 
 ## 8. 后续扩展方向

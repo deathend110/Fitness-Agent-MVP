@@ -5,6 +5,7 @@ import PromptPreviewPanel from '../components/PromptPreviewPanel.jsx'
 import { deepSeekDefaults, getDeepSeekApiKeyStatus } from '../api/deepseek.js'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import { adoptPlanChange } from '../utils/adoptPlan.js'
+import { getCoachBlockReason } from '../utils/coachGuard.js'
 import { requestCoachReply, requestCoachReplyStream } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import { buildPromptPreviewModel } from '../utils/promptPreview.js'
@@ -47,6 +48,7 @@ function CoachTab({
     () => buildPromptPreviewModel(profile, weeklyPlan, dailyLog),
     [dailyLog, profile, weeklyPlan],
   )
+  const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
   const statusTone = apiKeyStatus.hasKey
     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
     : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
@@ -73,6 +75,11 @@ function CoachTab({
 
     const userInput = draft.trim()
     if (!userInput || isSending) {
+      return
+    }
+
+    if (coachBlockReason) {
+      setErrorMessage(coachBlockReason)
       return
     }
 
