@@ -18,7 +18,9 @@ function App() {
   const [weeklyPlan, setWeeklyPlan] = useState(() =>
     loadStorage(storageKeys.weeklyPlan, defaultWeeklyPlan),
   )
-  const [dailyLog] = useState(() => loadStorage(storageKeys.dailyLog, defaultDailyLog))
+  const [dailyLog, setDailyLog] = useState(() =>
+    loadStorage(storageKeys.dailyLog, defaultDailyLog),
+  )
   const [chatHistory] = useState(() =>
     loadStorage(storageKeys.chatHistory, defaultChatHistory),
   )
@@ -59,7 +61,14 @@ function App() {
     {
       id: 'today',
       label: '今日日志',
-      component: <TodayTab dailyLog={dailyLog} profile={profile} weeklyPlan={weeklyPlan} />,
+      component: (
+        <TodayTab
+          dailyLog={dailyLog}
+          onDailyLogChange={setDailyLog}
+          profile={profile}
+          weeklyPlan={weeklyPlan}
+        />
+      ),
     },
     {
       id: 'coach',

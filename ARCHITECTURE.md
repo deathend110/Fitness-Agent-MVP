@@ -9,18 +9,20 @@ src/
     ExerciseEditor.jsx
     PlanDayCard.jsx
   tabs/
-    ProfileTab.jsx
-    PlanTab.jsx
-    TodayTab.jsx
     CoachTab.jsx
+    PlanTab.jsx
+    ProfileTab.jsx
+    TodayTab.jsx
   utils/
     calc.js
+    dailyLog.js
     defaultData.js
     exerciseForm.js
     profileForm.js
     storage.js
     weeklyPlan.js
 tests/
+  dailyLog.test.js
   weeklyPlan.test.js
 ```
 
@@ -30,48 +32,48 @@ tests/
   - 统一加载 `profile / weeklyPlan / dailyLog / chatHistory`
   - 维护顶层 React state
   - 通过 `useEffect` 将状态写回 localStorage
+- `src/tabs/ProfileTab.jsx`
+  - 维护用户基础档案、目标和三大项 1RM
 - `src/tabs/PlanTab.jsx`
-  - 组织训练计划页面
-  - 协调“展开哪一天”“当前编辑哪个动作”等页面状态
-  - 把 `ExerciseEditor` 的草稿转换为正式动作对象后写回周计划
-- `src/components/PlanDayCard.jsx`
-  - 负责单日训练卡片展示
-  - 渲染训练类型选择、动作列表、编辑入口和新增入口
-- `src/components/ExerciseEditor.jsx`
-  - 只负责单个动作草稿编辑
-  - 不直接读写 localStorage
-- `src/utils/exerciseForm.js`
-  - 在动作草稿对象与正式动作对象之间做转换
-  - 保证百分比模式与固定重量模式的数据字段形态一致
+  - 维护一周训练计划
+  - 协调训练日展开、动作编辑、新增与删除
+- `src/tabs/TodayTab.jsx`
+  - 维护今日日志表单
+  - 展示已保存摘要与今日计划，避免表单录入与只读信息割裂
+- `src/utils/dailyLog.js`
+  - 将已保存的今日日志转成受控表单草稿
+  - 将表单输入规范化为可安全保存的数据结构
+  - 使用当天日期键生成新的 `dailyLog` 对象
 - `src/utils/weeklyPlan.js`
-  - 封装周计划更新逻辑
-  - 包含修改训练类型、新增动作、更新动作、删除动作
-  - 生成稳定动作 `id`，优先使用 `crypto.randomUUID()`
-- `tests/weeklyPlan.test.js`
-  - 直接验证周计划 helper 的核心行为
+  - 封装周计划的新增、修改、删除逻辑
+- `src/utils/storage.js`
+  - 统一封装 localStorage 的读写与异常兜底
 
 ## 数据流说明
 
 ```text
 App 启动
   -> loadStorage()
-  -> 读取 fitloop_weeklyPlan 等本地数据
-  -> 将 weeklyPlan 与 setWeeklyPlan 传给 PlanTab
+  -> 读取 fitloop_profile / fitloop_weeklyPlan / fitloop_dailyLog / fitloop_chatHistory
+  -> 将 state 和 setter 传给各 Tab
 
-PlanTab 页面交互
-  -> 用户修改训练类型 / 新增动作 / 编辑动作 / 删除动作
-  -> ExerciseEditor 维护单动作草稿
-  -> draftToExercise() 转成正式动作对象
-  -> weeklyPlan.js 返回新的 weeklyPlan
-  -> onWeeklyPlanChange(setWeeklyPlan) 更新顶层状态
+TodayTab 录入今日日志
+  -> readTodayLogForm() 将当天记录转成受控表单草稿
+  -> 用户编辑体重、热量、蛋白质、睡眠、疲劳度、训练完成状态和备注
+  -> buildTodayLogPayload() 使用 getTodayStr() 作为日期键生成新 dailyLog
+  -> onDailyLogChange(setDailyLog) 更新 App 顶层状态
 
 App 状态变化
   -> useEffect(saveStorage)
-  -> 写回 fitloop_weeklyPlan
-  -> 刷新页面后再次 loadStorage() 仍能恢复
+  -> 写回 fitloop_dailyLog
+  -> 刷新页面后再次 loadStorage() 恢复当天数据
 ```
 
 ## localStorage 数据结构
+
+### `fitloop_profile`
+
+保存用户基础信息、目标信息和三大项 1RM。
 
 ### `fitloop_weeklyPlan`
 
@@ -96,21 +98,38 @@ App 状态变化
 }
 ```
 
-动作对象约束：
+### `fitloop_dailyLog`
 
-- 百分比模式：`ref1RM` 与 `pct` 有值，`kg === null`
-- 固定重量模式：`kg` 有值，`ref1RM === null && pct === null`
-- 每个动作都包含稳定 `id`
+按 `YYYY-MM-DD` 存储今日日志，当前字段如下：
 
-### 其他键
+```json
+{
+  "2026-05-30": {
+    "weight": 81.2,
+    "kcal": 2300,
+    "protein": 170,
+    "sleep": 6.5,
+    "fatigue": 4,
+    "trainingDone": true,
+    "trainingNotes": "今天完成腿部训练"
+  }
+}
+```
 
-- `fitloop_profile`：用户基础信息、三大项 1RM、目标与备注
-- `fitloop_dailyLog`：按日期存储体重、热量、疲劳、睡眠、训练备注
-- `fitloop_chatHistory`：AI 对话历史
+说明：
+
+- `weight / kcal / protein / sleep / fatigue` 可为数字或 `null`
+- `trainingDone` 始终为布尔值
+- `trainingNotes` 始终为字符串
+- 可选字段留空时会规范化为空安全值，避免页面摘要和后续上下文读取崩溃
+
+### `fitloop_chatHistory`
+
+保存 AI 教练会话记录，供后续上下文注入与建议采纳闭环使用。
 
 ## AI 调用链路
 
-当前项目保留 AI 页面骨架，正式链路仍按以下方向扩展：
+当前项目仅保留 AI 页面骨架，正式链路仍按以下方向扩展：
 
 ```text
 CoachTab
@@ -118,12 +137,12 @@ CoachTab
   -> 组装上下文 prompt
   -> 调用 DeepSeek Chat Completions
   -> 解析建议
-  -> 回显到页面，并在后续 Sprint 支持采纳写回计划
+  -> 在后续 Sprint 中支持结构化建议采纳
 ```
 
 ## 后续扩展方向
 
-- 训练计划动作顺序调整与批量复制
-- 今日日志更完整的表单校验
-- AI 返回结构化 JSON 建议并一键采纳
+- 今日日志的输入校验与历史浏览
+- 基于今日日志和计划的 AI 上下文注入
+- AI 返回结构化 JSON 建议并一键写回训练计划
 - 体重趋势图、训练热力图、数据导入导出
