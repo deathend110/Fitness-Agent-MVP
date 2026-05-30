@@ -134,29 +134,38 @@ test('buildPlanHeaderModel 在空计划下也会返回明确的计划设置占�
   })
 })
 
-test('PlanTab 移除效果稿之外的说明文案并保留新的承载框架', () => {
+test('PlanTab 移除双层卡片承载框，只保留页面 header 加内容区结构', () => {
   const planTabSource = readWorkspaceFile('src/tabs/PlanTab.jsx')
 
   assert.doesNotMatch(planTabSource, /fitloop_weeklyPlan/)
   assert.doesNotMatch(planTabSource, /这里可以直接维护一周训练计划/)
   assert.match(planTabSource, /<PlanHeaderToolbar headerModel=\{headerModel\} \/>/)
-  assert.match(planTabSource, /rounded-\[1\.5rem\] border border-fitloop-line bg-white\/80 p-6/)
-  assert.match(planTabSource, /rounded-\[1\.25rem\] border border-fitloop-line bg-white p-3/)
+  assert.match(planTabSource, /return \(\s*<div className="space-y-5">/)
+  assert.match(planTabSource, /<PlanWeekGrid/)
+  assert.doesNotMatch(planTabSource, /rounded-\[1\.5rem\] border border-fitloop-line/)
+  assert.doesNotMatch(planTabSource, /rounded-\[1\.25rem\] border border-fitloop-line bg-white p-3/)
 })
 
-test('PlanHeaderToolbar 与 Legend 源码不再保留旧版卡片式头部痕迹', () => {
+test('PlanHeaderToolbar 源码恢复效果稿的一行式结构与周区间图标', () => {
   const toolbarSource = readWorkspaceFile('src/components/plan-header/PlanHeaderToolbar.jsx')
-  const legendSource = readWorkspaceFile('src/components/plan-header/PlanHeaderLegend.jsx')
 
   assert.match(toolbarSource, /本周训练计划/)
   assert.match(toolbarSource, /headerModel\.weekRangeLabel/)
-  assert.match(toolbarSource, /headerModel\.weekBadgeLabel/)
+  assert.match(toolbarSource, /svg/)
+  assert.match(toolbarSource, /M8 7V3m8 4V3m-9 8h10M5 21h14/)
+  assert.match(toolbarSource, /lg:flex-row/)
+  assert.match(toolbarSource, /items-center gap-6/)
   assert.match(toolbarSource, /headerModel\.viewTabs\.map/)
-  assert.match(toolbarSource, /\{tab\.label\}/)
-  assert.doesNotMatch(toolbarSource, /uppercase tracking-\[0\.16em\]/)
-  assert.doesNotMatch(toolbarSource, /disabled/)
+  assert.match(toolbarSource, /<PlanHeaderLegend items=\{headerModel\.legendItems\} \/>/)
   assert.match(toolbarSource, /headerModel\.settingsButton\.label/)
-  assert.match(toolbarSource, /headerModel\.settingsButton\.hint/)
+  assert.doesNotMatch(toolbarSource, /flex-col gap-3 lg:items-end/)
+  assert.doesNotMatch(toolbarSource, /w-fit/)
+})
+
+test('PlanHeaderLegend 继续保持主项与辅项的横排图例点样式', () => {
+  const legendSource = readWorkspaceFile('src/components/plan-header/PlanHeaderLegend.jsx')
+
   assert.match(legendSource, /item\.tone === 'main'/)
   assert.match(legendSource, /item\.tone === 'accessory'/)
+  assert.match(legendSource, /flex-wrap items-center gap-4/)
 })
