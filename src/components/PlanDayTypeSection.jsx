@@ -1,12 +1,33 @@
 import PlanDayCardButton from './PlanDayCardButton.jsx'
 
 function PlanDayTypeSection({
+  compact = false,
+  compactLabel = '改为训练日',
   dayTypeListId,
   dayTypeOptions,
   dayTypeSuggestions,
   planType,
   onDayTypeChange,
 }) {
+  const quickOptions = compact
+    ? dayTypeOptions.filter((option) => option !== 'rest')
+    : dayTypeOptions
+
+  if (compact) {
+    return (
+      <div className="mt-3 border-t border-fitloop-line/60 pt-3">
+        <p className="mb-2 text-[11px] font-medium text-slate-500">{compactLabel}</p>
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {quickOptions.map((option) => (
+            <PlanDayCardButton key={option} onClick={() => onDayTypeChange(option)}>
+              {option}
+            </PlanDayCardButton>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-2">
       <label className="block space-y-2">

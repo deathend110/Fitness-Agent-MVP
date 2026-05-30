@@ -13,6 +13,7 @@ import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 function PlanDayCard({
   dayKey,
   dayLabel,
+  dateLabel,
   plan,
   isTrainingDay,
   dayTypeOptions,
@@ -34,6 +35,7 @@ function PlanDayCard({
   const dayTypeSuggestions = getPlanDayTypeSuggestions(plan.type)
   const displayModel = buildPlanDayDisplayModel({
     dayLabel,
+    dateLabel,
     plan,
     isTrainingDay,
   })
@@ -41,6 +43,7 @@ function PlanDayCard({
     displayModel.showAddExerciseButton && editingExerciseId === NEW_PLAN_EXERCISE_ID
   const hasExercises = plan.exercises.length > 0
   const showDayTypeSection = displayModel.showDayTypeSection !== false
+  const dayTypeSectionVariant = displayModel.dayTypeSectionVariant ?? 'full'
   const isCompactRestDay = displayModel.layout === 'rest-compact'
   // 新增动作时优先展示新增表单，避免和空状态提示同时抢占注意力。
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
@@ -58,8 +61,13 @@ function PlanDayCard({
       <div className={`mt-4 ${isCompactRestDay ? 'flex min-h-[9.5rem] flex-1 flex-col' : 'space-y-4'}`}>
         {showDayTypeSection ? (
           <PlanDayTypeSection
+            compact={dayTypeSectionVariant === 'compact'}
             dayTypeListId={dayTypeListId}
-            dayTypeOptions={dayTypeOptions}
+            dayTypeOptions={
+              displayModel.dayTypeQuickOptions?.length > 0
+                ? displayModel.dayTypeQuickOptions
+                : dayTypeOptions
+            }
             dayTypeSuggestions={dayTypeSuggestions}
             onDayTypeChange={onDayTypeChange}
             planType={plan.type}

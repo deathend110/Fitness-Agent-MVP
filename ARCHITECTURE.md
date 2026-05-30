@@ -103,11 +103,12 @@ docs/
   - 只负责组合头部、训练类型区、动作编辑区和动作列表
 
 - `src/components/PlanDayCardHeader.jsx`
-  - 展示星期标签、训练日 / 恢复日模式、训练类型、动作数量和展开状态
+  - 展示星期标签、日期标签、训练日 / 恢复日模式、训练类型和动作数量
 
 - `src/components/PlanDayTypeSection.jsx`
   - 负责训练类型输入
   - 使用“文本输入 + datalist 联想 + 快捷按钮”组合
+  - 在空休息日里支持轻量快捷切换模式，避免视觉回退到旧版厚重编辑块
 
 - `src/components/PlanExerciseEditorCard.jsx`
   - 封装新增动作 / 编辑动作的表单容器
@@ -122,7 +123,7 @@ docs/
 
 - `src/utils/planLayout.js`
   - 负责把 weeklyPlan 映射成周视图列数据
-  - 统一生成桌面比例网格模板、训练日 / 休息日列跨度和布局兜底标记
+  - 统一生成桌面比例网格模板、训练日 / 休息日列跨度、每天日期标签和布局兜底标记
 
 - `src/utils/weeklyPlan.js`
   - 负责周计划结构归一化
@@ -508,7 +509,7 @@ tests/
 ### 展示模型职责
 
 - `src/utils/planDayDisplay.js`
-  - 负责把单日计划映射为展示模型，集中判断休息日、空训练日、历史动作保留提示和无备注入口约束。
+  - 负责把单日计划映射为展示模型，集中判断休息日、空训练日、历史动作保留提示、轻量切换入口和无备注入口约束。
   - 让 `PlanDayCard.jsx` 只消费展示结果，减少 JSX 内散落的条件分支。
 
 ### 组件职责调整
@@ -518,6 +519,7 @@ tests/
   - 继续承载训练类型切换、新增动作、动作编辑与删除链路。
 - `src/components/PlanDayCardHeader.jsx`
   - 训练日与休息日共用同一入口，但根据展示模型输出不同的头部信息密度。
+  - 空休息日窄列只保留“周几 + 月日 + 休息 badge”，避免与中部恢复面板重复表达。
 - `src/components/plan-grid/PlanWeekGridColumn.jsx`
   - 继续负责宽窄列比例，同时让休息日列使用更轻的容器样式。
 - `src/components/plan-rest/PlanDayEmptyState.jsx`
@@ -525,7 +527,11 @@ tests/
 - `src/components/plan-rest/PlanRestDayPanel.jsx`
   - 负责休息日空列的独立轻量模板，不引入无效备注入口。
 
+- `src/components/PlanDayTypeSection.jsx`
+  - 空休息日使用紧凑模式，只暴露“改为训练日”的轻量快捷入口。
+  - 有历史动作的休息日与训练日继续保留完整训练类型输入链路。
+
 ### 验证补充
 
 - `tests/planDayDisplay.test.js`
-  - 覆盖休息日空状态、空训练日状态、休息日保留历史动作以及“无备注入口”约束。
+  - 覆盖休息日空状态、空训练日状态、休息日保留历史动作、轻量切换入口以及“无备注入口”约束。

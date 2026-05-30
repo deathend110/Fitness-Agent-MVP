@@ -12,7 +12,7 @@ function readWorkspaceFile(relativePath) {
 }
 
 test('buildWeeklyPlanColumns 会生成按周一到周日排列的 7 天列，并区分训练日与休息日比例', () => {
-  const columns = buildWeeklyPlanColumns(demoWeeklyPlan)
+  const columns = buildWeeklyPlanColumns(demoWeeklyPlan, { referenceDate: '2026-05-30' })
 
   assert.equal(columns.length, 7)
   assert.deepEqual(columns.map((column) => column.dayKey), [
@@ -36,10 +36,12 @@ test('buildWeeklyPlanColumns 会生成按周一到周日排列的 7 天列，并
   assert.equal(columns[0].isTrainingDay, true)
   assert.equal(columns[1].isTrainingDay, false)
   assert.equal(columns[0].exerciseCount, demoWeeklyPlan.Monday.exercises.length)
+  assert.equal(columns[0].dateLabel, '5月25日')
+  assert.equal(columns[6].dateLabel, '5月31日')
 })
 
 test('buildWeeklyPlanLayoutModel 会输出桌面比例网格模板与窄屏兜底标志', () => {
-  const layoutModel = buildWeeklyPlanLayoutModel(demoWeeklyPlan)
+  const layoutModel = buildWeeklyPlanLayoutModel(demoWeeklyPlan, { referenceDate: '2026-05-30' })
 
   assert.equal(layoutModel.desktopTemplateColumns, '2fr 1fr 2fr 1fr 2fr 1fr 1fr')
   assert.equal(layoutModel.desktopGridColumnCount, 7)
@@ -73,7 +75,7 @@ test('buildWeeklyPlanLayoutModel 会根据训练日与休息日动态生成 7 �
     Friday: { type: 'rest', exercises: [] },
     Saturday: { type: 'squat', exercises: [{ id: 'squat-1' }] },
     Sunday: { type: 'rest', exercises: [] },
-  })
+  }, { referenceDate: '2026-05-30' })
 
   assert.deepEqual(layoutModel.columns.map((column) => column.dayKey), [
     'Monday',
@@ -93,6 +95,59 @@ test('buildWeeklyPlanLayoutModel 会根据训练日与休息日动态生成 7 �
     'narrow',
     'wide',
     'narrow',
+  ])
+})
+
+test('buildWeeklyPlanColumns 会优先使用 weeklyPlan.weekMeta 生成每天日期标签', () => {
+  const columns = buildWeeklyPlanColumns({
+    weekMeta: {
+      weekNumber: 22,
+      weekStart: '2026-05-25',
+      weekEnd: '2026-05-31',
+    },
+    Monday: { type: '腿日', exercises: [] },
+    Tuesday: { type: 'rest', exercises: [] },
+    Wednesday: { type: '推日', exercises: [] },
+    Thursday: { type: 'rest', exercises: [] },
+    Friday: { type: '拉日', exercises: [] },
+    Saturday: { type: 'rest', exercises: [] },
+    Sunday: { type: 'rest', exercises: [] },
+  }, { referenceDate: '2026-05-30' })
+
+  assert.deepEqual(columns.map((column) => column.dateLabel), [
+    '5月25日',
+    '5月26日',
+    '5月27日',
+    '5月28日',
+    '5月29日',
+    '5月30日',
+    '5月31日',
+  ])
+})
+
+test('buildWeeklyPlanColumns 在旧 weekMeta 缺失完整周区间时会回退到当前自然周日期标签', () => {
+  const columns = buildWeeklyPlanColumns({
+    weekMeta: {
+      weekNumber: 22,
+      weekStart: '2026-04-27',
+    },
+    Monday: { type: 'rest', exercises: [] },
+    Tuesday: { type: 'rest', exercises: [] },
+    Wednesday: { type: 'rest', exercises: [] },
+    Thursday: { type: 'rest', exercises: [] },
+    Friday: { type: 'rest', exercises: [] },
+    Saturday: { type: 'rest', exercises: [] },
+    Sunday: { type: 'rest', exercises: [] },
+  }, { referenceDate: '2026-05-30' })
+
+  assert.deepEqual(columns.map((column) => column.dateLabel), [
+    '5月25日',
+    '5月26日',
+    '5月27日',
+    '5月28日',
+    '5月29日',
+    '5月30日',
+    '5月31日',
   ])
 })
 

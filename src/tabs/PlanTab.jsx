@@ -37,7 +37,14 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
 
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
-  const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
+  const todayStr = getTodayStr()
+  const layoutModel = useMemo(
+    () =>
+      buildWeeklyPlanLayoutModel(weeklyPlan, {
+        referenceDate: todayStr,
+      }),
+    [todayStr, weeklyPlan],
+  )
   // 头部周信息优先复用 weeklyPlan 内的真实元数据，日期基准必须传入可解析的真实日期字符串。
   const headerModel = useMemo(
     () =>
@@ -121,6 +128,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
               <PlanDayCard
                 dayKey={column.dayKey}
                 dayLabel={column.dayLabel}
+                dateLabel={column.dateLabel}
                 dayTypeOptions={dayTypeOptions}
                 editingExerciseId={editingExerciseId}
                 exerciseDraft={

@@ -1,5 +1,9 @@
 function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDay, planType }) {
   const typeLabel = displayModel?.headerBadgeLabel ?? (!isTrainingDay && planType === 'rest' ? '休息' : planType)
+  const header = displayModel?.header ?? {
+    title: dayLabel,
+    dateLabel: '',
+  }
   const preview = displayModel?.preview ?? {
     eyebrow: isTrainingDay ? '训练日' : '轻安排',
     title: typeLabel,
@@ -14,6 +18,20 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
     ? 'border-fitloop-orange/30 bg-fitloop-orange/10 text-fitloop-orange'
     : 'border-fitloop-line/70 bg-fitloop-panel/90 text-slate-300'
 
+  if (isCompactRestDay) {
+    return (
+      <div className="flex w-full flex-col items-center text-center">
+        <h3 className="truncate text-sm font-bold text-slate-100">{header.title}</h3>
+        {header.dateLabel ? (
+          <p className="mt-1 text-[11px] leading-4 text-slate-400">{header.dateLabel}</p>
+        ) : null}
+        <span className="mt-2 rounded-full border border-fitloop-line/70 bg-fitloop-panel/90 px-2 py-0.5 text-[11px] font-semibold text-slate-300">
+          {typeLabel}
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div className={rootClassName}>
       <div
@@ -26,8 +44,11 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
             {preview.eyebrow}
           </p>
           <h3 className={`truncate font-semibold text-slate-100 ${isCompactRestDay ? 'mt-1 text-base' : 'mt-2 text-lg'}`}>
-            {dayLabel}
+            {header.title}
           </h3>
+          {header.dateLabel ? (
+            <p className="mt-1 text-xs leading-5 text-slate-400">{header.dateLabel}</p>
+          ) : null}
         </div>
       </div>
 

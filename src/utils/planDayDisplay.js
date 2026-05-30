@@ -14,11 +14,25 @@ function getHistoryTitle(count = 0) {
   return `保留 ${count} 个历史动作`
 }
 
+function createHeaderModel(dayLabel = '', dateLabel = '') {
+  return {
+    eyebrow: '',
+    title: dayLabel,
+    meta: '',
+    dateLabel,
+  }
+}
+
 /**
  * 将计划日的展示判断集中到纯函数里，先稳定空状态与休息日语义，
  * 再让 React 组件只负责按模型渲染，避免 JSX 里散落条件分支。
  */
-export function buildPlanDayDisplayModel({ dayLabel = '', plan = {}, isTrainingDay = false } = {}) {
+export function buildPlanDayDisplayModel({
+  dayLabel = '',
+  dateLabel = '',
+  plan = {},
+  isTrainingDay = false,
+} = {}) {
   const exercises = Array.isArray(plan.exercises) ? plan.exercises : []
   const exerciseCount = exercises.length
   const isRestDay = !isTrainingDay
@@ -31,15 +45,18 @@ export function buildPlanDayDisplayModel({ dayLabel = '', plan = {}, isTrainingD
       variant: 'rest',
       layout: hasHistoryExercises ? 'rest-history' : 'rest-compact',
       showAddExerciseButton: false,
-      showDayTypeSection: hasHistoryExercises,
+      showDayTypeSection: true,
+      dayTypeSectionVariant: hasHistoryExercises ? 'full' : 'compact',
+      dayTypeQuickOptions: ['腿日', '推日', '拉日', '有氧'],
       showNoteEntry: false,
       headerBadgeLabel: '休息',
+      header: createHeaderModel(dayLabel, dateLabel),
       historyHint:
         hasHistoryExercises
           ? '当前标记为休息日，历史动作仍保留，切回训练类型后可继续补充。'
           : null,
       preview: {
-        eyebrow: '轻安排',
+        eyebrow: '',
         title: hasHistoryExercises ? getHistoryTitle(exerciseCount) : '恢复优先',
         meta: hasHistoryExercises ? getExerciseCountLabel(exerciseCount) : '身体恢复 · 蓄力',
       },
@@ -61,8 +78,11 @@ export function buildPlanDayDisplayModel({ dayLabel = '', plan = {}, isTrainingD
     layout: 'training',
     showAddExerciseButton: true,
     showDayTypeSection: true,
+    dayTypeSectionVariant: 'full',
+    dayTypeQuickOptions: [],
     showNoteEntry: false,
     headerBadgeLabel: plan.type || '训练日',
+    header: createHeaderModel(dayLabel, dateLabel),
     historyHint: null,
     preview: {
       eyebrow: exerciseCount === 0 ? '待补充' : '训练日',
