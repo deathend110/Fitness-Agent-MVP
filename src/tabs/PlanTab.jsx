@@ -49,10 +49,10 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const headerModel = useMemo(
     () =>
       buildPlanHeaderModel({
-        referenceDate: getTodayStr(),
+        referenceDate: todayStr,
         weeklyPlan,
       }),
-    [weeklyPlan],
+    [todayStr, weeklyPlan],
   )
 
   function handleDayTypeChange(dayKey, nextType) {

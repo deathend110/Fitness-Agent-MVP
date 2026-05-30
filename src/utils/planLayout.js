@@ -1,5 +1,5 @@
 import { resolvePlanWeekMeta } from './planHeader.js'
-import { normalizeWeeklyPlan } from './weeklyPlan.js'
+import { getWeekdayOrder, normalizeWeeklyPlan } from './weeklyPlan.js'
 
 const TRAINING_DAY_SPAN = 2
 const REST_DAY_SPAN = 1
@@ -47,11 +47,7 @@ function formatMonthDayLabel(date) {
   return `${date.getMonth() + 1}月${date.getDate()}日`
 }
 
-function buildDateLabelMap(weeklyPlan = {}, options = {}) {
-  const weekMeta = resolvePlanWeekMeta({
-    referenceDate: options.referenceDate,
-    weeklyPlan,
-  })
+function buildDateLabelMap(weekMeta = {}) {
   const weekStartDate = parseDateKey(weekMeta.weekStart)
 
   if (!weekStartDate) {
@@ -68,38 +64,50 @@ function buildDateLabelMap(weeklyPlan = {}, options = {}) {
   }, {})
 }
 
-function buildPlanColumn(dayKey, dayPlan, dateLabelMap) {
+function buildPlanColumn(dayKey, dayPlan, dateLabelMap, weekMeta) {
   const isTrainingDay = dayPlan.type !== 'rest'
 
   return {
     dayKey,
     dayLabel: getPlanDayLabel(dayKey),
     dateLabel: dateLabelMap[dayKey] ?? '',
+    weekMeta,
     plan: dayPlan,
     isTrainingDay,
     exerciseCount: dayPlan.exercises.length,
     width: isTrainingDay ? 'wide' : 'narrow',
+    planTypeLabel: dayPlan.type || 'rest',
+    dateLabelSource: dateLabelMap[dayKey] ? 'weeklyPlan' : 'referenceDate',
   }
 }
 
 export function buildWeeklyPlanColumns(weeklyPlan = {}, options = {}) {
   const normalizedPlan = normalizeWeeklyPlan(weeklyPlan)
-  const dateLabelMap = buildDateLabelMap(weeklyPlan, options)
+  const weekMeta = resolvePlanWeekMeta({
+    referenceDate: options.referenceDate,
+    weeklyPlan,
+  })
+  const dateLabelMap = buildDateLabelMap(weekMeta)
 
-  return Object.entries(normalizedPlan).map(([dayKey, dayPlan]) =>
-    buildPlanColumn(dayKey, dayPlan, dateLabelMap),
+  return getWeekdayOrder().map((dayKey) =>
+    buildPlanColumn(dayKey, normalizedPlan[dayKey] ?? { type: 'rest', exercises: [] }, dateLabelMap, weekMeta),
   )
 }
 
 // 布局模型集中输出比例网格约束，避免页面组件重复拼接列跨度与兜底策略。
 export function buildWeeklyPlanLayoutModel(weeklyPlan = {}, options = {}) {
   const columns = buildWeeklyPlanColumns(weeklyPlan, options)
+  const weekMeta = columns[0]?.weekMeta ?? resolvePlanWeekMeta({
+    referenceDate: options.referenceDate,
+    weeklyPlan,
+  })
   const desktopTemplateColumns = columns
     .map((column) => (column.isTrainingDay ? `${TRAINING_DAY_SPAN}fr` : `${REST_DAY_SPAN}fr`))
     .join(' ')
 
   return {
     columns,
+    weekMeta,
     compactMode: COMPACT_MODE,
     desktopGridColumnCount: columns.length,
     desktopTemplateColumns: desktopTemplateColumns || DESKTOP_TEMPLATE_COLUMNS,

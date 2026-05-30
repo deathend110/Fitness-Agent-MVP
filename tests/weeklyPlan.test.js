@@ -194,6 +194,11 @@ test('removeExerciseFromDay 删除动作时不会影响其他日期', () => {
 
 test('normalizeWeeklyPlan 会把旧结构动作升级为结构化字段并补齐 7 天', () => {
   const normalizedPlan = normalizeWeeklyPlan({
+    weekMeta: {
+      weekNumber: 22,
+      weekStart: '2026-05-25',
+      weekEnd: '2026-05-31',
+    },
     Monday: {
       type: '腿日',
       exercises: [
@@ -217,5 +222,32 @@ test('normalizeWeeklyPlan 会把旧结构动作升级为结构化字段并补齐
   assert.equal(normalizedPlan.Monday.exercises[0].template.repsText, '3')
   assert.equal(normalizedPlan.Monday.exercises[0].instance.pct, 0.8)
   assert.equal(normalizedPlan.Monday.exercises[0].instance.note, '主项')
+  assert.deepEqual(normalizedPlan.weekMeta, {
+    weekNumber: 22,
+    weekStart: '2026-05-25',
+    weekEnd: '2026-05-31',
+  })
   assert.deepEqual(normalizedPlan.Sunday, { type: 'rest', exercises: [] })
+})
+
+test('updateDayType 在写回时会保留周元信息，避免真实周计划刷新后丢失日期锚点', () => {
+  const nextPlan = updateDayType(
+    {
+      weekMeta: {
+        weekNumber: 22,
+        weekStart: '2026-05-25',
+        weekEnd: '2026-05-31',
+      },
+      Monday: { type: '腿日', exercises: [] },
+    },
+    'Monday',
+    'rest',
+  )
+
+  assert.deepEqual(nextPlan.weekMeta, {
+    weekNumber: 22,
+    weekStart: '2026-05-25',
+    weekEnd: '2026-05-31',
+  })
+  assert.equal(nextPlan.Monday.type, 'rest')
 })
