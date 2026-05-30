@@ -1,4 +1,4 @@
-import { calcTDEE, getExerciseKg } from './calc.js'
+import { buildDailyMetricsSummary, getExerciseKg } from './calc.js'
 import { getWeekdayOrder } from './weeklyPlan.js'
 
 function formatText(value, fallback = '未记录') {
@@ -16,6 +16,14 @@ function formatNumber(value, unit = '', fallback = '未记录') {
   }
 
   return `${value}${unit}`
+}
+
+function formatMetricNumber(value, unit = '', fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return '未记录'
+  }
+
+  return `${Number(value.toFixed(fractionDigits))}${unit}`
 }
 
 function getRecentEntries(dailyLog = {}, limit) {
@@ -136,11 +144,67 @@ function buildTrainingSection(dailyLog = {}) {
   return ['【近 7 天训练完成情况】', ...lines].join('\n')
 }
 
-function buildTdeeSection(profile = {}, weeklyPlan = {}, dailyLog = {}) {
-  const summary = calcTDEE(profile, weeklyPlan, dailyLog)
-  const todayType = formatText(summary.todayPlan?.type === 'rest' ? '休息日' : summary.todayPlan?.type)
-  const todayKcal = dailyLog?.[summary.todayStr]?.kcal == null ? '未记录' : `${summary.todayKcal}kcal`
-  const deltaText = dailyLog?.[summary.todayStr]?.kcal == null ? '未记录' : `${summary.delta}kcal`
+function getCalorieStatusLabel(status) {
+  if (status === 'deficit') {
+    return '热量缺口'
+  }
+
+  if (status === 'surplus') {
+    return '热量盈余'
+  }
+
+  if (status === 'balanced') {
+    return '热量基本持平'
+  }
+
+  return '未知'
+}
+
+function getProteinStatusLabel(status) {
+  if (status === 'met') {
+    return '已达到建议下限'
+  }
+
+  if (status === 'low') {
+    return '低于建议下限'
+  }
+
+  return '未知'
+}
+
+function buildStructuredMetrics(summary) {
+  return {
+    date: summary.todayStr,
+    today_plan_type: summary.todayPlan?.type ?? 'rest',
+    is_training_day: summary.isTrainingDay,
+    bmr_kcal: summary.bmr,
+    training_kcal: summary.trainingKcal,
+    tdee_kcal: summary.tdee,
+    bmi: summary.bmi,
+    calorie_intake_kcal: summary.calorie.intake,
+    calorie_delta_kcal: summary.calorie.delta,
+    calorie_status: summary.calorie.status,
+    protein_intake_g: summary.protein.intake,
+    protein_g_per_kg: summary.protein.gramsPerKg,
+    protein_status: summary.protein.status,
+    sleep_hours: summary.recovery.sleepHours,
+    fatigue_level: summary.recovery.fatigueLevel,
+  }
+}
+
+// 这里同时保留解释性文字和可机读字段，保证大模型既能直接读懂，也能在后续按统一键名继续推算。
+function buildMetricsSection(profile = {}, weeklyPlan = {}, dailyLog = {}) {
+  const summary = buildDailyMetricsSummary(profile, weeklyPlan, dailyLog)
+  const structuredMetrics = buildStructuredMetrics(summary)
+  const todayType = formatText(
+    summary.todayPlan?.type === 'rest' ? '休息日' : summary.todayPlan?.type,
+  )
+  const todayIntake = formatMetricNumber(summary.calorie.intake, 'kcal', 0)
+  const calorieDelta = formatMetricNumber(summary.calorie.delta, 'kcal', 0)
+  const proteinIntake = formatMetricNumber(summary.protein.intake, 'g', 0)
+  const proteinPerKg = formatMetricNumber(summary.protein.gramsPerKg, 'g/kg', 1)
+  const sleepHours = formatMetricNumber(summary.recovery.sleepHours, 'h', 1)
+  const fatigueLevel = formatMetricNumber(summary.recovery.fatigueLevel, '/5', 0)
 
   return [
     '【今日 TDEE 估算】',
@@ -149,13 +213,21 @@ function buildTdeeSection(profile = {}, weeklyPlan = {}, dailyLog = {}) {
     `基础代谢(BMR)：${summary.bmr}kcal`,
     `训练容量估算消耗：${summary.trainingKcal}kcal`,
     `当日 TDEE：${summary.tdee}kcal`,
-    `今日摄入：${todayKcal}`,
-    `热量缺口/盈余：${deltaText}`,
+    `今日摄入：${todayIntake}`,
+    `热量缺口/盈余：${calorieDelta}`,
+    `BMI：${formatMetricNumber(summary.bmi, '', 1)}`,
+    `热量状态：${getCalorieStatusLabel(summary.calorie.status)}（状态值：${summary.calorie.status}）`,
+    `蛋白质摄入：${proteinIntake}`,
+    `蛋白质按体重：${proteinPerKg}`,
+    `蛋白质状态：${getProteinStatusLabel(summary.protein.status)}（状态值：${summary.protein.status}）`,
+    `恢复数据：睡眠 ${sleepHours}；疲劳度 ${fatigueLevel}`,
+    '这些字段可作为训练负荷、饮食充足度和恢复状态的统一判断口径；如字段缺失，请明确说明不确定性，不要自行脑补。',
+    `structured_metrics=${JSON.stringify(structuredMetrics, null, 2)}`,
   ].join('\n')
 }
 
 /**
- * 为 AI 教练统一构建最新上下文，保证新用户、空日志、休息日等场景都能稳定生成文本预览。
+ * 为 AI 教练统一构建最新上下文，确保 PromptPreview 与实际注入共享同一份结构化指标口径。
  */
 export function buildSystemPrompt(profile = {}, weeklyPlan = {}, dailyLog = {}) {
   return [
@@ -167,6 +239,6 @@ export function buildSystemPrompt(profile = {}, weeklyPlan = {}, dailyLog = {}) 
     buildWeightHistorySection(dailyLog),
     buildDietSection(dailyLog),
     buildTrainingSection(dailyLog),
-    buildTdeeSection(profile, weeklyPlan, dailyLog),
+    buildMetricsSection(profile, weeklyPlan, dailyLog),
   ].join('\n\n')
 }

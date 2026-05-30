@@ -27,16 +27,44 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "task/V1/Task 7 - AI 对话框能力完善.md",
+                "file": "task/V1/Task 1 - 数值显示优化.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Task 7 - AI 对话框能力完善"
+              "title": "Task 1 - 数值显示优化"
+            }
+          },
+          {
+            "id": "c08d40d331f337a8",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "README"
+            }
+          },
+          {
+            "id": "86e35e43849e4dac",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "task/V1/Task 2-7 长期推进表.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Task 2-7 长期推进表"
             }
           }
         ],
-        "currentTab": 1
+        "currentTab": 3
       }
     ],
     "direction": "vertical"
@@ -171,13 +199,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "task/V1/Task 7 - AI 对话框能力完善.md",
+                "file": "task/V1/Task 2-7 长期推进表.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Task 7 - AI 对话框能力完善 的大纲"
+              "title": "Task 2-7 长期推进表 的大纲"
             }
           }
         ],
@@ -198,23 +226,39 @@
       "bases:新建数据库": false
     }
   },
-  "active": "2927478bf3954323",
+  "active": "86e35e43849e4dac",
   "lastOpenFiles": [
+    "src/utils/prompt.js",
+    "tests/promptPreview.test.js",
+    "tests/prompt.test.js",
+    "src/utils/calc.js",
+    "tests/calc.test.js",
+    "训练计划页面效果图.html",
+    "dist/assets/WeightChart-CJzLDm__.js",
+    "dist/assets/index-DOMo8_pa.js",
+    "dist/assets/index-ZmpwU1E0.css",
+    "dist/assets/index-DcbhksJN.js",
+    "dist/assets/WeightChart-BdMv3qsK.js",
+    "训练计划页面效果图-GPT.png",
+    "训练计划页面效果图.png",
+    "docs/superpowers/plans/2026-05-30-reset-demo-defaults.md",
+    "task/V1/Task 1 - 数值显示优化.md",
+    "task/V1/Task 7 - AI 对话框能力完善.md",
+    "task/V1/Task 2-7 长期推进表.md",
+    "ARCHITECTURE.md",
+    "README.md",
     "task/V1/Task 6 - TDEE 与复杂数值计算.md",
     "task/V1/Task 8 - DeepSeek API 优化.md",
     "task/V1/Task 9 - Agent 功能优化.md",
     "task/V1/RepMind 修改规划表V1.md",
     "task/V1/Task 5 - UI 设计与配色统一.md",
-    "task/V1/Task 7 - AI 对话框能力完善.md",
     "task/V1/Task 4 - 训练表格布局完善.md",
     "task/V1/Task 3 - 每日训练类型开放输入.md",
     "task/V1/Task 2 - RPE 范围修正.md",
-    "task/V1/Task 1 - 数值显示优化.md",
     "docs/verification.md",
     "docs/RepMind 修改意见记录V1.md",
     "task/RepMind 修改规划表V1.md",
     "task/V0/RepMind V0 开发完成记录.md",
-    "task/V1",
     "task/V0/tasks.md",
     "task/V0/Sprint 6 - 加分项（核心闭环稳定后再做）.md",
     "task/V0/Sprint 5 - 最小验证与课程交付.md",
@@ -222,20 +266,6 @@
     "task/V0/Sprint 3 - 今日日志与上下文数据.md",
     "task/V0/Sprint 2 - 档案与训练计划.md",
     "task/V0/Sprint 1 - 核心骨架与本地数据.md",
-    "task/V0/Sprint 0 - 项目准备.md",
-    "task/V0/最终验收任务.md",
-    "task/V0/长期推进表.md",
-    "task/V0",
-    "docs/RepMind 修改意见记录 V1.md",
-    "docs/RepMind 修改意见记录 V2.md",
-    "node_modules/d3-color/package.json",
-    "node_modules/redux-thunk/package.json",
-    "node_modules/d3-time-format/package.json",
-    "node_modules/react-is/index.js",
-    "node_modules/eventemitter3/index.mjs",
-    "node_modules/d3-path/package.json",
-    "node_modules/d3-interpolate/package.json",
-    "node_modules/d3-array/package.json",
     "docs/SDD四件套.jpg"
   ]
 }

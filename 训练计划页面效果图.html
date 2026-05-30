@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RepMind - 本周训练计划</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            DEFAULT: '#5A4FCF',
+                            light: '#EEEDFC',
+                            dark: '#4036A9'
+                        },
+                        accent: '#1A56DB',
+                        bgMain: '#F8FAFC'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #F8FAFC;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #E2E8F0;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden text-slate-800 selection:bg-brand/10">
+
+    <!-- 侧边栏 Sidebar -->
+    <aside class="w-60 bg-white border-r border-slate-100 flex flex-col justify-between p-5 flex-shrink-0">
+        <div class="space-y-8">
+            <!-- Logo - 已去除图标，仅保留 RepMind 文本 -->
+            <div class="flex items-center px-2">
+                <span class="text-xl font-bold text-brand tracking-wide">RepMind</span>
+            </div>
+
+            <!-- 导航菜单 -->
+            <nav class="space-y-1">
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    <span class="text-sm font-medium">我的档案</span>
+                </a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-brand/5 text-brand font-semibold transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <span class="text-sm">训练计划</span>
+                </a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    <span class="text-sm font-medium">今日日志</span>
+                </a>
+                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 hover:bg-slate-50 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    <span class="text-sm font-medium">AI 教练</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- 底部配置与状态 -->
+        <div class="space-y-3">
+            <button class="w-full flex items-center justify-center gap-2 border border-slate-200 px-3 py-2 rounded-xl text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                计划设置
+            </button>
+            <button class="w-full flex items-center justify-center gap-2 bg-brand text-white px-3 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-dark transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
+                AI 优化建议
+            </button>
+            <!-- 存储提示 -->
+            <div class="flex items-center gap-2 px-2 pt-2 border-t border-slate-100">
+                <div class="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <div class="text-xs">
+                    <p class="font-semibold text-slate-700">数据已保存</p>
+                    <p class="text-slate-400">本地存储</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主内容区 Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden p-6 bg-bgMain">
+        
+        <!-- 头部 Header Area -->
+        <header class="flex items-center justify-between mb-5 flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-bold text-slate-900">本周训练计划</h1>
+                <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-lg text-sm text-slate-600 shadow-sm">
+                    <span>2026年5月25日 - 5月31日</span>
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </div>
+                <span class="bg-brand/10 text-brand text-xs font-bold px-2 py-1 rounded">第 22 周</span>
+            </div>
+            
+            <div class="flex items-center gap-6">
+                <!-- 视图切换 -->
+                <div class="bg-slate-100 p-0.5 rounded-xl flex border border-slate-200/60">
+                    <button class="bg-white text-brand shadow-sm text-xs font-semibold px-4 py-1.5 rounded-lg">周视图</button>
+                    <button class="text-slate-500 text-xs font-medium px-4 py-1.5 rounded-lg hover:text-slate-800">列表视图</button>
+                </div>
+                <!-- 图例 Legend -->
+                <div class="flex items-center gap-4 text-xs font-medium text-slate-600">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-brand"></span> 主项
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-accent"></span> 辅项
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 周期训练看板 (采用动态比例网格：训练日占2份，休息日占1份) -->
+        <div class="flex-1 grid grid-cols-[2fr_1fr_2fr_1fr_2fr_1fr_1fr] gap-3 overflow-x-auto pb-2 items-start min-w-[1100px]">
+            
+            <!-- 周一 (训练日 - 宽) -->
+            <div class="flex flex-col bg-slate-50/50 rounded-2xl p-2.5 border border-slate-100 min-h-full">
+                <div class="text-center mb-3">
+                    <p class="text-sm font-bold text-slate-800">周一</p>
+                    <p class="text-xs text-slate-400 mb-2">5月25日</p>
+                    <span class="inline-block bg-brand text-white text-xs font-bold px-4 py-1 rounded-full shadow-sm shadow-brand/20">腿日</span>
+                </div>
+                <div class="space-y-2.5 flex-1">
+                    <!-- 卡片 1 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">深蹲</h4>
+                                <span class="bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded">主项</span>
+                            </div>
+                            <button class="text-slate-400 hover:text-slate-600"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">1RM 120kg × 75%</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">4 组 × 6 次</span>
+                            <span class="text-accent font-extrabold text-base">90 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 7-8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">主项，保持核心稳定</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 2 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">罗马尼亚硬拉</h4>
+                                <span class="bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded">主项</span>
+                            </div>
+                            <button class="text-slate-400 hover:text-slate-600"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">1RM 150kg × 65%</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 8 次</span>
+                            <span class="text-accent font-extrabold text-base">98 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 7</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">感受腿后侧拉伸</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 3 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative group">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">腿举</h4>
+                                <span class="bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded">辅项</span>
+                            </div>
+                            <button class="text-slate-400 hover:text-slate-600"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">&nbsp;</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 12 次</span>
+                            <span class="text-accent font-extrabold text-base">160 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">顶峰收缩</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="mt-3 w-full border border-dashed border-slate-200 py-2 rounded-xl text-xs text-brand font-medium hover:bg-white transition-colors flex items-center justify-center gap-1">
+                    <span class="text-base">+</span> 添加动作
+                </button>
+            </div>
+
+            <!-- 周二 (休息日 - 窄) -->
+            <div class="flex flex-col bg-white rounded-2xl p-2 border border-slate-100 min-h-full justify-between items-center text-center">
+                <div class="w-full flex flex-col items-center">
+                    <p class="text-sm font-bold text-slate-800">周二</p>
+                    <p class="text-xs text-slate-400 mb-2">5月26日</p>
+                    <span class="inline-block bg-slate-100 text-slate-500 text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-200/50 truncate max-w-full">
+                        ☕ 休息
+                    </span>
+                </div>
+                <div class="my-auto flex flex-col items-center px-1">
+                    <svg class="w-12 h-12 text-slate-200 mb-2" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24">
+                        <path d="M4 9h16M4 9a2 2 0 00-2 2v5a2 2 0 002 2h16a2 2 0 002-2v-5a2 2 0 00-2-2M4 9V6a2 2 0 012-2h12a2 2 0 012 2v3M6 18v2m12-2v2"></path>
+                    </svg>
+                    <h5 class="text-xs font-bold text-slate-600">休息日</h5>
+                    <p class="text-[10px] text-slate-400 mt-1 leading-tight">身体恢复<br>蓄力</p>
+                </div>
+                <button class="w-full text-[11px] text-slate-400 font-medium py-1 hover:text-slate-600 transition-colors truncate">
+                    + 备注
+                </button>
+            </div>
+
+            <!-- 周三 (训练日 - 宽) -->
+            <div class="flex flex-col bg-slate-50/50 rounded-2xl p-2.5 border border-slate-100 min-h-full">
+                <div class="text-center mb-3">
+                    <p class="text-sm font-bold text-slate-800">周三</p>
+                    <p class="text-xs text-slate-400 mb-2">5月27日</p>
+                    <span class="inline-block bg-brand text-white text-xs font-bold px-4 py-1 rounded-full shadow-sm shadow-brand/20">推日</span>
+                </div>
+                <div class="space-y-2.5 flex-1">
+                    <!-- 卡片 1 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">卧推</h4>
+                                <span class="bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded">主项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">1RM 90kg × 75%</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">4 组 × 6 次</span>
+                            <span class="text-accent font-extrabold text-base">68 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 7-8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">肩胛收紧，下放控制</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 2 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                <h4 class="font-extrabold text-slate-900 text-[17px] truncate">上斜哑铃卧推</h4>
+                                <span class="bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0">主项</span>
+                            </div>
+                            <button class="text-slate-400 ml-2"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">1RM 54kg × 70%</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 8 次</span>
+                            <span class="text-accent font-extrabold text-base">38 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 7</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">上胸发力</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 3 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">哑铃飞鸟</h4>
+                                <span class="bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded">辅项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">&nbsp;</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 12 次</span>
+                            <span class="text-accent font-extrabold text-base">16 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">感受胸部拉伸</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 4 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">绳索下压</h4>
+                                <span class="bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded">辅项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">&nbsp;</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 12 次</span>
+                            <span class="text-accent font-extrabold text-base">45 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">顶峰收缩，缓慢下放</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="mt-3 w-full border border-dashed border-slate-200 py-2 rounded-xl text-xs text-brand font-medium hover:bg-white transition-colors flex items-center justify-center gap-1">
+                    <span class="text-base">+</span> 添加动作
+                </button>
+            </div>
+
+            <!-- 周四 (休息日 - 窄) -->
+            <div class="flex flex-col bg-white rounded-2xl p-2 border border-slate-100 min-h-full justify-between items-center text-center">
+                <div class="w-full flex flex-col items-center">
+                    <p class="text-sm font-bold text-slate-800">周四</p>
+                    <p class="text-xs text-slate-400 mb-2">5月28日</p>
+                    <span class="inline-block bg-slate-100 text-slate-500 text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-200/50 truncate max-w-full">
+                        ☕ 休息
+                    </span>
+                </div>
+                <div class="my-auto flex flex-col items-center px-1">
+                    <svg class="w-12 h-12 text-slate-200 mb-2" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24">
+                        <path d="M4 9h16M4 9a2 2 0 00-2 2v5a2 2 0 002 2h16a2 2 0 002-2v-5a2 2 0 00-2-2M4 9V6a2 2 0 012-2h12a2 2 0 012 2v3M6 18v2m12-2v2"></path>
+                    </svg>
+                    <h5 class="text-xs font-bold text-slate-600">休息日</h5>
+                    <p class="text-[10px] text-slate-400 mt-1 leading-tight">身体恢复<br>蓄力</p>
+                </div>
+                <button class="w-full text-[11px] text-slate-400 font-medium py-1 hover:text-slate-600 transition-colors truncate">
+                    + 备注
+                </button>
+            </div>
+
+            <!-- 周五 (训练日 - 宽) -->
+            <div class="flex flex-col bg-slate-50/50 rounded-2xl p-2.5 border border-slate-100 min-h-full">
+                <div class="text-center mb-3">
+                    <p class="text-sm font-bold text-slate-800">周五</p>
+                    <p class="text-xs text-slate-400 mb-2">5月29日</p>
+                    <span class="inline-block bg-brand text-white text-xs font-bold px-4 py-1 rounded-full shadow-sm shadow-brand/20">拉日</span>
+                </div>
+                <div class="space-y-2.5 flex-1">
+                    <!-- 卡片 1 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">硬拉</h4>
+                                <span class="bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded">主项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">1RM 150kg × 75%</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 5 次</span>
+                            <span class="text-accent font-extrabold text-base">113 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 7-8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">全身发力，注意腰部保护</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 2 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">引体向上</h4>
+                                <span class="bg-brand text-white text-[10px] font-bold px-1.5 py-0.5 rounded">主项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">&nbsp;</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">4 组 × 8 次</span>
+                            <span class="text-accent font-extrabold text-base">自重</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">下巴过杠，顶峰收缩</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 3 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">坐姿划船</h4>
+                                <span class="bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded">辅项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">&nbsp;</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 10 次</span>
+                            <span class="text-accent font-extrabold text-base">80 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">挤压背部</span>
+                        </div>
+                    </div>
+                    <!-- 卡片 4 -->
+                    <div class="bg-white rounded-xl p-3 border border-slate-200/60 shadow-sm relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="flex items-center gap-1.5">
+                                <h4 class="font-extrabold text-slate-900 text-[17px]">面拉</h4>
+                                <span class="bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded">辅项</span>
+                            </div>
+                            <button class="text-slate-400"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg></button>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">&nbsp;</p>
+                        <div class="flex justify-between items-baseline mt-2">
+                            <span class="bg-slate-50 border border-slate-100 text-slate-600 text-[11px] px-2 py-0.5 rounded-md font-medium">3 组 × 15 次</span>
+                            <span class="text-accent font-extrabold text-base">25 kg</span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-dashed border-slate-100 flex items-center justify-between text-[11px]">
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">RPE 8</span>
+                            <span class="text-slate-400 truncate max-w-[120px]">肩胛后缩</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="mt-3 w-full border border-dashed border-slate-200 py-2 rounded-xl text-xs text-brand font-medium hover:bg-white transition-colors flex items-center justify-center gap-1">
+                    <span class="text-base">+</span> 添加动作
+                </button>
+            </div>
+
+            <!-- 周六 (休息日 - 窄) -->
+            <div class="flex flex-col bg-white rounded-2xl p-2 border border-slate-100 min-h-full justify-between items-center text-center">
+                <div class="w-full flex flex-col items-center">
+                    <p class="text-sm font-bold text-slate-800">周六</p>
+                    <p class="text-xs text-slate-400 mb-2">5月30日</p>
+                    <span class="inline-block bg-slate-100 text-slate-500 text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-200/50 truncate max-w-full">
+                        ☕ 休息
+                    </span>
+                </div>
+                <div class="my-auto flex flex-col items-center px-1">
+                    <svg class="w-12 h-12 text-slate-200 mb-2" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24">
+                        <path d="M4 9h16M4 9a2 2 0 00-2 2v5a2 2 0 002 2h16a2 2 0 002-2v-5a2 2 0 00-2-2M4 9V6a2 2 0 012-2h12a2 2 0 012 2v3M6 18v2m12-2v2"></path>
+                    </svg>
+                    <h5 class="text-xs font-bold text-slate-600">休息日</h5>
+                    <p class="text-[10px] text-slate-400 mt-1 leading-tight">身体恢复<br>蓄力</p>
+                </div>
+                <button class="w-full text-[11px] text-slate-400 font-medium py-1 hover:text-slate-600 transition-colors truncate">
+                    + 备注
+                </button>
+            </div>
+
+            <!-- 周日 (休息日 - 窄) -->
+            <div class="flex flex-col bg-white rounded-2xl p-2 border border-slate-100 min-h-full justify-between items-center text-center">
+                <div class="w-full flex flex-col items-center">
+                    <p class="text-sm font-bold text-slate-800">周日</p>
+                    <p class="text-xs text-slate-400 mb-2">5月31日</p>
+                    <span class="inline-block bg-slate-100 text-slate-500 text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-200/50 truncate max-w-full">
+                        ☕ 休息
+                    </span>
+                </div>
+                <div class="my-auto flex flex-col items-center px-1">
+                    <svg class="w-12 h-12 text-slate-200 mb-2" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24">
+                        <path d="M4 9h16M4 9a2 2 0 00-2 2v5a2 2 0 002 2h16a2 2 0 002-2v-5a2 2 0 00-2-2M4 9V6a2 2 0 012-2h12a2 2 0 012 2v3M6 18v2m12-2v2"></path>
+                    </svg>
+                    <h5 class="text-xs font-bold text-slate-600">休息日</h5>
+                    <p class="text-[10px] text-slate-400 mt-1 leading-tight">身体恢复<br>蓄力</p>
+                </div>
+                <button class="w-full text-[11px] text-slate-400 font-medium py-1 hover:text-slate-600 transition-colors truncate">
+                    + 备注
+                </button>
+            </div>
+
+        </div>
+
+    </main>
+
+</body>
+</html>
