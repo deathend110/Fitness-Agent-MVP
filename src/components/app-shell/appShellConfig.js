@@ -35,6 +35,5 @@ export function buildAppShellStatus() {
   return {
     saveStateLabel: '数据已保存',
     storageLabel: '本地存储',
-    helperLabel: '侧栏状态会同步到当前浏览器',
   }
 }

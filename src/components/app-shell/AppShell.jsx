@@ -11,9 +11,9 @@ function AppShell({ activeTabId, children, onTabChange, status, tabs }) {
           tabs={tabs}
         />
 
-        {/* 主区域保留独立滚动，避免页面级横向滚动并为各 tab 复用同一浅色壳层。 */}
+        {/* 主区域直接复用效果稿式外层容器，只保留留白与滚动，不再包额外描边卡片。 */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-fitloop-canvas p-4 sm:p-5 lg:p-6">
-          <section className="fitloop-shell__content fitloop-shell__main min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <section className="fitloop-shell__content min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             {children}
           </section>
         </div>

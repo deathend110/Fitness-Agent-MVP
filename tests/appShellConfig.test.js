@@ -29,7 +29,6 @@ test('buildAppShellStatus 提供底部状态区所需的默认文案', () => {
   assert.deepEqual(buildAppShellStatus(), {
     saveStateLabel: '数据已保存',
     storageLabel: '本地存储',
-    helperLabel: '侧栏状态会同步到当前浏览器',
   })
 })
 
