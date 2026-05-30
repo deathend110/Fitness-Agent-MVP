@@ -54,14 +54,14 @@ function DataTransferPanel({ appState, onImportData }) {
   }
 
   const noticeTone = notice.tone === 'error'
-    ? 'border-rose-500/30 bg-rose-500/10 text-rose-100'
-    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+    ? 'border-rose-200 bg-rose-50 text-rose-500'
+    : 'border-emerald-200 bg-emerald-50 text-emerald-600'
 
   return (
-    <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+    <article className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-xl shadow-black/20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">数据备份</p>
+          <p className="text-sm font-semibold text-slate-100">数据备份</p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
             当前数据只保存在浏览器 localStorage。这里可以导出 JSON 备份，也可以从备份文件恢复
             `profile / weeklyPlan / dailyLog / chatHistory`。
@@ -70,14 +70,14 @@ function DataTransferPanel({ appState, onImportData }) {
 
         <div className="flex flex-wrap gap-2">
           <button
-            className="rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-400 hover:text-white"
+            className="rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-fitloop-orange/30 hover:bg-fitloop-orange/8 hover:text-fitloop-orange"
             onClick={handleExport}
             type="button"
           >
             导出备份
           </button>
           <button
-            className="rounded-md bg-fitloop-orange px-3 py-2 text-sm font-medium text-white transition hover:brightness-110"
+            className="rounded-md border border-fitloop-orange bg-fitloop-orange px-3 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110"
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >

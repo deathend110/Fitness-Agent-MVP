@@ -117,40 +117,42 @@ function App() {
   return (
     <main className="min-h-screen bg-fitloop-ink text-slate-100">
       <section className="mx-auto flex min-h-screen max-w-6xl flex-col px-6 py-8">
-        <header className="flex flex-col gap-5 border-b border-fitloop-line pb-6 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-fitloop-orange">
-              FitLoop MVP
-            </p>
-            <h1 className="mt-2 text-3xl font-bold text-white md:text-4xl">
-              AI 健身教练与训练记录闭环
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-              首次进入请先填写你的真实档案、训练计划和今日日志。AI 教练会基于你当前保存的本地数据自动注入上下文，并给出可采纳的训练建议。
-            </p>
+        <header className="rounded-2xl border border-fitloop-line bg-fitloop-panel/80 px-6 py-6 shadow-xl shadow-black/20">
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-fitloop-orange">
+                FitLoop MVP
+              </p>
+              <h1 className="mt-2 text-3xl font-bold text-slate-100 md:text-4xl">
+                AI 健身教练与训练记录闭环
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                首次进入请先填写你的真实档案、训练计划和今日日志。AI 教练会基于你当前保存的本地数据自动注入上下文，并给出可采纳的训练建议。
+              </p>
+            </div>
+
+            <nav aria-label="主功能导航" className="flex flex-wrap gap-2">
+              {tabs.map((tab) => {
+                const isActive = tab.id === activeTabId
+
+                return (
+                  <button
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
+                      isActive
+                        ? 'border-fitloop-orange bg-fitloop-orange text-white shadow-sm shadow-black/20'
+                        : 'border-fitloop-line bg-fitloop-panel text-slate-300 hover:border-fitloop-orange/30 hover:bg-fitloop-orange/8 hover:text-fitloop-orange'
+                    }`}
+                    key={tab.id}
+                    onClick={() => setActiveTabId(tab.id)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </nav>
           </div>
-
-          <nav aria-label="主功能导航" className="flex flex-wrap gap-2">
-            {tabs.map((tab) => {
-              const isActive = tab.id === activeTabId
-
-              return (
-                <button
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
-                    isActive
-                      ? 'border-fitloop-orange bg-fitloop-orange text-white'
-                      : 'border-fitloop-line bg-fitloop-panel text-slate-300 hover:border-slate-400 hover:text-white'
-                  }`}
-                  key={tab.id}
-                  onClick={() => setActiveTabId(tab.id)}
-                  type="button"
-                >
-                  {tab.label}
-                </button>
-              )
-            })}
-          </nav>
         </header>
 
         <section className="flex-1 py-10">

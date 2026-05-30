@@ -4,10 +4,10 @@ function getRoleLabel(role) {
 
 function getBubbleTone(role) {
   if (role === 'user') {
-    return 'ml-auto border-fitloop-orange/40 bg-fitloop-orange/10'
+    return 'ml-auto border-fitloop-orange/40 bg-fitloop-orange/10 shadow-sm shadow-black/20'
   }
 
-  return 'mr-auto border-fitloop-line bg-fitloop-panel/80'
+  return 'mr-auto border-fitloop-line bg-fitloop-panel shadow-sm shadow-black/20'
 }
 
 function CoachConversationPanel({
@@ -20,9 +20,9 @@ function CoachConversationPanel({
   streamingText,
 }) {
   return (
-    <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+    <article className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-xl shadow-black/20">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-white">对话区</h3>
+        <h3 className="text-lg font-semibold text-slate-100">对话区</h3>
         <span className="text-xs uppercase tracking-[0.16em] text-slate-400">
           最近 {chatHistory.length} 条
         </span>
@@ -44,7 +44,7 @@ function CoachConversationPanel({
         ))}
 
         {isSending ? (
-          <article className="mr-auto w-full max-w-[85%] rounded-md border border-fitloop-line bg-fitloop-panel/80 p-3">
+          <article className="mr-auto w-full max-w-[85%] rounded-md border border-fitloop-line bg-fitloop-panel p-3 shadow-sm shadow-black/20">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">AI 教练</p>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">
               {streamingText || '正在整理你的最新训练上下文，请稍等...'}
@@ -57,7 +57,7 @@ function CoachConversationPanel({
         <label className="block">
           <span className="sr-only">输入你想问 AI 教练的问题</span>
           <textarea
-            className="min-h-28 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-28 w-full rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-3 text-sm leading-6 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSending}
             onChange={(event) => onDraftChange(event.target.value)}
             placeholder="比如：最近疲劳度有点高，要不要调整计划？"
@@ -67,7 +67,7 @@ function CoachConversationPanel({
 
         {errorMessage ? (
           <p
-            className="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm leading-6 text-rose-100"
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-500"
             role="alert"
           >
             {errorMessage}
@@ -81,7 +81,7 @@ function CoachConversationPanel({
               : '发送前会自动注入最新档案、计划和日志。'}
           </p>
           <button
-            className="rounded-md bg-fitloop-orange px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-fitloop-orange bg-fitloop-orange px-4 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!draft.trim() || isSending}
             type="submit"
           >
