@@ -33,12 +33,19 @@ function getOneRmOptions(profile = {}) {
 }
 
 function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
-  const [expandedDay, setExpandedDay] = useState(() => getTodayKey())
   const [editingState, setEditingState] = useState(() => clearPlanEditorState())
 
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
+  void getTodayKey
   const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
+  const fixedBoardCardProps = useMemo(
+    () => ({
+      expanded: true,
+      onToggle: undefined,
+    }),
+    [],
+  )
   // 头部周信息优先复用 weeklyPlan 内的真实元数据，日期基准必须传入可解析的真实日期字符串。
   const headerModel = useMemo(
     () =>
@@ -48,10 +55,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
       }),
     [weeklyPlan],
   )
-
-  function toggleDay(dayKey) {
-    setExpandedDay((currentDay) => (currentDay === dayKey ? null : dayKey))
-  }
 
   function handleDayTypeChange(dayKey, nextType) {
     onWeeklyPlanChange((currentPlan) => updateDayType(currentPlan, dayKey, nextType))
@@ -122,11 +125,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
           const editingExerciseId = isEditingDay ? editingState.exerciseId : null
 
           return (
-            <PlanWeekGridColumn
-              column={column}
-              isExpanded={expandedDay === column.dayKey}
-              key={column.dayKey}
-            >
+            <PlanWeekGridColumn column={column} key={column.dayKey}>
               <PlanDayCard
                 dayKey={column.dayKey}
                 dayLabel={column.dayLabel}
@@ -135,7 +134,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
                 exerciseDraft={
                   isEditingDay ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)
                 }
-                expanded={expandedDay === column.dayKey}
                 isExerciseEditing={(exerciseId) =>
                   isPlanEditorTarget(editingState, column.dayKey, exerciseId)
                 }
@@ -147,11 +145,11 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
                 onEditExercise={(exercise) => handleStartEditExercise(column.dayKey, exercise)}
                 onSaveExercise={saveExercise}
                 onStartAdd={() => handleStartAddExercise(column.dayKey)}
-                onToggle={() => toggleDay(column.dayKey)}
                 oneRmOptions={oneRmOptions}
                 plan={column.plan}
                 profile={profile}
                 rpeError={isEditingDay ? currentRpeError : null}
+                {...fixedBoardCardProps}
               />
             </PlanWeekGridColumn>
           )

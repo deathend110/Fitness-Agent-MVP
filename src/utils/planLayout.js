@@ -20,7 +20,6 @@ export function getPlanDayLabel(dayKey = '') {
 
 function buildPlanColumn(dayKey, dayPlan) {
   const isTrainingDay = dayPlan.type !== 'rest'
-  const desktopSpan = isTrainingDay ? TRAINING_DAY_SPAN : REST_DAY_SPAN
 
   return {
     dayKey,
@@ -29,7 +28,6 @@ function buildPlanColumn(dayKey, dayPlan) {
     isTrainingDay,
     exerciseCount: dayPlan.exercises.length,
     width: isTrainingDay ? 'wide' : 'narrow',
-    desktopSpan,
   }
 }
 
@@ -43,13 +41,13 @@ export function buildWeeklyPlanColumns(weeklyPlan = {}) {
 export function buildWeeklyPlanLayoutModel(weeklyPlan = {}) {
   const columns = buildWeeklyPlanColumns(weeklyPlan)
   const desktopTemplateColumns = columns
-    .map((column) => (column.desktopSpan === TRAINING_DAY_SPAN ? '2fr' : '1fr'))
+    .map((column) => (column.isTrainingDay ? `${TRAINING_DAY_SPAN}fr` : `${REST_DAY_SPAN}fr`))
     .join(' ')
 
   return {
     columns,
     compactMode: COMPACT_MODE,
-    desktopGridColumnCount: columns.reduce((total, column) => total + column.desktopSpan, 0),
+    desktopGridColumnCount: columns.length,
     desktopTemplateColumns: desktopTemplateColumns || DESKTOP_TEMPLATE_COLUMNS,
     shouldAvoidHorizontalScrollOnDesktop: true,
   }
