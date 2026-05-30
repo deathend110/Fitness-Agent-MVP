@@ -92,10 +92,10 @@ function buildLoadSummary(exercise = {}, profile = {}) {
   if (hasValue(exercise.kg)) {
     return {
       weightLabel: formatWeightDisplay(exercise.kg),
-      topMetaLabel: '',
+      topMetaLabel: '固定重量',
       loadDetailLabel: '固定重量',
       loadBadgeLabel: '固定 kg',
-      topMetaMuted: true,
+      topMetaMuted: false,
     }
   }
 

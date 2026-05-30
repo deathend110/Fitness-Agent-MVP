@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 
 import { buildPlanExerciseCardModel } from '../src/utils/planExerciseCard.js'
@@ -62,10 +63,11 @@ test('buildPlanExerciseCardModel 会给固定重量辅项保留空来源占位�
 
   assert.equal(model.tierLabel, '辅项')
   assert.equal(model.tierTone, 'accessory')
-  assert.equal(model.topMetaLabel, '')
-  assert.equal(model.topMetaMuted, true)
+  assert.equal(model.topMetaLabel, '固定重量')
+  assert.equal(model.topMetaMuted, false)
   assert.equal(model.weightLabel, '60kg')
   assert.equal(model.weightUnitLabel, 'kg')
+  assert.equal(model.loadDetailLabel, '固定重量')
   assert.equal(model.loadBadgeLabel, '固定 kg')
   assert.equal(model.noteLabel, '暂无备注')
   assert.equal(model.noteEmpty, true)
@@ -138,4 +140,11 @@ test('buildPlanExerciseCardModel 会为长动作名和未命名动作保留稳�
   assert.equal(longNameModel.name, longName)
   assert.equal(longNameModel.topMetaLabel, '深蹲 1RM 140kg × 60%')
   assert.equal(longNameModel.summaryLabel, '84kg · 3 组 × 8 次 · RPE 7.5')
+})
+
+test('PlanExerciseItem 会渲染固定重量来源说明与三点入口', () => {
+  const source = fs.readFileSync(new URL('../src/components/PlanExerciseItem.jsx', import.meta.url), 'utf8')
+
+  assert.match(source, /\{cardModel\.topMetaLabel \|\| '\\u00A0'\}/)
+  assert.match(source, /aria-label="更多操作"/)
 })
