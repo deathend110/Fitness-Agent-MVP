@@ -39,8 +39,15 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
   const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
-  // 头部展示信息集中到独立模型中，避免页面组件继续承担日期格式和图例拼装职责。
-  const headerModel = useMemo(() => buildPlanHeaderModel(), [])
+  // 头部周信息优先复用 weeklyPlan 内的真实元数据，空数据时再回退到当前自然周。
+  const headerModel = useMemo(
+    () =>
+      buildPlanHeaderModel({
+        referenceDate: getTodayKey(),
+        weeklyPlan,
+      }),
+    [weeklyPlan],
+  )
 
   function toggleDay(dayKey) {
     setExpandedDay((currentDay) => (currentDay === dayKey ? null : dayKey))
@@ -105,16 +112,11 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const currentRpeError = editingState.draft ? getRpeValidationError(editingState.draft.rpe) : null
 
   return (
-    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-6 shadow-2xl shadow-black/20 xl:p-7">
+    <section className="rounded-[1.5rem] border border-fitloop-line bg-white/80 p-6 shadow-2xl shadow-black/20 xl:p-7">
       <div className="space-y-5">
         <PlanHeaderToolbar headerModel={headerModel} />
 
-        <p className="max-w-3xl text-sm leading-7 text-slate-300">
-          这里可以直接维护一周训练计划。你可以按天新增、编辑、删除动作，每次保存都会写回
-          <code>fitloop_weeklyPlan</code>，刷新页面后仍然保留。
-        </p>
-
-        <div className="rounded-[1.25rem] border border-fitloop-line bg-fitloop-ink/30 p-3 shadow-sm shadow-black/20 xl:p-4">
+        <div className="rounded-[1.25rem] border border-fitloop-line bg-white p-3 shadow-sm shadow-black/20 xl:p-4">
           <PlanWeekGrid
             layoutModel={layoutModel}
             renderColumn={(column) => {

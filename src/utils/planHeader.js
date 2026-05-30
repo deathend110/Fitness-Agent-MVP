@@ -3,12 +3,15 @@ const PLAN_HEADER_LEGEND_ITEMS = [
   { label: '主项', tone: 'main' },
   { label: '辅项', tone: 'accessory' },
 ]
+const PLAN_HEADER_VIEW_TABS = [
+  { key: 'week', label: '周视图', isActive: true, isInteractive: false },
+  { key: 'list', label: '列表视图', isActive: false, isInteractive: false },
+]
 const PLAN_SETTINGS_BUTTON = {
   label: '计划设置',
-  hint: '当前仅提供入口占位，周期计划与经典计划模板将在后续版本开放。',
-  title: '计划设置（建设中）',
-  description:
-    '这里会放周模板、周期节奏和经典计划库配置；当前 MVP 先保留统一入口，避免误导为完整功能已上线。',
+  hint: '当前仅保留训练计划设置入口，后续版本会接入周期模板与高级配置。',
+  title: '计划设置（开发中）',
+  description: '训练计划页头部暂时只保留一个统一入口，供后续接入计划模板、周期节奏和高级设置。',
   confirmLabel: '知道了',
   isPlaceholder: true,
 }
@@ -31,6 +34,21 @@ function normalizeReferenceDate(referenceDate) {
   }
 
   return new Date()
+}
+
+function parseDateString(dateString) {
+  if (typeof dateString !== 'string' || !dateString.trim()) {
+    return null
+  }
+
+  const parsedDate = new Date(`${dateString.trim()}T00:00:00`)
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null
+  }
+
+  parsedDate.setHours(0, 0, 0, 0)
+  return parsedDate
 }
 
 function getMondayOfWeek(referenceDate) {
@@ -73,9 +91,7 @@ function getIsoWeekNumber(referenceDate) {
   utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day)
 
   const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1))
-  const weekNumber = Math.ceil(((utcDate - yearStart) / 86400000 + 1) / 7)
-
-  return weekNumber
+  return Math.ceil(((utcDate - yearStart) / 86400000 + 1) / 7)
 }
 
 function formatDateKey(date) {
@@ -102,15 +118,26 @@ function readWeekMetaFromPlan(weeklyPlan) {
   return weeklyPlan.weekMeta
 }
 
+function resolvePlanWeekRange(options = {}) {
+  const fallbackWeekStart = getMondayOfWeek(options.referenceDate)
+  const fallbackWeekEnd = getSundayOfWeek(options.referenceDate)
+  const planWeekMeta = readWeekMetaFromPlan(options.weeklyPlan)
+  const weekStartDate = parseDateString(planWeekMeta?.weekStart) ?? fallbackWeekStart
+  const weekEndDate = parseDateString(planWeekMeta?.weekEnd) ?? fallbackWeekEnd
+
+  return {
+    weekStartDate,
+    weekEndDate,
+  }
+}
+
 /**
- * 训练计划头部先通过兼容层统一周元信息。
- * 这样旧版 weeklyPlan、缺字段数据和本周空计划都能走同一套稳定展示字段。
+ * 训练计划头部统一从兼容层读取周元信息，确保空计划、旧数据和后续真实周配置都能稳定展示。
  */
 export function resolvePlanWeekMeta(options = {}) {
-  const weekStartDate = getMondayOfWeek(options.referenceDate)
-  const weekEndDate = getSundayOfWeek(options.referenceDate)
   const derivedWeekNumber = getIsoWeekNumber(options.referenceDate)
   const planWeekMeta = readWeekMetaFromPlan(options.weeklyPlan)
+  const { weekStartDate, weekEndDate } = resolvePlanWeekRange(options)
 
   return {
     source: planWeekMeta ? 'weeklyPlan' : 'derived',
@@ -125,8 +152,7 @@ export function resolvePlanWeekMeta(options = {}) {
 }
 
 export function buildPlanHeaderModel(options = {}) {
-  const weekStartDate = getMondayOfWeek(options.referenceDate)
-  const weekEndDate = getSundayOfWeek(options.referenceDate)
+  const { weekStartDate, weekEndDate } = resolvePlanWeekRange(options)
   const weekMeta = resolvePlanWeekMeta(options)
 
   return {
@@ -135,8 +161,7 @@ export function buildPlanHeaderModel(options = {}) {
     weekRangeLabel: formatWeekRangeLabel(weekStartDate, weekEndDate),
     weekBadgeLabel: `第 ${weekMeta.weekNumber} 周`,
     legendItems: PLAN_HEADER_LEGEND_ITEMS,
-    // 当前头部只保留必要信息与计划设置占位入口，不回填未上线的复杂配置操作。
-    secondaryActions: [],
+    viewTabs: PLAN_HEADER_VIEW_TABS,
     settingsButton: PLAN_SETTINGS_BUTTON,
   }
 }
