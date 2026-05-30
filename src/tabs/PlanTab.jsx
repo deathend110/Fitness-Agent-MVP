@@ -6,16 +6,16 @@ import {
   getRpeValidationError,
 } from '../utils/exerciseForm.js'
 import {
+  formatCountDisplay,
   formatPercentDisplay,
   formatWeightDisplay,
-  formatCountDisplay,
   getExerciseKg,
   getTodayKey,
 } from '../utils/calc.js'
+import { buildWeeklyPlanColumns } from '../utils/planLayout.js'
 import {
   addExerciseToDay,
   getPlanDayTypes,
-  getWeekdayOrder,
   removeExerciseFromDay,
   updateDayType,
   updateExerciseInDay,
@@ -49,24 +49,21 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   })
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
-  const days = getWeekdayOrder().map((dayKey) => [
-    dayKey,
-    weeklyPlan?.[dayKey] ?? { type: 'rest', exercises: [] },
-  ])
+  const dayColumns = useMemo(() => buildWeeklyPlanColumns(weeklyPlan), [weeklyPlan])
 
   const exerciseSummaries = useMemo(() => {
     const summaries = {}
 
-    days.forEach(([, plan]) => {
+    dayColumns.forEach(({ plan }) => {
       plan.exercises.forEach((exercise) => {
-        summaries[exercise.id] = `${getExerciseDisplay(profile, exercise)} 路 ${formatCountDisplay(
+        summaries[exercise.id] = `${getExerciseDisplay(profile, exercise)} × ${formatCountDisplay(
           exercise.sets,
         )} 组 × ${formatCountDisplay(exercise.reps)} 次`
       })
     })
 
     return summaries
-  }, [days, profile])
+  }, [dayColumns, profile])
 
   function toggleDay(dayKey) {
     setExpandedDay((currentDay) => (currentDay === dayKey ? null : dayKey))
@@ -163,29 +160,36 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
         每次保存都会写回 <code>fitloop_weeklyPlan</code>，刷新页面后仍然保留。
       </p>
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-2">
-        {days.map(([dayKey, plan]) => (
-          <PlanDayCard
-            dayKey={dayKey}
-            dayTypeOptions={dayTypeOptions}
-            editingExerciseId={editingState.dayKey === dayKey ? editingState.exerciseId : null}
-            exerciseDraft={editingState.dayKey === dayKey ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)}
-            exerciseSummaries={exerciseSummaries}
-            expanded={expandedDay === dayKey}
-            key={dayKey}
-            onCancelEditing={cancelEditing}
-            onDayTypeChange={(nextType) => handleDayTypeChange(dayKey, nextType)}
-            onDeleteExercise={(exerciseId) => deleteExercise(dayKey, exerciseId)}
-            onDraftChange={updateDraft}
-            onEditExercise={(exercise) => startEditExercise(dayKey, exercise)}
-            onSaveExercise={saveExercise}
-            onStartAdd={() => startAddExercise(dayKey)}
-            onToggle={() => toggleDay(dayKey)}
-            oneRmOptions={oneRmOptions}
-            plan={plan}
-            rpeError={editingState.dayKey === dayKey ? currentRpeError : null}
-          />
-        ))}
+      <div className="mt-8 overflow-x-auto pb-2">
+        <div className="flex min-w-max gap-4">
+          {dayColumns.map(({ dayKey, plan, widthClassName }) => (
+            <PlanDayCard
+              dayKey={dayKey}
+              dayTypeOptions={dayTypeOptions}
+              editingExerciseId={editingState.dayKey === dayKey ? editingState.exerciseId : null}
+              exerciseDraft={
+                editingState.dayKey === dayKey
+                  ? editingState.draft
+                  : createEmptyExerciseDraft(oneRmOptions)
+              }
+              exerciseSummaries={exerciseSummaries}
+              expanded={expandedDay === dayKey}
+              key={dayKey}
+              onCancelEditing={cancelEditing}
+              onDayTypeChange={(nextType) => handleDayTypeChange(dayKey, nextType)}
+              onDeleteExercise={(exerciseId) => deleteExercise(dayKey, exerciseId)}
+              onDraftChange={updateDraft}
+              onEditExercise={(exercise) => startEditExercise(dayKey, exercise)}
+              onSaveExercise={saveExercise}
+              onStartAdd={() => startAddExercise(dayKey)}
+              onToggle={() => toggleDay(dayKey)}
+              oneRmOptions={oneRmOptions}
+              plan={plan}
+              rpeError={editingState.dayKey === dayKey ? currentRpeError : null}
+              widthClassName={widthClassName}
+            />
+          ))}
+        </div>
       </div>
     </section>
   )

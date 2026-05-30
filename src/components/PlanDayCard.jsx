@@ -85,20 +85,23 @@ function PlanDayCard({
   onCancelEditing,
   onDeleteExercise,
   rpeError,
+  widthClassName = 'min-w-[12rem] flex-[1_1_12rem]',
 }) {
   const dayTypeListId = `${dayKey}-day-type-options`
   const dayTypeSuggestions = getPlanDayTypeSuggestions(plan.type)
 
   return (
-    <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+    <article
+      className={`flex h-full flex-col rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4 ${widthClassName}`}
+    >
       <button
         aria-expanded={expanded}
         className="flex w-full items-center justify-between gap-3 text-left"
         onClick={onToggle}
         type="button"
       >
-        <div>
-          <h3 className="text-lg font-semibold text-white">{dayKey}</h3>
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-semibold text-white">{dayKey}</h3>
           <p className="mt-1 text-sm text-slate-400">{plan.exercises.length} 个动作</p>
         </div>
         <div className="flex items-center gap-2">
@@ -108,6 +111,12 @@ function PlanDayCard({
           <span className="text-xs text-slate-400">{expanded ? '收起' : '展开'}</span>
         </div>
       </button>
+
+      <div className="mt-3 rounded-md border border-fitloop-line/60 bg-black/10 px-3 py-2">
+        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">训练日</p>
+        <p className="mt-1 text-sm font-semibold text-slate-100">{plan.type}</p>
+        <p className="mt-1 text-xs text-slate-400">{plan.exercises.length} 个动作</p>
+      </div>
 
       {expanded ? (
         <div className="mt-4 space-y-4">
