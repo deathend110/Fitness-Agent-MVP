@@ -40,6 +40,8 @@ function PlanDayCard({
   const showNewExerciseEditor =
     displayModel.showAddExerciseButton && editingExerciseId === NEW_PLAN_EXERCISE_ID
   const hasExercises = plan.exercises.length > 0
+  const showDayTypeSection = displayModel.showDayTypeSection !== false
+  const isCompactRestDay = displayModel.layout === 'rest-compact'
   // 新增动作时优先展示新增表单，避免和空状态提示同时抢占注意力。
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
 
@@ -53,14 +55,16 @@ function PlanDayCard({
         planType={plan.type}
       />
 
-      <div className="mt-4 space-y-4">
-        <PlanDayTypeSection
-          dayTypeListId={dayTypeListId}
-          dayTypeOptions={dayTypeOptions}
-          dayTypeSuggestions={dayTypeSuggestions}
-          onDayTypeChange={onDayTypeChange}
-          planType={plan.type}
-        />
+      <div className={`mt-4 ${isCompactRestDay ? 'flex min-h-[9.5rem] flex-1 flex-col' : 'space-y-4'}`}>
+        {showDayTypeSection ? (
+          <PlanDayTypeSection
+            dayTypeListId={dayTypeListId}
+            dayTypeOptions={dayTypeOptions}
+            dayTypeSuggestions={dayTypeSuggestions}
+            onDayTypeChange={onDayTypeChange}
+            planType={plan.type}
+          />
+        ) : null}
 
         {displayModel.showAddExerciseButton ? (
           <div className="flex flex-wrap gap-2">
@@ -88,6 +92,7 @@ function PlanDayCard({
           visibleEmptyState.tone === 'rest' ? (
             <PlanRestDayPanel
               description={visibleEmptyState.description}
+              descriptionLines={visibleEmptyState.descriptionLines}
               title={visibleEmptyState.title}
             />
           ) : (
