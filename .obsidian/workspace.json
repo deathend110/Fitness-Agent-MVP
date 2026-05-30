@@ -8,34 +8,6 @@
         "type": "tabs",
         "children": [
           {
-            "id": "dd4cd4088d0f8333",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "docs/RepMind 修改意见记录 V2.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "RepMind 修改意见记录 V2"
-            }
-          },
-          {
-            "id": "86e35e43849e4dac",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "task/V1/Task 2-7 长期推进表.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Task 2-7 长期推进表"
-            }
-          },
-          {
             "id": "b31c3dea2641feef",
             "type": "leaf",
             "state": {
@@ -48,9 +20,51 @@
               "icon": "lucide-file",
               "title": "RepMind 修改意见记录 V2"
             }
+          },
+          {
+            "id": "0e28ce19b0d71f9d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "task/V1.5/Task 6 - 编辑入口与计划交互流重构.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Task 6 - 编辑入口与计划交互流重构"
+            }
+          },
+          {
+            "id": "2e89bb2de1f5745d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "ARCHITECTURE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "ARCHITECTURE"
+            }
+          },
+          {
+            "id": "b23b7d706c23eabe",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "README.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "README"
+            }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -185,13 +199,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "task/V1/Task 2-7 长期推进表.md",
+                "file": "ARCHITECTURE.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Task 2-7 长期推进表 的大纲"
+              "title": "ARCHITECTURE 的大纲"
             }
           }
         ],
@@ -212,46 +226,50 @@
       "bases:新建数据库": false
     }
   },
-  "active": "86e35e43849e4dac",
+  "active": "2e89bb2de1f5745d",
   "lastOpenFiles": [
-    "task/V2/Task 7 - AI 对话框能力完善.md",
+    "README.md",
+    "ARCHITECTURE.md",
+    "dist/index.html",
+    "dist/assets/WeightChart-Dz7AhBhn.js",
+    "dist/assets/index-DD9ETR9K.js",
+    "dist/assets/index-Civr3ePw.css",
+    "dist/assets",
+    "task/V1.5/Task 6 - 编辑入口与计划交互流重构.md",
+    "src/tabs/PlanTab.jsx",
+    "src/components/PlanDayCard.jsx",
+    "src/components/ExerciseEditor.jsx",
+    "V1.5效果图.png",
+    "V2效果图.png",
+    "image.png",
+    "src/components/PlanExerciseEditorCard.jsx",
+    "src/components/PlanExerciseItem.jsx",
+    "task/V1.5/V1.5 训练计划新UI改造长期规划表.md",
+    "task/V1.5/Task 11 - AI 教练页新UI适配（不含 V2 能力增强）.md",
     "docs/RepMind 修改意见记录 V2.md",
+    "task/V1.5/Task 10 - 今日日志页新UI适配.md",
+    "task/V1.5/Task 8 - V1.5 UI 改造收口与验证.md",
+    "task/V1.5/Task 7 - 计划设置入口占位与周信息适配.md",
+    "task/V1.5/Task 5 - 休息日列与空状态交互适配.md",
+    "task/V1.5/Task 4 - 训练日动作卡片信息密度重构.md",
+    "task/V1.5/Task 3 - 周视图比例网格与列容器重构.md",
+    "task/V1.5/Task 2 - 训练计划页头部工具栏重构.md",
+    "task/V1.5/Task 1 - 应用壳层与侧边栏导航重构.md",
+    "task/V1.5/Task 9 - 我的档案页新UI适配.md",
     "task/V1/Task 2-7 长期推进表.md",
+    "task/V1.5/Task 7 - 列表视图与轻量数据扩展适配.md",
+    "Pasted image 20260530150844.png",
+    "task/V2/Task 3 - Agent 功能优化.md",
+    "task/V2/Task 2 - DeepSeek API 优化.md",
+    "task/V2/Task 1 - AI 对话框能力完善.md",
+    "task/V2/Task 7 - AI 对话框能力完善.md",
     "task/V2/Task 9 - Agent 功能优化.md",
     "task/V2/Task 8 - DeepSeek API 优化.md",
-    "task/V2",
-    "dist/index.html",
-    "dist/assets/WeightChart-DMKzDa-Z.js",
-    "dist/assets/index-x1PMrKM5.js",
-    "dist/assets/index-BZ-JyQ5z.css",
-    "dist/assets",
-    "ARCHITECTURE.md",
-    "src/utils/promptMetricsSection.js",
-    "tests/promptMetricsSection.test.js",
-    "dist/assets/WeightChart-CzeLCLN8.js",
-    "dist/assets/index-C889i0Pd.js",
     "docs/RepMind Python技术栈演进.md",
     "docs/RepMind 修改意见记录V1.md",
     "task/V1/RepMind 修改规划表V1.md",
-    "README.md",
-    "task/V1/Task 1 - 数值显示优化.md",
-    "task/V1/Task 2 - RPE 范围修正.md",
     "训练计划页面效果图-GPT.png",
     "训练计划页面效果图.png",
-    "docs/superpowers/plans/2026-05-30-reset-demo-defaults.md",
-    "task/V1/Task 7 - AI 对话框能力完善.md",
-    "task/V1/Task 6 - TDEE 与复杂数值计算.md",
-    "task/V1/Task 8 - DeepSeek API 优化.md",
-    "task/V1/Task 9 - Agent 功能优化.md",
-    "task/V1/Task 5 - UI 设计与配色统一.md",
-    "task/V1/Task 4 - 训练表格布局完善.md",
-    "task/V1/Task 3 - 每日训练类型开放输入.md",
-    "docs/verification.md",
-    "task/RepMind 修改规划表V1.md",
-    "task/V0/RepMind V0 开发完成记录.md",
-    "task/V0/tasks.md",
-    "task/V0/Sprint 6 - 加分项（核心闭环稳定后再做）.md",
-    "task/V0/Sprint 5 - 最小验证与课程交付.md",
     "docs/SDD四件套.jpg"
   ]
 }
