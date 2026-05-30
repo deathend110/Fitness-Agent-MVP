@@ -46,7 +46,7 @@ function PlanDayCard({
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
 
   return (
-    <div className="min-w-0">
+    <div className="flex h-full min-w-0 flex-col">
       <PlanDayCardHeader
         dayLabel={dayLabel}
         displayModel={displayModel}
@@ -55,7 +55,7 @@ function PlanDayCard({
         planType={plan.type}
       />
 
-      <div className={`mt-4 ${isCompactRestDay ? 'flex min-h-[9.5rem] flex-1 flex-col' : 'space-y-4'}`}>
+      <div className={`mt-4 flex flex-1 flex-col ${isCompactRestDay ? 'min-h-[9.5rem]' : ''}`}>
         {showDayTypeSection ? (
           <PlanDayTypeSection
             compact={dayTypeSectionVariant === 'compact'}
@@ -63,14 +63,6 @@ function PlanDayCard({
             onDayTypeChange={onDayTypeChange}
             planType={plan.type}
           />
-        ) : null}
-
-        {displayModel.showAddExerciseButton ? (
-          <div className="flex flex-wrap gap-2">
-            <PlanDayCardButton kind="primary" onClick={onStartAdd}>
-              添加动作
-            </PlanDayCardButton>
-          </div>
         ) : null}
 
         {showNewExerciseEditor ? (
@@ -128,6 +120,14 @@ function PlanDayCard({
               />
             ))}
           </ul>
+        ) : null}
+
+        {displayModel.showAddExerciseButton ? (
+          <div className="mt-auto pt-4">
+            <PlanDayCardButton className="w-full justify-center" kind="primary" onClick={onStartAdd}>
+              添加动作
+            </PlanDayCardButton>
+          </div>
         ) : null}
       </div>
     </div>

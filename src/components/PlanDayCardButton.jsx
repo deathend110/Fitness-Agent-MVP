@@ -10,9 +10,13 @@ function getButtonClassName(kind = 'secondary') {
   return 'rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-fitloop-orange/30 hover:bg-fitloop-orange/8 hover:text-fitloop-orange'
 }
 
-function PlanDayCardButton({ children, kind = 'secondary', ...props }) {
+function PlanDayCardButton({ children, className = '', kind = 'secondary', ...props }) {
   return (
-    <button {...props} className={getButtonClassName(kind)} type={props.type ?? 'button'}>
+    <button
+      {...props}
+      className={`${getButtonClassName(kind)} ${className}`.trim()}
+      type={props.type ?? 'button'}
+    >
       {children}
     </button>
   )
