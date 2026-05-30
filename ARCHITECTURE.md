@@ -1,6 +1,6 @@
 ﻿# FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4、Task 5 与 Task 6 已完成的训练计划、界面主题和复杂指标升级。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
 
 ## 当前项目结构
 
@@ -11,6 +11,9 @@ src/
   components/
     AdoptCard.jsx
     CoachConversationPanel.jsx
+    CoachComposer.jsx
+    CoachMessageBubble.jsx
+    CoachSidebar.jsx
     DataTransferPanel.jsx
     ExerciseEditor.jsx
     PlanDayCard.jsx
@@ -72,6 +75,30 @@ docs/
   - 负责加载和持久化顶层状态
   - 统一管理 `profile / weeklyPlan / dailyLog / chatHistory`
   - 负责应用级标题区、导航切换和页面外壳视觉节奏
+
+- `src/tabs/CoachTab.jsx`
+  - 负责 AI 教练页页面组织
+  - 将页面收敛为左侧辅助栏 + 中央聊天区的单页对话结构
+  - 协调空状态、已对话状态、流式回复和错误提示
+  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`
+
+- `src/components/CoachConversationPanel.jsx`
+  - 负责消息流渲染与输入区编排
+  - 在空状态和已对话状态之间切换
+  - 空状态使用居中欢迎文案与英雄式输入框
+  - 已对话状态使用消息流 + 底部固定输入区
+
+- `src/components/CoachSidebar.jsx`
+  - 负责 AI 教练页内部左侧辅助栏
+  - 展示最近聊天记录与辅助状态
+
+- `src/components/CoachComposer.jsx`
+  - 负责 AI 教练页输入框、发送按钮与错误提示
+  - 复用空状态和已对话状态的统一输入样式
+
+- `src/components/CoachMessageBubble.jsx`
+  - 负责渲染用户消息、AI 消息和流式回复气泡
+  - 保持聊天消息的基础层级和可读性
 
 - `src/tabs/PlanTab.jsx`
   - 负责周计划页面组织
@@ -218,6 +245,18 @@ CoachTab
   -> adoptPlanChange()
   -> App 更新 weeklyPlan
   -> 写回 fitloop_weeklyPlan
+```
+
+### 5. AI 教练页 UI 流
+
+```text
+CoachTab
+  -> 生成侧栏最近对话记录
+  -> 渲染 CoachSidebar + CoachConversationPanel
+  -> 空状态展示欢迎文案与居中输入框
+  -> 已对话状态展示消息流
+  -> 发送时优先流式输出，失败回退普通请求
+  -> 将消息追加到 chatHistory
 ```
 
 ## localStorage 数据结构
@@ -545,3 +584,11 @@ tests/
 - `PlanHeaderToolbar` 的周编号已改为可点击输入的内联编辑控件，直接回写 `weeklyPlan.weekMeta.weekNumber`。
 - 其余页面继续复用统一壳层，只保留各自必要内容区。
 - 版本总结见 `task/V1.6/V1.6 开发完成总结.md`。
+
+## V2 收口说明
+
+- AI 教练页已重构为更接近主流聊天产品的布局。
+- 页面内部改为左侧辅助栏 + 中央主聊天区，不再保留旧版三栏工具面板。
+- 空状态与已对话状态分别使用欢迎页式输入与消息流式输入区。
+- 本轮仅重排 UI，不改变 DeepSeek 接口、上下文注入和采纳链路。
+- 版本总结见 `task/V2/V2 开发完成总结.md`。

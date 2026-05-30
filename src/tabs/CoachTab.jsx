@@ -1,20 +1,9 @@
 import { useMemo, useState } from 'react'
-import AdoptCard from '../components/AdoptCard.jsx'
 import CoachConversationPanel from '../components/CoachConversationPanel.jsx'
-import PromptPreviewPanel from '../components/PromptPreviewPanel.jsx'
-import { deepSeekDefaults, getDeepSeekApiKeyStatus } from '../api/deepseek.js'
-import { buildAdoptCardModel } from '../utils/adoptCard.js'
-import { adoptPlanChange } from '../utils/adoptPlan.js'
+import CoachSidebar from '../components/CoachSidebar.jsx'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
 import { requestCoachReply, requestCoachReplyStream } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
-import { buildPromptPreviewModel } from '../utils/promptPreview.js'
-
-function buildRecentDates(dailyLog) {
-  return Object.keys(dailyLog)
-    .sort((left, right) => right.localeCompare(left))
-    .slice(0, 3)
-}
 
 function getVisibleStreamText(fullText) {
   const markerIndex = fullText.indexOf('---JSON---')
@@ -26,6 +15,29 @@ function getVisibleStreamText(fullText) {
   return fullText.slice(0, markerIndex).trimEnd()
 }
 
+function buildRecentChatRecords(chatHistory) {
+  const userMessages = chatHistory.filter((message) => message.role === 'user')
+
+  if (!userMessages.length) {
+    return [
+      { id: 'record-test', label: '测试', active: true },
+      { id: 'record-new-1', label: '新的聊天', active: false },
+      { id: 'record-thought', label: '请求隐藏模型思考过...', active: false },
+      { id: 'record-new-2', label: '新的聊天', active: false },
+      { id: 'record-test-2', label: '测试', active: false },
+    ]
+  }
+
+  return userMessages
+    .slice(-5)
+    .reverse()
+    .map((message, index) => ({
+      id: `record-${index}-${message.content}`,
+      label: message.content.trim() || '新的聊天',
+      active: index === 0,
+    }))
+}
+
 function CoachTab({
   chatHistory,
   dailyLog,
@@ -35,27 +47,15 @@ function CoachTab({
   weeklyPlan,
 }) {
   const [draft, setDraft] = useState('')
-  const [adoptFeedback, setAdoptFeedback] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [pendingSuggestion, setPendingSuggestion] = useState(null)
   const [streamingText, setStreamingText] = useState('')
 
-  const recentDates = useMemo(() => buildRecentDates(dailyLog), [dailyLog])
-  const apiKeyStatus = getDeepSeekApiKeyStatus()
-  const adoptCard = useMemo(() => buildAdoptCardModel(pendingSuggestion), [pendingSuggestion])
-  const promptPreview = useMemo(
-    () => buildPromptPreviewModel(profile, weeklyPlan, dailyLog),
-    [dailyLog, profile, weeklyPlan],
-  )
   const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
-  const statusTone = apiKeyStatus.hasKey
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-amber-200 bg-amber-50 text-amber-700'
-  const adoptFeedbackTone =
-    adoptFeedback?.tone === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      : 'border-rose-200 bg-rose-50 text-rose-600'
+  const sidebarRecords = useMemo(
+    () => buildRecentChatRecords(chatHistory),
+    [chatHistory],
+  )
 
   async function requestReplyWithFallback(payload) {
     try {
@@ -94,7 +94,6 @@ function CoachTab({
     }
 
     setErrorMessage('')
-    setAdoptFeedback(null)
     setIsSending(true)
     setStreamingText('')
     setDraft('')
@@ -102,7 +101,6 @@ function CoachTab({
 
     try {
       const reply = await requestReplyWithFallback(requestPayload)
-      setPendingSuggestion(reply.suggestion)
       onChatHistoryChange(
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
@@ -114,112 +112,19 @@ function CoachTab({
     }
   }
 
-  function handleAdoptSuggestion() {
-    if (!pendingSuggestion) {
-      return
-    }
-
-    const result = adoptPlanChange(weeklyPlan, pendingSuggestion.day, pendingSuggestion.changes)
-
-    setAdoptFeedback({
-      tone: result.ok ? 'success' : 'error',
-      message: result.message,
-    })
-
-    if (!result.ok) {
-      return
-    }
-
-    onWeeklyPlanChange(result.nextPlan)
-    setPendingSuggestion(null)
-  }
-
-  function handleDismissSuggestion() {
-    setAdoptFeedback(null)
-    setPendingSuggestion(null)
-  }
-
   return (
-    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
-      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Coach</p>
-      <h2 className="mt-3 text-3xl font-semibold text-slate-100">AI 教练</h2>
+    <section className="flex min-h-[calc(100vh-8rem)] flex-col overflow-hidden bg-white lg:flex-row">
+      <CoachSidebar records={sidebarRecords} />
 
-      <article className={`mt-6 rounded-2xl border p-5 shadow-sm shadow-black/20 ${statusTone}`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold">配置与调用状态</h3>
-            <p className="mt-2 text-sm leading-6">{apiKeyStatus.message}</p>
-          </div>
-          <span className="text-xs font-semibold uppercase tracking-[0.16em]">
-            {apiKeyStatus.hasKey ? 'Ready' : 'Action Required'}
-          </span>
-        </div>
-        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-          <div className="rounded-xl border border-fitloop-line bg-fitloop-panel p-3 text-slate-200">
-            <dt className="text-xs uppercase tracking-[0.16em] text-slate-300">Endpoint</dt>
-            <dd className="mt-1 break-all">{deepSeekDefaults.baseUrl}/chat/completions</dd>
-          </div>
-          <div className="rounded-xl border border-fitloop-line bg-fitloop-panel p-3 text-slate-200">
-            <dt className="text-xs uppercase tracking-[0.16em] text-slate-300">Default Model</dt>
-            <dd className="mt-1">{deepSeekDefaults.model}</dd>
-          </div>
-        </dl>
-      </article>
-
-      <div className="mt-8 grid gap-5 xl:grid-cols-[1.05fr_0.85fr_1.1fr]">
-        <div className="space-y-4">
-          <CoachConversationPanel
-            chatHistory={chatHistory}
-            draft={draft}
-            errorMessage={errorMessage}
-            isSending={isSending}
-            onDraftChange={setDraft}
-            onSubmit={handleSubmit}
-            streamingText={streamingText}
-          />
-          <AdoptCard
-            card={adoptCard}
-            onAdopt={handleAdoptSuggestion}
-            onDismiss={handleDismissSuggestion}
-          />
-          {adoptFeedback ? (
-            <p className={`rounded-md border px-3 py-2 text-sm leading-6 ${adoptFeedbackTone}`}>
-              {adoptFeedback.message}
-            </p>
-          ) : null}
-        </div>
-
-        <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
-          <h3 className="text-lg font-semibold text-slate-100">最近日志摘要</h3>
-          {recentDates.length ? (
-            <ul className="mt-4 space-y-3">
-              {recentDates.map((date) => {
-                const log = dailyLog[date]
-
-                return (
-                  <li
-                    className="rounded-xl border border-fitloop-line/80 bg-fitloop-ink/30 p-3"
-                    key={date}
-                  >
-                    <p className="text-sm font-semibold text-slate-100">{date}</p>
-                    <p className="mt-1 text-sm text-slate-300">
-                      {log.kcal ?? '未记录'} kcal · 蛋白质 {log.protein ?? '未记录'} g · 疲劳度{' '}
-                      {log.fatigue ?? '未记录'}/5
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">
-                      {log.trainingNotes || '暂无记录'}
-                    </p>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : (
-            <p className="mt-4 text-sm leading-6 text-slate-300">暂无记录</p>
-          )}
-        </article>
-
-        <PromptPreviewPanel previewModel={promptPreview} />
-      </div>
+      <CoachConversationPanel
+        chatHistory={chatHistory}
+        draft={draft}
+        errorMessage={errorMessage}
+        isSending={isSending}
+        onDraftChange={setDraft}
+        onSubmit={handleSubmit}
+        streamingText={streamingText}
+      />
     </section>
   )
 }

@@ -1,14 +1,6 @@
-function getRoleLabel(role) {
-  return role === 'user' ? '你' : 'AI 教练'
-}
-
-function getBubbleTone(role) {
-  if (role === 'user') {
-    return 'ml-auto border-fitloop-orange/40 bg-fitloop-orange/10 shadow-sm shadow-black/20'
-  }
-
-  return 'mr-auto border-fitloop-line bg-fitloop-panel shadow-sm shadow-black/20'
-}
+import { useEffect, useRef } from 'react'
+import CoachComposer from './CoachComposer.jsx'
+import CoachMessageBubble from './CoachMessageBubble.jsx'
 
 function CoachConversationPanel({
   chatHistory,
@@ -19,77 +11,83 @@ function CoachConversationPanel({
   onSubmit,
   streamingText,
 }) {
+  const isEmpty = chatHistory.length === 0
+  const messageEndRef = useRef(null)
+
+  useEffect(() => {
+    if (isEmpty) {
+      return
+    }
+
+    messageEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'end',
+    })
+  }, [chatHistory, isEmpty, isSending, streamingText])
+
   return (
-    <article className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-xl shadow-black/20">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold text-slate-100">对话区</h3>
-        <span className="text-xs uppercase tracking-[0.16em] text-slate-400">
-          最近 {chatHistory.length} 条
-        </span>
-      </div>
+    <section className="flex min-w-0 flex-1 flex-col bg-white">
+      {isEmpty ? (
+        <div className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10">
+          <div className="w-full max-w-[56rem]">
+            <div className="text-center">
+              <p className="text-[2rem] font-medium leading-tight tracking-tight text-slate-700 sm:text-[2.4rem]">
+                Hello, I&apos;m <span className="font-bold text-slate-800">RepMind</span>{' '}
+                <span className="text-fitloop-orange">★</span>
+              </p>
+            </div>
 
-      <div className="mt-4 flex max-h-[30rem] min-h-[22rem] flex-col gap-3 overflow-y-auto pr-1">
-        {chatHistory.map((message, index) => (
-          <article
-            className={`w-full max-w-[85%] rounded-md border p-3 ${getBubbleTone(message.role)}`}
-            key={`${message.role}-${index}-${message.content}`}
-          >
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-              {getRoleLabel(message.role)}
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">
-              {message.content}
-            </p>
-          </article>
-        ))}
-
-        {isSending ? (
-          <article className="mr-auto w-full max-w-[85%] rounded-md border border-fitloop-line bg-fitloop-panel p-3 shadow-sm shadow-black/20">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">AI 教练</p>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">
-              {streamingText || '正在整理你的最新训练上下文，请稍等...'}
-            </p>
-          </article>
-        ) : null}
-      </div>
-
-      <form className="mt-4 space-y-3" onSubmit={onSubmit}>
-        <label className="block">
-          <span className="sr-only">输入你想问 AI 教练的问题</span>
-          <textarea
-            className="min-h-28 w-full rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-3 text-sm leading-6 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isSending}
-            onChange={(event) => onDraftChange(event.target.value)}
-            placeholder="比如：最近疲劳度有点高，要不要调整计划？"
-            value={draft}
-          />
-        </label>
-
-        {errorMessage ? (
-          <p
-            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-6 text-rose-500"
-            role="alert"
-          >
-            {errorMessage}
-          </p>
-        ) : null}
-
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-slate-400">
-            {isSending
-              ? '正在优先尝试流式输出；如果流式失败，会自动回退到普通回复。'
-              : '发送前会自动注入最新档案、计划和日志。'}
-          </p>
-          <button
-            className="rounded-md border border-fitloop-orange bg-fitloop-orange px-4 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!draft.trim() || isSending}
-            type="submit"
-          >
-            {isSending ? '发送中...' : '发送'}
-          </button>
+            <div className="mt-10">
+              <CoachComposer
+                draft={draft}
+                errorMessage={errorMessage}
+                isSending={isSending}
+                onDraftChange={onDraftChange}
+                onSubmit={onSubmit}
+                variant="hero"
+              />
+            </div>
+          </div>
         </div>
-      </form>
-    </article>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-6 py-8 sm:px-10">
+            <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-5">
+              {chatHistory.map((message, index) => (
+                <CoachMessageBubble
+                  key={`${message.role}-${index}-${message.content}`}
+                  message={message}
+                />
+              ))}
+
+              {isSending ? (
+                <CoachMessageBubble
+                  isStreaming
+                  message={{
+                    role: 'assistant',
+                    content: streamingText || '正在整理你的最新训练上下文，请稍等...',
+                  }}
+                />
+              ) : null}
+
+              <div ref={messageEndRef} />
+            </div>
+          </div>
+
+          <div className="border-t border-[#e5ebf7] px-6 py-5 sm:px-10">
+            <div className="mx-auto w-full max-w-[56rem]">
+              <CoachComposer
+                draft={draft}
+                errorMessage={errorMessage}
+                isSending={isSending}
+                onDraftChange={onDraftChange}
+                onSubmit={onSubmit}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }
 

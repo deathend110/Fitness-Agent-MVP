@@ -1,0 +1,9 @@
+{
+  "terminal.integrated.profiles.windows": {
+    "PowerShell LTS": {
+      "path": "pwsh.exe",
+      "args": ["-NoLogo"]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell LTS"
+}
