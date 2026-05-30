@@ -114,6 +114,7 @@ docs/
 
 - `src/components/PlanExerciseItem.jsx`
   - 负责单个动作卡片的展示和局部编辑切换
+  - 当前训练日卡片采用高信息密度布局，统一承载主辅项、负重来源、组次、RPE、备注与后续菜单占位入口
 
 - `src/components/ExerciseEditor.jsx`
   - 负责动作编辑表单本体
@@ -132,6 +133,7 @@ docs/
 
 - `src/utils/planExerciseCard.js`
   - 负责把动作结构转换成卡片展示模型
+  - 统一处理百分比重量、固定 kg、自重动作、空备注与长动作名的展示兜底
 
 - `src/utils/calc.js`
   - 作为兼容导出层保留原有调用入口
@@ -319,6 +321,8 @@ CoachTab
 - `src/utils/planExerciseCard.js` 负责构建动作卡片模型
 - 主项使用更高对比度样式
 - 辅项使用更轻的视觉层级
+- 卡片主视图同时展示动作名、负重来源、实际重量、组次、RPE 与备注，减少训练日列内的信息折叠
+- 右上角保留稳定的“更多操作”占位入口，为 Task 6 之后的菜单扩展预留挂载位
 
 ### 3. 编辑器支持层级 / 组型 / 次数表达
 
