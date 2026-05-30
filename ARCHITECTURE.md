@@ -21,6 +21,9 @@ src/
     PlanExerciseItem.jsx
     PromptPreviewPanel.jsx
     WeightChart.jsx
+    plan-header/
+      PlanHeaderLegend.jsx
+      PlanHeaderToolbar.jsx
   tabs/
     CoachTab.jsx
     PlanTab.jsx
@@ -41,6 +44,7 @@ src/
     defaultData.js
     exerciseForm.js
     planExerciseCard.js
+    planHeader.js
     planLayout.js
     profileForm.js
     prompt.js
@@ -68,8 +72,20 @@ docs/
 
 - `src/tabs/PlanTab.jsx`
   - 负责周计划页面组织
+  - 通过 `buildPlanHeaderModel()` 与 `PlanHeaderToolbar` 组装头部工具栏
   - 通过 `buildWeeklyPlanColumns()` 构建 7 列课表布局
   - 协调单日展开、动作新增、编辑、删除
+
+- `src/components/plan-header/PlanHeaderToolbar.jsx`
+  - 负责训练计划页头部工具栏的布局编排
+  - 展示标题、周区间、周编号、主项/辅项图例与“计划设置”占位按钮
+
+- `src/components/plan-header/PlanHeaderLegend.jsx`
+  - 负责主项 / 辅项图例渲染
+
+- `src/utils/planHeader.js`
+  - 负责训练计划页头部展示模型
+  - 统一生成周区间、ISO 周编号、图例配置与占位按钮配置
 
 - `src/components/PlanDayCard.jsx`
   - 作为单日计划卡片的协调壳
