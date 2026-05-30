@@ -163,3 +163,14 @@ task/           迭代任务拆分与执行清单
 ```
 
 更完整的模块职责、数据流和 `localStorage` 结构说明见 [ARCHITECTURE.md](/g:/VSCODE-G/Fitness Agent MVP/ARCHITECTURE.md)。
+
+## 2026-05-30 默认数据更新
+
+- 应用启动默认值已经改为空白结构，首次打开页面不会再自动灌入演示档案、训练计划、日志或聊天记录。
+- 测试和离线验证如需样例数据，请使用 `src/utils/defaultData.js` 中单独保留的 `demo*` fixture。
+- 本次版本会在浏览器端执行一次性 `localStorage` 迁移，首次进入新版时自动重置以下键为新的空白结构：
+  - `fitloop_profile`
+  - `fitloop_weeklyPlan`
+  - `fitloop_dailyLog`
+  - `fitloop_chatHistory`
+- 迁移完成后会写入 `fitloop_storageVersion = "v2-empty-defaults"`，后续再次打开应用不会重复覆盖用户已填写的数据。

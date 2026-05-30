@@ -1,15 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  defaultDailyLog,
-  defaultProfile,
-  defaultWeeklyPlan,
+  demoDailyLog,
+  demoProfile,
+  demoWeeklyPlan,
 } from '../src/utils/defaultData.js'
 import { getTodayKey } from '../src/utils/calc.js'
 import { buildSystemPrompt } from '../src/utils/prompt.js'
 
 test('buildSystemPrompt 会把档案、计划、日志与 TDEE 注入到 prompt 文本', () => {
-  const prompt = buildSystemPrompt(defaultProfile, defaultWeeklyPlan, defaultDailyLog)
+  const prompt = buildSystemPrompt(demoProfile, demoWeeklyPlan, demoDailyLog)
 
   assert.match(prompt, /基本信息/)
   assert.match(prompt, /三大项 1RM/)
@@ -72,7 +72,7 @@ test('buildSystemPrompt 在休息日会把训练消耗写成 0 且保留固定 k
     },
   }
 
-  const prompt = buildSystemPrompt(defaultProfile, weeklyPlan, {})
+  const prompt = buildSystemPrompt(demoProfile, weeklyPlan, {})
 
   assert.match(prompt, /骑车 20kg x 1组 x 30次/)
   assert.match(prompt, /训练容量估算消耗：0kcal/)

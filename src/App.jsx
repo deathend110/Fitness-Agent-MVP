@@ -10,19 +10,25 @@ import {
   defaultWeeklyPlan,
   storageKeys,
 } from './utils/defaultData.js'
-import { loadStorage, saveStorage } from './utils/storage.js'
+import { loadStorage, migrateLegacyDemoData, saveStorage } from './utils/storage.js'
+
+function loadInitialState(key, fallback) {
+  // 先执行一次性迁移，再读取当前版本的本地数据，避免旧 demo 数据继续灌入页面。
+  migrateLegacyDemoData()
+  return loadStorage(key, fallback)
+}
 
 function App() {
   const [activeTabId, setActiveTabId] = useState('profile')
-  const [profile, setProfile] = useState(() => loadStorage(storageKeys.profile, defaultProfile))
+  const [profile, setProfile] = useState(() => loadInitialState(storageKeys.profile, defaultProfile))
   const [weeklyPlan, setWeeklyPlan] = useState(() =>
-    loadStorage(storageKeys.weeklyPlan, defaultWeeklyPlan),
+    loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan),
   )
   const [dailyLog, setDailyLog] = useState(() =>
-    loadStorage(storageKeys.dailyLog, defaultDailyLog),
+    loadInitialState(storageKeys.dailyLog, defaultDailyLog),
   )
   const [chatHistory, setChatHistory] = useState(() =>
-    loadStorage(storageKeys.chatHistory, defaultChatHistory),
+    loadInitialState(storageKeys.chatHistory, defaultChatHistory),
   )
 
   useEffect(() => {
@@ -119,7 +125,7 @@ function App() {
               AI 健身教练与训练记录闭环
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-              当前已接入 localStorage 默认数据。即使浏览器里还没有任何记录，也能直接看到档案、训练计划、今日日志和 AI 对话摘要，方便后续继续做编辑和闭环能力。
+              首次进入请先填写你的真实档案、训练计划和今日日志。AI 教练会基于你当前保存的本地数据自动注入上下文，并给出可采纳的训练建议。
             </p>
           </div>
 

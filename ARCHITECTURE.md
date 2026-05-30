@@ -429,3 +429,30 @@ CoachTab
 - 复杂指标与大模型辅助推算
 - 更完整的 AI 对话体验
 - 数据导入导出增强与云同步能力
+
+## 10. 2026-05-30 默认数据与迁移补充
+
+### 10.1 默认数据职责拆分
+
+- `src/utils/defaultData.js`
+  - `defaultProfile / defaultWeeklyPlan / defaultDailyLog / defaultChatHistory` 现在只表示应用启动时的空白结构。
+  - `demoProfile / demoWeeklyPlan / demoDailyLog / demoChatHistory` 单独保留给测试、脚本演示和回归验证使用，不再直接注入页面。
+
+### 10.2 启动数据流补充
+
+```text
+App 首次初始化
+  -> migrateLegacyDemoData()
+  -> 若未写入 fitloop_storageVersion，则将四类业务键重置为空白结构
+  -> 写入 fitloop_storageVersion = "v2-empty-defaults"
+  -> loadStorage() 读取当前版本数据
+  -> 初始化顶层 state
+```
+
+该迁移只执行一次，目的是清理旧版本浏览器里残留的演示数据，同时避免在用户已经开始填写真实数据后再次覆盖。
+
+### 10.3 localStorage 新增版本键
+
+- `fitloop_storageVersion`
+  - 当前值：`"v2-empty-defaults"`
+  - 用途：标记“一次性清空旧 demo 数据”的迁移已经执行完成。

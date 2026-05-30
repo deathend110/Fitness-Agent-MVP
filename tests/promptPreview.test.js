@@ -6,18 +6,18 @@ import {
   promptPreviewLabels,
 } from '../src/utils/promptPreview.js'
 import {
-  defaultDailyLog,
-  defaultProfile,
-  defaultWeeklyPlan,
+  demoDailyLog,
+  demoProfile,
+  demoWeeklyPlan,
 } from '../src/utils/defaultData.js'
 import { getTodayStr } from '../src/utils/calc.js'
 import { buildSystemPrompt } from '../src/utils/prompt.js'
 
 test('buildPromptPreviewModel 默认返回折叠的当前上下文预览', () => {
   const previewModel = buildPromptPreviewModel(
-    defaultProfile,
-    defaultWeeklyPlan,
-    defaultDailyLog,
+    demoProfile,
+    demoWeeklyPlan,
+    demoDailyLog,
   )
 
   assert.equal(previewModel.title, promptPreviewLabels.title)
@@ -25,28 +25,28 @@ test('buildPromptPreviewModel 默认返回折叠的当前上下文预览', () =>
   assert.equal(previewModel.defaultExpanded, false)
   assert.equal(
     previewModel.promptText,
-    buildSystemPrompt(defaultProfile, defaultWeeklyPlan, defaultDailyLog),
+    buildSystemPrompt(demoProfile, demoWeeklyPlan, demoDailyLog),
   )
 })
 
 test('buildPromptPreviewModel 会随着今日日志变化生成新的 prompt 预览', () => {
   const todayStr = getTodayStr()
   const originalModel = buildPromptPreviewModel(
-    defaultProfile,
-    defaultWeeklyPlan,
-    defaultDailyLog,
+    demoProfile,
+    demoWeeklyPlan,
+    demoDailyLog,
   )
   const updatedDailyLog = {
-    ...defaultDailyLog,
+    ...demoDailyLog,
     [todayStr]: {
-      ...defaultDailyLog[todayStr],
+      ...demoDailyLog[todayStr],
       trainingNotes: '今天改成轻量恢复训练，深蹲主项只做技术组。',
       kcal: 2460,
     },
   }
   const updatedModel = buildPromptPreviewModel(
-    defaultProfile,
-    defaultWeeklyPlan,
+    demoProfile,
+    demoWeeklyPlan,
     updatedDailyLog,
   )
 

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { defaultWeeklyPlan } from '../src/utils/defaultData.js'
+import { demoWeeklyPlan } from '../src/utils/defaultData.js'
 import { adoptPlanChange } from '../src/utils/adoptPlan.js'
 
 test('adoptPlanChange 会按 suggestion 的 day 和 changes 更新目标动作字段', () => {
-  const result = adoptPlanChange(defaultWeeklyPlan, 'Monday', [
+  const result = adoptPlanChange(demoWeeklyPlan, 'Monday', [
     {
       action: 'update',
       exerciseName: '深蹲',
@@ -18,11 +18,11 @@ test('adoptPlanChange 会按 suggestion 的 day 和 changes 更新目标动作�
   assert.equal(result.message, '已采纳 AI 建议，训练计划已更新。')
   assert.equal(result.nextPlan.Monday.exercises[0].pct, 0.7)
   assert.equal(result.nextPlan.Monday.exercises[1].kg, 80)
-  assert.equal(defaultWeeklyPlan.Monday.exercises[0].pct, 0.75)
+  assert.equal(demoWeeklyPlan.Monday.exercises[0].pct, 0.75)
 })
 
 test('adoptPlanChange 在目标 day 不存在时返回失败结果', () => {
-  const result = adoptPlanChange(defaultWeeklyPlan, 'Holiday', [
+  const result = adoptPlanChange(demoWeeklyPlan, 'Holiday', [
     {
       action: 'update',
       exerciseName: '深蹲',
@@ -34,12 +34,12 @@ test('adoptPlanChange 在目标 day 不存在时返回失败结果', () => {
   assert.deepEqual(result, {
     ok: false,
     message: '未找到 Holiday 的训练计划，无法采纳该建议。',
-    nextPlan: defaultWeeklyPlan,
+    nextPlan: demoWeeklyPlan,
   })
 })
 
 test('adoptPlanChange 在目标动作不存在时返回失败结果，且不产生部分写回', () => {
-  const result = adoptPlanChange(defaultWeeklyPlan, 'Monday', [
+  const result = adoptPlanChange(demoWeeklyPlan, 'Monday', [
     {
       action: 'update',
       exerciseName: '深蹲',
@@ -57,7 +57,7 @@ test('adoptPlanChange 在目标动作不存在时返回失败结果，且不产�
   assert.deepEqual(result, {
     ok: false,
     message: '未找到 Monday 的动作“卧推”，无法采纳该建议。',
-    nextPlan: defaultWeeklyPlan,
+    nextPlan: demoWeeklyPlan,
   })
-  assert.equal(defaultWeeklyPlan.Monday.exercises[0].pct, 0.75)
+  assert.equal(demoWeeklyPlan.Monday.exercises[0].pct, 0.75)
 })
