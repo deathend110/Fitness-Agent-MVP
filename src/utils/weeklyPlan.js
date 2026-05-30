@@ -8,6 +8,8 @@ const WEEKDAY_ORDER = [
   'Saturday',
   'Sunday',
 ]
+const RPE_MIN = 0
+const RPE_MAX = 10
 
 function createFallbackId() {
   return `exercise-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -28,6 +30,19 @@ function getDefaultDayPlan(dayPlan = {}) {
   }
 }
 
+// 计划数据层只接受 0-10 的 RPE，超出范围时统一压成 null，避免非法强度写入 localStorage。
+function normalizeRpe(rpe) {
+  if (!Number.isFinite(rpe)) {
+    return null
+  }
+
+  if (rpe < RPE_MIN || rpe > RPE_MAX) {
+    return null
+  }
+
+  return rpe
+}
+
 function normalizeExercise(exercise = {}, fallbackId) {
   const usePercentageMode =
     Boolean(exercise.ref1RM) && Number.isFinite(exercise.pct)
@@ -36,7 +51,7 @@ function normalizeExercise(exercise = {}, fallbackId) {
     name: (exercise.name ?? '').trim(),
     sets: Number.isFinite(exercise.sets) ? exercise.sets : null,
     reps: Number.isFinite(exercise.reps) ? exercise.reps : null,
-    rpe: Number.isFinite(exercise.rpe) ? exercise.rpe : null,
+    rpe: normalizeRpe(exercise.rpe),
     note: (exercise.note ?? '').trim(),
   }
 

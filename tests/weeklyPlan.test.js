@@ -56,6 +56,23 @@ test('addExerciseToDay 新增固定重量动作时会清空 ref1RM 和 pct', () 
   assert.equal(addedExercise.kg, 80)
 })
 
+test('addExerciseToDay 会把非法 RPE 归一化为 null', () => {
+  const nextPlan = addExerciseToDay(demoWeeklyPlan, 'Tuesday', {
+    name: '深蹲',
+    ref1RM: 'squat',
+    pct: 0.75,
+    kg: null,
+    sets: 4,
+    reps: 6,
+    rpe: 11,
+    note: '主项',
+  })
+
+  const addedExercise = nextPlan.Tuesday.exercises.at(-1)
+
+  assert.equal(addedExercise.rpe, null)
+})
+
 test('updateExerciseInDay 只更新目标日期中的目标动作', () => {
   const nextPlan = updateExerciseInDay(demoWeeklyPlan, 'Monday', 'monday-squat', {
     id: 'monday-squat',
@@ -73,6 +90,22 @@ test('updateExerciseInDay 只更新目标日期中的目标动作', () => {
   assert.equal(nextPlan.Monday.exercises[0].kg, null)
   assert.equal(nextPlan.Monday.exercises[0].pct, 0.7)
   assert.equal(nextPlan.Wednesday.exercises[0].name, demoWeeklyPlan.Wednesday.exercises[0].name)
+})
+
+test('updateExerciseInDay 会把非法 RPE 归一化为 null', () => {
+  const nextPlan = updateExerciseInDay(demoWeeklyPlan, 'Monday', 'monday-squat', {
+    id: 'monday-squat',
+    name: '暂停深蹲',
+    ref1RM: 'squat',
+    pct: 0.7,
+    kg: null,
+    sets: 5,
+    reps: 4,
+    rpe: -1,
+    note: '次主项',
+  })
+
+  assert.equal(nextPlan.Monday.exercises[0].rpe, null)
 })
 
 test('removeExerciseFromDay 删除动作时不会影响其他日期', () => {

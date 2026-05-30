@@ -174,3 +174,7 @@ task/           迭代任务拆分与执行清单
   - `fitloop_dailyLog`
   - `fitloop_chatHistory`
 - 迁移完成后会写入 `fitloop_storageVersion = "v2-empty-defaults"`，后续再次打开应用不会重复覆盖用户已填写的数据。
+## 输入校验补充
+
+- `RPE` 在表单层和计划数据层都会限制为 `0-10`
+- `fitloop_weeklyPlan` 写回本地存储前会先做归一化，超出范围的值会变成 `null`

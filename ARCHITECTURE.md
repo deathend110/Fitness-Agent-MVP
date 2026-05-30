@@ -456,3 +456,9 @@ App 首次初始化
 - `fitloop_storageVersion`
   - 当前值：`"v2-empty-defaults"`
   - 用途：标记“一次性清空旧 demo 数据”的迁移已经执行完成。
+## 11. 输入校验补充
+
+- `src/utils/exerciseForm.js` 负责表单层的 RPE 0-10 校验，给出即时错误提示
+- `src/utils/weeklyPlan.js` 负责计划数据层兜底，写回周计划前会把非法 RPE 归一化为 `null`
+- `localStorage` 中的 `fitloop_weeklyPlan` 只保留合法 RPE 或空值，避免越界训练强度被持久化
+- 当前测试用例同时覆盖 `addExerciseToDay()` 和 `updateExerciseInDay()` 两条写回路径
