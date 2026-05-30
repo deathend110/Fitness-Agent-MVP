@@ -485,3 +485,43 @@ src/
 
 - `tests/planLayout.test.js` 已补充桌面比例模板、列跨度与兜底标志断言。
 - 本任务的自动化验证重点是布局模型契约；真实 16:9 观感仍需后续 UI 验收继续确认。
+## V1.5 Task 5 补充说明
+
+### 新增结构
+
+```text
+src/
+  components/
+    plan-rest/
+      PlanDayEmptyState.jsx
+      PlanRestDayPanel.jsx
+  utils/
+    planDayDisplay.js
+tests/
+  planDayDisplay.test.js
+```
+
+### 展示模型职责
+
+- `src/utils/planDayDisplay.js`
+  - 负责把单日计划映射为展示模型，集中判断休息日、空训练日、历史动作保留提示和无备注入口约束。
+  - 让 `PlanDayCard.jsx` 只消费展示结果，减少 JSX 内散落的条件分支。
+
+### 组件职责调整
+
+- `src/components/PlanDayCard.jsx`
+  - 根据展示模型切换训练日空状态、休息日轻量面板和历史动作提示。
+  - 继续承载训练类型切换、新增动作、动作编辑与删除链路。
+- `src/components/PlanDayCardHeader.jsx`
+  - 训练日与休息日共用同一入口，但根据展示模型输出不同的头部信息密度。
+- `src/components/plan-grid/PlanWeekGridColumn.jsx`
+  - 继续负责宽窄列比例，同时让休息日列使用更轻的容器样式。
+- `src/components/plan-rest/PlanDayEmptyState.jsx`
+  - 负责训练日空动作状态的轻量提示。
+- `src/components/plan-rest/PlanRestDayPanel.jsx`
+  - 负责休息日空列的独立轻量模板，不引入无效备注入口。
+
+### 验证补充
+
+- `tests/planDayDisplay.test.js`
+  - 覆盖休息日空状态、空训练日状态、休息日保留历史动作以及“无备注入口”约束。

@@ -1,0 +1,74 @@
+function getExerciseCountLabel(count = 0) {
+  if (count <= 0) {
+    return '暂无动作'
+  }
+
+  return `已排 ${count} 个动作`
+}
+
+function getHistoryTitle(count = 0) {
+  if (count <= 0) {
+    return '保留历史动作'
+  }
+
+  return `保留 ${count} 个历史动作`
+}
+
+/**
+ * 将计划日的展示判断集中到纯函数里，先稳定空状态与休息日语义，
+ * 再让 React 组件只负责按模型渲染，避免 JSX 里散落条件分支。
+ */
+export function buildPlanDayDisplayModel({ dayLabel = '', plan = {}, isTrainingDay = false } = {}) {
+  const exercises = Array.isArray(plan.exercises) ? plan.exercises : []
+  const exerciseCount = exercises.length
+  const isRestDay = !isTrainingDay
+
+  if (isRestDay) {
+    return {
+      dayLabel,
+      variant: 'rest',
+      showAddExerciseButton: false,
+      showNoteEntry: false,
+      historyHint:
+        exerciseCount > 0
+          ? '当前标记为休息日，历史动作仍保留，切回训练类型后可继续补充。'
+          : null,
+      preview: {
+        eyebrow: '轻安排',
+        title: exerciseCount > 0 ? getHistoryTitle(exerciseCount) : '恢复优先',
+        meta: exerciseCount > 0 ? getExerciseCountLabel(exerciseCount) : '点击可调整当天类型',
+      },
+      emptyState:
+        exerciseCount === 0
+          ? {
+              tone: 'rest',
+              title: '休息日',
+              description: '恢复节奏，给下一次训练留出余量。',
+            }
+          : null,
+    }
+  }
+
+  return {
+    dayLabel,
+    variant: 'training',
+    showAddExerciseButton: true,
+    showNoteEntry: false,
+    historyHint: null,
+    preview: {
+      eyebrow: exerciseCount === 0 ? '待补充' : '训练日',
+      title: plan.type || '训练日',
+      meta: getExerciseCountLabel(exerciseCount),
+    },
+    emptyState:
+      exerciseCount === 0
+        ? {
+            tone: 'training-empty',
+            title: '暂未安排动作',
+            description: '先确定今天的训练重点，再补充动作。',
+          }
+        : null,
+  }
+}
+
+export default buildPlanDayDisplayModel
