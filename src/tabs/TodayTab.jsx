@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { getTodayKey, getTodayStr } from '../utils/calc.js'
+import { formatDecimalDisplay, getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildTodayLogPayload, readTodayLogForm } from '../utils/dailyLog.js'
 import { buildTodayPlanSummary } from '../utils/todayPlan.js'
 import { buildWeightChartModel } from '../utils/weightChart.js'
@@ -19,7 +19,7 @@ function formatMetric(value, suffix = '') {
     return '--'
   }
 
-  return `${value}${suffix}`
+  return `${formatDecimalDisplay(value)}${suffix}`
 }
 
 function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
@@ -57,7 +57,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
       <p className="text-sm font-semibold text-fitloop-mint">Tab 3</p>
       <h2 className="mt-3 text-2xl font-bold text-white">今日日志</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
-        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要、近 14 天体重趋势和今日训练计划。
+        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要、近 14 天体重趋势和今日日计划。
         保存后会写回 <code>fitloop_dailyLog</code>，刷新页面后仍会保留。
       </p>
 
@@ -113,7 +113,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
             <textarea
               className="min-h-28 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
               onChange={(event) => updateDraftField('trainingNotes', event.target.value)}
-              placeholder="例如：主项速度下降、哪个部位发紧、是否需要下调训练量。"
+              placeholder="例如：主项速度下降、某个部位发紧、是否需要下调训练量。"
               value={draft.trainingNotes}
             />
           </label>

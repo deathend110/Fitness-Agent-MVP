@@ -1,4 +1,4 @@
-import { getExerciseKg } from './calc.js'
+import { formatCountDisplay, formatRpeDisplay, formatWeightDisplay, getExerciseKg } from './calc.js'
 
 function getTypeLabel(type) {
   return type === 'rest' || !type ? '休息日' : type
@@ -7,35 +7,33 @@ function getTypeLabel(type) {
 function formatExerciseDetail(exercise = {}, oneRM = {}) {
   const detailParts = []
   const hasResolvedKg = Boolean(exercise.ref1RM) || Number.isFinite(exercise.kg)
-  const hasSetsAndReps =
-    Number.isFinite(exercise.sets) && Number.isFinite(exercise.reps)
+  const hasSetsAndReps = Number.isFinite(exercise.sets) && Number.isFinite(exercise.reps)
 
   if (hasResolvedKg) {
-    detailParts.push(`${getExerciseKg(exercise, oneRM)}kg`)
+    detailParts.push(formatWeightDisplay(getExerciseKg(exercise, oneRM)))
   } else {
     detailParts.push('重量待定')
   }
 
   if (hasSetsAndReps) {
-    detailParts.push(`${exercise.sets} 组 x ${exercise.reps} 次`)
+    detailParts.push(`${formatCountDisplay(exercise.sets)} 组 x ${formatCountDisplay(exercise.reps)} 次`)
   }
 
   if (Number.isFinite(exercise.rpe)) {
-    detailParts.push(`RPE ${exercise.rpe}`)
+    detailParts.push(`RPE ${formatRpeDisplay(exercise.rpe)}`)
   }
 
   if (exercise.note?.trim()) {
     detailParts.push(exercise.note.trim())
   }
 
-  return detailParts.join(' · ')
+  return detailParts.join(' 路 ')
 }
 
 export function buildTodayPlanSummary(dayPlan = {}, oneRM = {}) {
   const type = dayPlan?.type ?? 'rest'
   const exercises = Array.isArray(dayPlan?.exercises) ? dayPlan.exercises : []
 
-  // TodayTab 只读展示当日计划；rest 或空动作都明确回到“休息/未安排”语义。
   if (type === 'rest') {
     return {
       typeLabel: getTypeLabel(type),

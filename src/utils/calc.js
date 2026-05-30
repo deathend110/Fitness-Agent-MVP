@@ -13,6 +13,17 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function normalizeDecimal(value, fractionDigits = 1) {
+  const parsed = Number(value)
+
+  if (!Number.isFinite(parsed)) {
+    return '0'
+  }
+
+  const normalized = Number(parsed.toFixed(fractionDigits))
+  return `${normalized}`
+}
+
 function getRestPlan() {
   return { type: 'rest', exercises: [] }
 }
@@ -41,6 +52,26 @@ export function getExerciseKg(exercise = {}, oneRM = {}) {
   }
 
   return toNumber(exercise.kg)
+}
+
+export function formatDecimalDisplay(value, fractionDigits = 1) {
+  return normalizeDecimal(value, fractionDigits)
+}
+
+export function formatWeightDisplay(value) {
+  return `${formatDecimalDisplay(value, 1)}kg`
+}
+
+export function formatCountDisplay(value) {
+  return formatDecimalDisplay(value, 0)
+}
+
+export function formatPercentDisplay(value) {
+  return `${formatDecimalDisplay(toNumber(value) * 100, 0)}%`
+}
+
+export function formatRpeDisplay(value) {
+  return formatDecimalDisplay(value, 1)
 }
 
 // 按 spec 中的 Mifflin-St Jeor 公式估算基础代谢。

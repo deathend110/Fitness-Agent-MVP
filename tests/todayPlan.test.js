@@ -58,12 +58,12 @@ test('buildTodayPlanSummary 在训练日返回可扫描的动作摘要', () => {
     {
       id: 'monday-squat',
       name: '深蹲',
-      detail: '90kg · 4 组 x 6 次 · RPE 8 · 主项',
+      detail: '90kg 路 4 组 x 6 次 路 RPE 8 路 主项',
     },
     {
       id: 'monday-rdl',
       name: '罗马尼亚硬拉',
-      detail: '80kg · 3 组 x 10 次',
+      detail: '80kg 路 3 组 x 10 次',
     },
   ])
 })

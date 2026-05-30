@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react'
 import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard.jsx'
 import { createExerciseDraft, draftToExercise } from '../utils/exerciseForm.js'
-import { getExerciseKg, getTodayKey } from '../utils/calc.js'
+import {
+  formatPercentDisplay,
+  formatWeightDisplay,
+  formatCountDisplay,
+  getExerciseKg,
+  getTodayKey,
+} from '../utils/calc.js'
 import {
   addExerciseToDay,
   getPlanDayTypes,
@@ -16,10 +22,10 @@ const NEW_EXERCISE_ID = '__new__'
 function getExerciseDisplay(profile, exercise) {
   if (exercise.ref1RM) {
     const actualKg = getExerciseKg(exercise, profile.oneRM)
-    return `${Math.round((exercise.pct ?? 0) * 100)}% -> ${actualKg}kg`
+    return `${formatPercentDisplay(exercise.pct)} -> ${formatWeightDisplay(actualKg)}`
   }
 
-  return `${getExerciseKg(exercise, profile.oneRM)}kg`
+  return formatWeightDisplay(getExerciseKg(exercise, profile.oneRM))
 }
 
 function getOneRmOptions(profile) {
@@ -49,7 +55,9 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
 
     days.forEach(([, plan]) => {
       plan.exercises.forEach((exercise) => {
-        summaries[exercise.id] = `${getExerciseDisplay(profile, exercise)} · ${exercise.sets} 组 × ${exercise.reps} 次`
+        summaries[exercise.id] = `${getExerciseDisplay(profile, exercise)} 路 ${formatCountDisplay(
+          exercise.sets,
+        )} 组 × ${formatCountDisplay(exercise.reps)} 次`
       })
     })
 
@@ -112,15 +120,10 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
       )
     } else {
       onWeeklyPlanChange((currentPlan) =>
-        updateExerciseInDay(
-          currentPlan,
-          editingState.dayKey,
-          editingState.exerciseId,
-          {
-            ...nextExercise,
-            id: editingState.exerciseId,
-          },
-        ),
+        updateExerciseInDay(currentPlan, editingState.dayKey, editingState.exerciseId, {
+          ...nextExercise,
+          id: editingState.exerciseId,
+        }),
       )
     }
 

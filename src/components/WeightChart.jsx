@@ -7,13 +7,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { formatWeightDisplay } from '../utils/calc.js'
 
 function renderTooltipLabel(label) {
   return `日期：${label}`
 }
 
 function renderTooltipValue(value) {
-  return [`${value} kg`, '体重']
+  return [formatWeightDisplay(value), '体重']
 }
 
 function WeightChart({ model }) {
@@ -50,9 +51,9 @@ function WeightChart({ model }) {
               axisLine={false}
               domain={['dataMin - 1', 'dataMax + 1']}
               tick={{ fill: '#94a3b8', fontSize: 12 }}
-              tickFormatter={(value) => `${value}kg`}
+              tickFormatter={(value) => formatWeightDisplay(value)}
               tickLine={false}
-              width={48}
+              width={56}
             />
             <Tooltip
               contentStyle={{

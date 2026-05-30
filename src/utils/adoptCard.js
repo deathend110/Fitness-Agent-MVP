@@ -1,3 +1,10 @@
+import {
+  formatCountDisplay,
+  formatPercentDisplay,
+  formatRpeDisplay,
+  formatWeightDisplay,
+} from './calc.js'
+
 const DAY_LABELS = {
   Monday: '周一',
   Tuesday: '周二',
@@ -53,38 +60,37 @@ function formatChangeValue(field, value) {
   }
 
   if (field === 'pct' && typeof value === 'number') {
-    return `${Math.round(value * 100)}%`
+    return formatPercentDisplay(value)
   }
 
   if (field === 'sets' && typeof value === 'number') {
-    return `${value} 组`
+    return `${formatCountDisplay(value)} 组`
   }
 
   if (field === 'reps' && typeof value === 'number') {
-    return `${value} 次`
+    return `${formatCountDisplay(value)} 次`
   }
 
   if (field === 'kg' && typeof value === 'number') {
-    return `${value} kg`
+    return formatWeightDisplay(value)
   }
 
   if (field === 'rpe' && typeof value === 'number') {
-    return `${value}`
+    return formatRpeDisplay(value)
   }
 
   return String(value)
 }
 
 /**
- * 把 AI suggestion 整理成卡片展示模型，避免 CoachTab 直接处理字段映射与文案格式。
+ * 将 AI suggestion 整理成卡片展示模型，避免 CoachTab 直接处理字段映射与文案格式。
  */
 export function buildAdoptCardModel(suggestion) {
   if (!suggestion || typeof suggestion !== 'object') {
     return null
   }
 
-  const summary =
-    typeof suggestion.summary === 'string' ? suggestion.summary.trim() : ''
+  const summary = typeof suggestion.summary === 'string' ? suggestion.summary.trim() : ''
   const rawChanges = Array.isArray(suggestion.changes) ? suggestion.changes : []
 
   if (!summary && rawChanges.length === 0) {
@@ -93,9 +99,11 @@ export function buildAdoptCardModel(suggestion) {
 
   return {
     dayLabel: formatDayLabel(suggestion.day),
-    summary: summary || 'AI 给出了一条训练计划调整建议',
+    summary: summary || 'AI 给出了一条训练计划调整建议。',
     changes: rawChanges.map((change, index) => ({
-      id: `${index}-${change.action || 'update'}-${change.exerciseName || 'exercise'}-${change.field || 'field'}`,
+      id: `${index}-${change.action || 'update'}-${change.exerciseName || 'exercise'}-${
+        change.field || 'field'
+      }`,
       actionLabel: formatActionLabel(change.action),
       exerciseName: change.exerciseName || '未命名动作',
       fieldLabel: formatFieldLabel(change.field),
