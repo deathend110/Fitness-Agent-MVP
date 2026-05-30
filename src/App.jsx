@@ -60,6 +60,10 @@ function App() {
     setChatHistory(nextChatHistory)
   }
 
+  function handleOpenCoachTab() {
+    setActiveTabId('coach')
+  }
+
   const tabs = [
     {
       id: 'profile',
@@ -91,6 +95,7 @@ function App() {
         <TodayTab
           dailyLog={dailyLog}
           onDailyLogChange={setDailyLog}
+          onOpenCoach={handleOpenCoachTab}
           profile={profile}
           weeklyPlan={weeklyPlan}
         />

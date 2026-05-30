@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
+import DailyMetricsPanel from '../components/DailyMetricsPanel.jsx'
 import { formatDecimalDisplay, getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildTodayLogPayload, readTodayLogForm } from '../utils/dailyLog.js'
+import { buildDailyMetricsPanelModel } from '../utils/dailyMetricsPanel.js'
 import { buildTodayPlanSummary } from '../utils/todayPlan.js'
 import { buildWeightChartModel } from '../utils/weightChart.js'
 
@@ -22,12 +24,13 @@ function formatMetric(value, suffix = '') {
   return `${formatDecimalDisplay(value)}${suffix}`
 }
 
-function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
+function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach }) {
   const todayDate = getTodayStr()
   const todayPlanKey = getTodayKey()
   const todayLog = dailyLog?.[todayDate]
   const todayPlan = weeklyPlan?.[todayPlanKey] ?? { type: 'rest', exercises: [] }
   const todayPlanSummary = buildTodayPlanSummary(todayPlan, profile?.oneRM)
+  const dailyMetricsPanel = buildDailyMetricsPanelModel(profile, weeklyPlan, dailyLog)
   const weightChartModel = buildWeightChartModel(dailyLog, todayDate)
   const [draft, setDraft] = useState(() => readTodayLogForm(todayLog))
   const [saveHint, setSaveHint] = useState('')
@@ -124,6 +127,8 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
         </form>
 
         <div className="space-y-4">
+          <DailyMetricsPanel model={dailyMetricsPanel} onOpenCoach={onOpenCoach} />
+
           <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayDate}</p>
             <h3 className="mt-3 text-lg font-semibold text-slate-100">已保存摘要</h3>
