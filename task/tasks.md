@@ -487,29 +487,29 @@
 
 ## 十一、任务完成顺序摘要
 
-| 顺序 | 任务 | 预计时间 |
-| --- | --- | --- |
-| 1 | Task 0.1 初始化 Vite React 项目 | 30min |
-| 2 | Task 0.2 创建基础项目文档 | 30min |
-| 3 | Task 1.1 搭建 App Tab 框架 | 45min |
-| 4 | Task 1.2 实现 localStorage 工具与默认数据 | 45min |
-| 5 | Task 1.3 实现计算工具 | 45min |
-| 6 | Task 2.1 实现我的档案 Tab | 45min |
-| 7 | Task 2.2 实现训练计划周视图 | 45min |
-| 8 | Task 2.3 实现动作编辑组件 | 60min |
-| 9 | Task 2.4 实现训练计划增删改 | 60min |
-| 10 | Task 3.1 实现今日日志表单 | 45min |
-| 11 | Task 3.2 展示今日计划只读摘要 | 30min |
-| 12 | Task 3.3 实现 System Prompt 构建 | 60min |
-| 13 | Task 4.1 实现 DeepSeek API 封装 | 45min |
-| 14 | Task 4.2 实现 AI 教练对话 UI | 60min |
-| 15 | Task 4.3 实现上下文预览 | 30min |
-| 16 | Task 4.4 实现 AI 返回 JSON 解析 | 45min |
-| 17 | Task 4.5 实现采纳建议卡片 | 60min |
-| 18 | Task 4.6 实现一键采纳写回训练计划 | 45min |
-| 19 | Task 5.1 建立最小验证清单 | 45min |
-| 20 | Task 5.2 补齐 README 和 ARCHITECTURE | 45min |
-| 21 | Task 5.3 整理课堂 demo 脚本 | 30min |
+| 顺序  | 任务                                | 预计时间  |
+| --- | --------------------------------- | ----- |
+| 1   | Task 0.1 初始化 Vite React 项目        | 30min |
+| 2   | Task 0.2 创建基础项目文档                 | 30min |
+| 3   | Task 1.1 搭建 App Tab 框架            | 45min |
+| 4   | Task 1.2 实现 localStorage 工具与默认数据  | 45min |
+| 5   | Task 1.3 实现计算工具                   | 45min |
+| 6   | Task 2.1 实现我的档案 Tab               | 45min |
+| 7   | Task 2.2 实现训练计划周视图                | 45min |
+| 8   | Task 2.3 实现动作编辑组件                 | 60min |
+| 9   | Task 2.4 实现训练计划增删改                | 60min |
+| 10  | Task 3.1 实现今日日志表单                 | 45min |
+| 11  | Task 3.2 展示今日计划只读摘要               | 30min |
+| 12  | Task 3.3 实现 System Prompt 构建      | 60min |
+| 13  | Task 4.1 实现 DeepSeek API 封装       | 45min |
+| 14  | Task 4.2 实现 AI 教练对话 UI            | 60min |
+| 15  | Task 4.3 实现上下文预览                  | 30min |
+| 16  | Task 4.4 实现 AI 返回 JSON 解析         | 45min |
+| 17  | Task 4.5 实现采纳建议卡片                 | 60min |
+| 18  | Task 4.6 实现一键采纳写回训练计划             | 45min |
+| 19  | Task 5.1 建立最小验证清单                 | 45min |
+| 20  | Task 5.2 补齐 README 和 ARCHITECTURE | 45min |
+| 21  | Task 5.3 整理课堂 demo 脚本             | 30min |
 
 ---
 
