@@ -8,7 +8,6 @@ import PlanRestDayPanel from './plan-rest/PlanRestDayPanel.jsx'
 import { createExerciseDraft } from '../utils/exerciseForm.js'
 import { NEW_PLAN_EXERCISE_ID } from '../utils/planEditorState.js'
 import { buildPlanDayDisplayModel } from '../utils/planDayDisplay.js'
-import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 
 function PlanDayCard({
   dayKey,
@@ -16,7 +15,6 @@ function PlanDayCard({
   dateLabel,
   plan,
   isTrainingDay,
-  dayTypeOptions,
   editingExerciseId,
   isExerciseEditing,
   exerciseDraft,
@@ -32,7 +30,6 @@ function PlanDayCard({
   rpeError,
 }) {
   const dayTypeListId = `${dayKey}-day-type-options`
-  const dayTypeSuggestions = getPlanDayTypeSuggestions(plan.type)
   const displayModel = buildPlanDayDisplayModel({
     dayLabel,
     dateLabel,
@@ -63,12 +60,6 @@ function PlanDayCard({
           <PlanDayTypeSection
             compact={dayTypeSectionVariant === 'compact'}
             dayTypeListId={dayTypeListId}
-            dayTypeOptions={
-              displayModel.dayTypeQuickOptions?.length > 0
-                ? displayModel.dayTypeQuickOptions
-                : dayTypeOptions
-            }
-            dayTypeSuggestions={dayTypeSuggestions}
             onDayTypeChange={onDayTypeChange}
             planType={plan.type}
           />

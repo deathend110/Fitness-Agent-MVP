@@ -18,7 +18,6 @@ import {
 } from '../utils/planEditorState.js'
 import {
   addExerciseToDay,
-  getPlanDayTypes,
   removeExerciseFromDay,
   updateDayType,
   updateExerciseInDay,
@@ -36,7 +35,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const [editingState, setEditingState] = useState(() => clearPlanEditorState())
 
   const oneRmOptions = getOneRmOptions(profile)
-  const dayTypeOptions = getPlanDayTypes()
   const todayStr = getTodayStr()
   const layoutModel = useMemo(
     () =>
@@ -129,7 +127,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
                 dayKey={column.dayKey}
                 dayLabel={column.dayLabel}
                 dateLabel={column.dateLabel}
-                dayTypeOptions={dayTypeOptions}
                 editingExerciseId={editingExerciseId}
                 exerciseDraft={
                   isEditingDay ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)
