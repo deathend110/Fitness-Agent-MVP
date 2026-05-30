@@ -118,16 +118,27 @@ function readWeekMetaFromPlan(weeklyPlan) {
   return weeklyPlan.weekMeta
 }
 
+function hasCompleteWeekRange(planWeekMeta) {
+  return Boolean(parseDateString(planWeekMeta?.weekStart) && parseDateString(planWeekMeta?.weekEnd))
+}
+
 function resolvePlanWeekRange(options = {}) {
   const fallbackWeekStart = getMondayOfWeek(options.referenceDate)
   const fallbackWeekEnd = getSundayOfWeek(options.referenceDate)
   const planWeekMeta = readWeekMetaFromPlan(options.weeklyPlan)
-  const weekStartDate = parseDateString(planWeekMeta?.weekStart) ?? fallbackWeekStart
-  const weekEndDate = parseDateString(planWeekMeta?.weekEnd) ?? fallbackWeekEnd
+
+  if (!hasCompleteWeekRange(planWeekMeta)) {
+    return {
+      weekStartDate: fallbackWeekStart,
+      weekEndDate: fallbackWeekEnd,
+      usesPlanRange: false,
+    }
+  }
 
   return {
-    weekStartDate,
-    weekEndDate,
+    weekStartDate: parseDateString(planWeekMeta.weekStart),
+    weekEndDate: parseDateString(planWeekMeta.weekEnd),
+    usesPlanRange: true,
   }
 }
 
@@ -137,17 +148,13 @@ function resolvePlanWeekRange(options = {}) {
 export function resolvePlanWeekMeta(options = {}) {
   const derivedWeekNumber = getIsoWeekNumber(options.referenceDate)
   const planWeekMeta = readWeekMetaFromPlan(options.weeklyPlan)
-  const { weekStartDate, weekEndDate } = resolvePlanWeekRange(options)
+  const { weekStartDate, weekEndDate, usesPlanRange } = resolvePlanWeekRange(options)
 
   return {
     source: planWeekMeta ? 'weeklyPlan' : 'derived',
     weekNumber: normalizeWeekNumber(planWeekMeta?.weekNumber, derivedWeekNumber),
-    weekStart: typeof planWeekMeta?.weekStart === 'string' && planWeekMeta.weekStart.trim()
-      ? planWeekMeta.weekStart.trim()
-      : formatDateKey(weekStartDate),
-    weekEnd: typeof planWeekMeta?.weekEnd === 'string' && planWeekMeta.weekEnd.trim()
-      ? planWeekMeta.weekEnd.trim()
-      : formatDateKey(weekEndDate),
+    weekStart: usesPlanRange ? planWeekMeta.weekStart.trim() : formatDateKey(weekStartDate),
+    weekEnd: usesPlanRange ? planWeekMeta.weekEnd.trim() : formatDateKey(weekEndDate),
   }
 }
 
