@@ -175,6 +175,7 @@ task/
 
 - `src/utils/weeklyPlan.js`
   - 处理周计划初始化、更新与基础校验
+  - 负责训练类型归一化、自定义类型保留和坏结构兜底
 
 - `src/utils/weightChart.js`
   - 整理近 14 天体重图表数据
@@ -320,6 +321,13 @@ CoachTab
 }
 ```
 
+训练类型字段规则：
+
+- 默认快捷类型包括：`腿日`、`推日`、`拉日`、`有氧`、`rest`
+- 用户也可以保存自定义训练类型字符串
+- 空字符串、纯空白或损坏数据会在归一化时回退为 `rest`
+- 即使训练类型切换为 `rest`，当天已有动作也不会被自动删除
+
 说明：
 
 - 若动作配置了 `ref1RM + pct`，系统会根据 1RM 计算展示重量
@@ -462,3 +470,10 @@ App 首次初始化
 - `src/utils/weeklyPlan.js` 负责计划数据层兜底，写回周计划前会把非法 RPE 归一化为 `null`
 - `localStorage` 中的 `fitloop_weeklyPlan` 只保留合法 RPE 或空值，避免越界训练强度被持久化
 - 当前测试用例同时覆盖 `addExerciseToDay()` 和 `updateExerciseInDay()` 两条写回路径
+
+## 12. 训练类型开放输入补充
+
+- `PlanDayCard.jsx` 现在使用“文本输入 + datalist 联想 + 默认快捷按钮”组织训练类型输入
+- `weeklyPlan.updateDayType()` 支持保存自定义训练类型，不再把所有非枚举值强制改成 `rest`
+- `weeklyPlan` 数据层会统一执行训练类型归一化，保证旧枚举值、自定义值、空白值和坏结构都能稳定落盘
+- 自定义训练类型通过 App 顶层 state 写回 `fitloop_weeklyPlan` 后，页面刷新会按既有 `localStorage` 恢复链路重新加载
