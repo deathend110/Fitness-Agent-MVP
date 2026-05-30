@@ -1,4 +1,4 @@
-import { buildDailyMetricsSummary } from './calc.js'
+import { buildDailyMetricsSummary } from './dailyMetrics.js'
 
 function formatMetricValue(value, unit = '', fractionDigits = 1) {
   if (!Number.isFinite(value)) {
@@ -88,8 +88,13 @@ export function getMetricToneClassNames(tone) {
  * 将复杂指标 summary 转成 Today 页可直接消费的展示模型。
  * 这里统一复用 buildDailyMetricsSummary，避免页面自行重复计算。
  */
-export function buildDailyMetricsPanelModel(profile = {}, weeklyPlan = {}, dailyLog = {}) {
-  const summary = buildDailyMetricsSummary(profile, weeklyPlan, dailyLog)
+export function buildDailyMetricsPanelModel(
+  profile = {},
+  weeklyPlan = {},
+  dailyLog = {},
+  referenceDate,
+) {
+  const summary = buildDailyMetricsSummary(profile, weeklyPlan, dailyLog, referenceDate)
   const calorieStatus = getCalorieStatusCopy(summary.calorie.status)
   const proteinStatus = getProteinStatusCopy(summary.protein.status)
 

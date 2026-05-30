@@ -1,6 +1,6 @@
 # FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4 与 Task 5 已完成的训练计划和界面主题升级。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4、Task 5 与 Task 6 已完成的训练计划、界面主题和复杂指标升级。
 
 ## 当前项目结构
 
@@ -31,10 +31,12 @@ src/
     adoptPlan.js
     aiResponse.js
     calc.js
+    calcBase.js
     chatHistory.js
     coachChat.js
     coachGuard.js
     dailyLog.js
+    dailyMetrics.js
     dataTransfer.js
     defaultData.js
     exerciseForm.js
@@ -42,6 +44,7 @@ src/
     planLayout.js
     profileForm.js
     prompt.js
+    promptSections.js
     promptPreview.js
     storage.js
     todayPlan.js
@@ -99,6 +102,24 @@ docs/
 - `src/utils/planExerciseCard.js`
   - 负责把动作结构转换成卡片展示模型
 
+- `src/utils/calc.js`
+  - 作为兼容导出层保留原有调用入口
+  - 将日期/数值工具与复杂指标汇总拆分到独立文件，降低 Task 6 后续维护成本
+
+- `src/utils/calcBase.js`
+  - 负责日期键、动作负重换算、数值格式化、BMR 与训练消耗等基础计算
+
+- `src/utils/dailyMetrics.js`
+  - 负责 `buildDailyMetricsSummary()` 与 `calcTDEE()` 的复杂指标汇总
+  - 统一生成 Today 页展示、prompt 注入与测试验收共用的核心指标口径
+
+- `src/utils/prompt.js`
+  - 作为 system prompt 的薄入口，只负责组织各个上下文段落
+
+- `src/utils/promptSections.js`
+  - 负责档案、周计划、体重历史、饮食摘要、训练完成情况与复杂指标段的分段构建
+  - `buildMetricsSection()` 会把 `structured_metrics` JSON 注入 prompt，供 AI 继续解释复杂指标
+
 - `tailwind.config.js` + `src/index.css`
   - 负责定义 `repmind.*` 语义色 token
   - 负责明亮主题基底、边框、阴影和强调色策略
@@ -135,6 +156,9 @@ TodayTab
   -> 用户填写日志
   -> 更新 dailyLog
   -> 写回 fitloop_dailyLog
+  -> buildDailyMetricsPanelModel()
+      -> buildDailyMetricsSummary()
+      -> 生成 TDEE / 热量状态 / 蛋白质状态 / 恢复数据展示模型
   -> buildWeightChartModel()
   -> WeightChart 展示近 14 天体重趋势
 ```
@@ -144,6 +168,9 @@ TodayTab
 ```text
 CoachTab
   -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
+      -> buildMetricsSection(profile, weeklyPlan, dailyLog)
+      -> buildDailyMetricsSummary()
+      -> 注入 structured_metrics
   -> requestCoachReply()
       -> 优先流式请求
       -> 失败时回退普通请求
@@ -216,6 +243,8 @@ CoachTab
 - `trainingDone`
 - `trainingNotes`
 
+Task 6 的复杂指标不单独持久化，而是运行时根据 `profile + weeklyPlan + dailyLog` 即时汇总，避免出现第二份派生状态。
+
 ### `fitloop_chatHistory`
 
 只持久化：
@@ -245,6 +274,7 @@ CoachTab
 
 - 每次发送前都重新读取最新上下文
 - AI 回复解析与训练计划写回分离，保留用户最终确认权
+- Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 
 ## Task 4 已完成升级说明
 
@@ -299,3 +329,41 @@ CoachTab
 - 强调色：清亮蓝紫，仅用于主按钮、选中态、重要标签和焦点反馈
 - 次级信息：灰蓝与冷灰，避免页面发灰或过暗
 - 阴影：轻量、低对比，用于区分桌面级信息层级而不是制造漂浮感
+## Task 6 已完成升级说明
+### 1. 复杂指标计算口径
+
+- `buildDailyMetricsSummary()` 当前统一汇总：
+  - `BMR`
+  - `trainingKcal`
+  - `TDEE`
+  - `BMI`
+  - `calorie.intake / delta / status`
+  - `protein.intake / gramsPerKg / status`
+  - `recovery.sleepHours / fatigueLevel`
+- 热量状态规则：
+  - `delta > 100` 记为 `surplus`
+  - `delta < -100` 记为 `deficit`
+  - 其余记为 `balanced`
+- 蛋白质状态规则：
+  - `protein_g_per_kg >= 1.6` 记为 `met`
+  - 否则记为 `low`
+
+### 2. Today 页展示链路
+
+- `TodayTab.jsx` 调用 `buildDailyMetricsPanelModel()`
+- `buildDailyMetricsPanelModel()` 只消费 `buildDailyMetricsSummary()` 的结果，不在页面层重复推导复杂数值
+- 状态文案与色彩映射由 `dailyMetricsPanel.js` 负责，避免组件层散落业务规则
+
+### 3. Prompt 注入链路
+
+```text
+CoachTab / PromptPreviewPanel
+  -> buildSystemPrompt()
+  -> buildMetricsSection()
+  -> buildDailyMetricsSummary()
+  -> structured_metrics JSON
+  -> DeepSeek
+```
+
+- Prompt 预览与 AI 实际发送都复用 `buildSystemPrompt()`，保证所见即所发
+- 6.4 新增可选参考日期入口，用于固定样本稳定性测试，不影响运行时默认行为

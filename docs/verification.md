@@ -182,3 +182,31 @@ RepMind 已具备“日志 -> AI 建议 -> 采纳 -> 写回训练计划”的完
 - 生产构建成功
 
 当前版本已经适合用于课程展示、课堂 demo 和验收说明。
+## 7. Task 6.4 固定样本稳定性验收
+
+### 7.1 验收目标
+
+- 固定一组档案、周计划与今日日志，验证 `buildDailyMetricsSummary()` 关键数值稳定
+- 验证 Today 页展示模型与 prompt 注入使用同一份核心指标口径
+- 覆盖 `TDEE / 热量状态 / 蛋白质状态 / 恢复数据`
+
+### 7.2 固定样本
+
+- 参考日期：`2026-05-25`（Monday）
+- 档案：男，29 岁，175cm，70kg
+- 今日计划：深蹲 `140 x 80% x 5 x 5`，卧推 `100 x 70% x 4 x 6`
+- 今日日志：`2500kcal`、蛋白质 `105g`、睡眠 `7.2h`、疲劳 `3`
+
+### 7.3 自动化验收
+
+- 命令：`node --test tests/task64MetricsStability.test.js`
+- 结果：`1/1` 通过
+
+关键断言：
+
+- `tdee = 2433`
+- `calorie_status = balanced`
+- `protein_status = low`
+- `sleep_hours = 7.2`
+- `fatigue_level = 3`
+- Today 页 `panelModel.source.summary` 与 prompt 中 `structured_metrics` 完整对齐
