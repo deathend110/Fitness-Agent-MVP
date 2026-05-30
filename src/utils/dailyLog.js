@@ -32,7 +32,9 @@ export function readTodayLogForm(entry = {}) {
     kcal: toFormValue(entry.kcal),
     protein: toFormValue(entry.protein),
     sleep: toFormValue(entry.sleep),
+    steps: toFormValue(entry.steps),
     fatigue: toFormValue(entry.fatigue),
+    tdee: toFormValue(entry.tdee),
     trainingDone: Boolean(entry.trainingDone),
     trainingNotes: entry.trainingNotes ?? '',
   }
@@ -47,7 +49,9 @@ export function normalizeTodayLogEntry(form = {}) {
     kcal: toNullableNumber(form.kcal),
     protein: toNullableNumber(form.protein),
     sleep: toNullableNumber(form.sleep),
+    steps: toNullableNumber(form.steps),
     fatigue: toNullableNumber(form.fatigue),
+    tdee: toNullableNumber(form.tdee),
     trainingDone: Boolean(form.trainingDone),
     trainingNotes: `${form.trainingNotes ?? ''}`.trim(),
   }

@@ -1,0 +1,65 @@
+{
+  "app": "fitloop-mvp",
+  "version": 1,
+  "exportedAt": "2026-05-30T16:22:41.866Z",
+  "profile": {
+    "basic": {
+      "name": "肥肥的哲",
+      "sex": "",
+      "age": 23,
+      "height": 182,
+      "weight": 94.8,
+      "waist": 91.5
+    },
+    "oneRM": {
+      "squat": 150,
+      "bench": 120,
+      "deadlift": 180
+    },
+    "goal": "减脂",
+    "targetWeight": 90,
+    "notes": "减脂持续了3个月，目前身体状态正常，该吃吃该睡睡"
+  },
+  "weeklyPlan": {
+    "Monday": {
+      "type": "rest",
+      "exercises": []
+    },
+    "Tuesday": {
+      "type": "推日",
+      "exercises": []
+    },
+    "Wednesday": {
+      "type": "腿日",
+      "exercises": []
+    },
+    "Thursday": {
+      "type": "rest",
+      "exercises": []
+    },
+    "Friday": {
+      "type": "腿日",
+      "exercises": []
+    },
+    "Saturday": {
+      "type": "腿日",
+      "exercises": []
+    },
+    "Sunday": {
+      "type": "腿日",
+      "exercises": []
+    }
+  },
+  "dailyLog": {
+    "2026-05-30": {
+      "weight": 94.8,
+      "kcal": null,
+      "protein": null,
+      "sleep": null,
+      "fatigue": null,
+      "trainingDone": false,
+      "trainingNotes": ""
+    }
+  },
+  "chatHistory": []
+}

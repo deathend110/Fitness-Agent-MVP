@@ -52,8 +52,11 @@ export function buildStructuredMetrics(summary) {
     is_training_day: summary.isTrainingDay,
     bmr_kcal: summary.bmr,
     training_kcal: summary.trainingKcal,
+    estimated_tdee_kcal: summary.estimatedTdee,
+    tdee_source: summary.tdeeSource,
     tdee_kcal: summary.tdee,
     bmi: summary.bmi,
+    steps_count: summary.steps,
     calorie_intake_kcal: summary.calorie.intake,
     calorie_delta_kcal: summary.calorie.delta,
     calorie_status: summary.calorie.status,
@@ -82,7 +85,9 @@ export function buildMetricsSection(
   const proteinIntake = formatMetricNumber(summary.protein.intake, 'g', 0)
   const proteinPerKg = formatMetricNumber(summary.protein.gramsPerKg, 'g/kg', 1)
   const sleepHours = formatMetricNumber(summary.recovery.sleepHours, 'h', 1)
+  const steps = formatMetricNumber(summary.steps, '步', 0)
   const fatigueLevel = formatMetricNumber(summary.recovery.fatigueLevel, '/5', 0)
+  const tdeeSourceLabel = summary.tdeeSource === 'manual' ? '手填' : '估算'
 
   return [
     '【今日 TDEE 估算】',
@@ -90,7 +95,10 @@ export function buildMetricsSection(
     `今日训练类型：${todayType}`,
     `基础代谢(BMR)：${summary.bmr}kcal`,
     `训练容量估算消耗：${summary.trainingKcal}kcal`,
+    `步数：${steps}`,
     `当日 TDEE：${summary.tdee}kcal`,
+    `TDEE来源：${tdeeSourceLabel}`,
+    `参考估算 TDEE：${summary.estimatedTdee}kcal`,
     `今日摄入：${todayIntake}`,
     `热量缺口/盈余：${calorieDelta}`,
     `BMI：${formatMetricNumber(summary.bmi, '', 1)}`,

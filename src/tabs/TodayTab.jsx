@@ -13,6 +13,8 @@ const metricFields = [
   { key: 'kcal', label: '热量 (kcal)', inputMode: 'numeric', step: '1' },
   { key: 'protein', label: '蛋白质 (g)', inputMode: 'numeric', step: '1' },
   { key: 'sleep', label: '睡眠 (h)', inputMode: 'decimal', step: '0.1' },
+  { key: 'steps', label: '步数 (步)', inputMode: 'numeric', step: '1' },
+  { key: 'tdee', label: 'TDEE (kcal)', inputMode: 'numeric', step: '1' },
   { key: 'fatigue', label: '疲劳度 (1-5)', inputMode: 'numeric', step: '1', min: '1', max: '5' },
 ]
 
@@ -59,10 +61,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach
     <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Today</p>
       <h2 className="mt-3 text-3xl font-semibold text-slate-100">今日日志</h2>
-      <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
-        这里先录入当天恢复与训练情况，再在右侧对照已保存摘要、近 14 天体重趋势和今日日计划。
-        保存后会写回 <code>fitloop_dailyLog</code>，刷新页面后仍会保留。
-      </p>
+      
 
       <div className="mt-8 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         <form
@@ -137,6 +136,8 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach
               <p className="text-sm text-slate-300">热量：{formatMetric(todayLog?.kcal, ' kcal')}</p>
               <p className="text-sm text-slate-300">蛋白质：{formatMetric(todayLog?.protein, ' g')}</p>
               <p className="text-sm text-slate-300">睡眠：{formatMetric(todayLog?.sleep, ' h')}</p>
+              <p className="text-sm text-slate-300">步数：{formatMetric(todayLog?.steps, ' 步')}</p>
+              <p className="text-sm text-slate-300">TDEE：{formatMetric(todayLog?.tdee, ' kcal')}</p>
               <p className="text-sm text-slate-300">疲劳度：{formatMetric(todayLog?.fatigue, ' / 5')}</p>
               <p className="text-sm text-slate-300">
                 训练完成：{todayLog?.trainingDone ? '是' : '否'}

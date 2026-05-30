@@ -78,11 +78,7 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
         Profile
       </p>
       <h2 className="mt-3 text-3xl font-semibold text-slate-100">我的档案</h2>
-      <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
-        这里直接编辑并保存用户档案，所有数字字段都会以数字形式写入
-        <code>fitloop_profile</code>，刷新后仍会保留。
-      </p>
-
+      
       <div className="mt-8 space-y-6">
         <form className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

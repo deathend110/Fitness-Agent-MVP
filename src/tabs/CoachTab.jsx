@@ -143,11 +143,6 @@ function CoachTab({
     <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Coach</p>
       <h2 className="mt-3 text-3xl font-semibold text-slate-100">AI 教练</h2>
-      <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
-        这里已经接入真实对话流程。每次发送都会重新构建最新训练上下文，再调用 DeepSeek
-        聊天接口；默认优先尝试流式输出，失败时自动回退到普通回复。聊天历史会写入
-        <code>fitloop_chatHistory</code>，刷新后仍会保留最近 20 条消息。
-      </p>
 
       <article className={`mt-6 rounded-2xl border p-5 shadow-sm shadow-black/20 ${statusTone}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">

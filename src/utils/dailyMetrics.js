@@ -75,12 +75,15 @@ export function buildDailyMetricsSummary(
   const trainingKcal = isTrainingDay
     ? calcTrainingKcal(todayPlan.exercises, profile.oneRM)
     : 0
-  const tdee = Math.round(bmr * 1.2 + trainingKcal)
   const todayLog = dailyLog?.[todayStr] ?? {}
   const calorieIntake = toNullableNumber(todayLog.kcal)
   const proteinIntake = toNullableNumber(todayLog.protein)
   const sleepHours = toNullableNumber(todayLog.sleep)
+  const steps = toNullableNumber(todayLog.steps)
   const fatigueLevel = toNullableNumber(todayLog.fatigue)
+  const estimatedTdee = Math.round(bmr * 1.2 + trainingKcal)
+  const manualTdee = toNullableNumber(todayLog.tdee)
+  const tdee = manualTdee ?? estimatedTdee
   const calorieDelta = calorieIntake === null ? null : calorieIntake - tdee
   const bodyWeight = toNullableNumber(profile?.basic?.weight)
   const proteinPerKg = calcProteinPerKg(proteinIntake, bodyWeight)
@@ -93,6 +96,8 @@ export function buildDailyMetricsSummary(
     bmr,
     bmi: calcBMI(profile.basic),
     trainingKcal,
+    estimatedTdee,
+    tdeeSource: manualTdee === null ? 'estimated' : 'manual',
     tdee,
     calorie: {
       intake: calorieIntake,
@@ -108,6 +113,9 @@ export function buildDailyMetricsSummary(
       sleepHours,
       fatigueLevel,
     },
+    activity: {
+      steps,
+    },
   }
 }
 
@@ -122,7 +130,10 @@ export function calcTDEE(profile = {}, weeklyPlan = {}, dailyLog = {}, reference
     isTrainingDay: summary.isTrainingDay,
     bmr: summary.bmr,
     trainingKcal: summary.trainingKcal,
+    estimatedTdee: summary.estimatedTdee,
+    tdeeSource: summary.tdeeSource,
     tdee: summary.tdee,
+    steps: summary.activity.steps,
     todayKcal: summary.calorie.intake ?? 0,
     delta: summary.calorie.delta ?? 0,
   }

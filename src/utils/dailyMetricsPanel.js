@@ -113,8 +113,12 @@ export function buildDailyMetricsPanelModel(
         label: '训练消耗',
         value: formatMetricValue(summary.trainingKcal, ' kcal', 0),
       },
+      steps: {
+        label: '步数',
+        value: formatMetricValue(summary.steps, ' 步', 0),
+      },
       tdee: {
-        label: 'TDEE',
+        label: summary.tdeeSource === 'manual' ? 'TDEE（手填）' : 'TDEE（估算）',
         value: formatMetricValue(summary.tdee, ' kcal', 0),
       },
       bmi: {

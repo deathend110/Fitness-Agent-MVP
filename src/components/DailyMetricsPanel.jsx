@@ -23,6 +23,7 @@ function DailyMetricsPanel({ model, onOpenCoach }) {
   const metricKeys = [
     'bmr',
     'trainingKcal',
+    'steps',
     'tdee',
     'calorie',
     'calorieStatus',
