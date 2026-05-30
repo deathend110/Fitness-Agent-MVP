@@ -367,3 +367,44 @@ CoachTab / PromptPreviewPanel
 
 - Prompt 预览与 AI 实际发送都复用 `buildSystemPrompt()`，保证所见即所发
 - 6.4 新增可选参考日期入口，用于固定样本稳定性测试，不影响运行时默认行为
+
+## V1.5 Task 1 壳层补充
+
+### 新增结构
+
+```text
+src/
+  components/
+    app-shell/
+      AppShell.jsx
+      ShellIcon.jsx
+      ShellSidebar.jsx
+      ShellStatusBar.jsx
+      appShellConfig.js
+```
+
+### 壳层职责
+
+- `src/App.jsx`
+  - 继续负责顶层状态加载、持久化和四个 tab 的切换协调。
+  - 通过 `renderActiveTab()` 把现有业务 tab 装配到统一壳层中，不改动 tab 内部业务逻辑。
+
+- `src/components/app-shell/AppShell.jsx`
+  - 负责整体“侧栏 + 主内容区 + 底部状态区”的编排。
+  - 使用 `min-w-0` 与独立内容滚动区约束宽度和 overflow，避免默认制造整页横向滚动。
+
+- `src/components/app-shell/ShellSidebar.jsx`
+  - 负责品牌区、四个导航入口和当前工作区提示。
+  - 只消费壳层元信息，不直接依赖业务 tab 内部数据结构。
+
+- `src/components/app-shell/ShellStatusBar.jsx`
+  - 负责底部保存状态提示与 MVP 占位快捷按钮。
+
+- `src/components/app-shell/appShellConfig.js`
+  - 负责四个导航项、快捷按钮和状态文案配置。
+  - 提供可被 `node --test` 直接验证的最小壳层契约。
+
+### 验证补充
+
+- 新增 `tests/appShellConfig.test.js`，覆盖四个核心导航顺序、未知 tab 回退、状态区文案和快捷按钮占位。
+- 该测试承担本任务的 TDD 自动化部分；UI 展示层通过 `npm run build` 和手动验收路径共同验证。
