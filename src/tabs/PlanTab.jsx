@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react'
 import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard.jsx'
-import { createExerciseDraft, draftToExercise } from '../utils/exerciseForm.js'
+import {
+  buildExerciseSavePayload,
+  createExerciseDraft,
+  getRpeValidationError,
+} from '../utils/exerciseForm.js'
 import {
   formatPercentDisplay,
   formatWeightDisplay,
@@ -108,7 +112,13 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
       return
     }
 
-    const nextExercise = draftToExercise(editingState.draft)
+    const rpeError = getRpeValidationError(editingState.draft.rpe)
+
+    if (rpeError) {
+      return
+    }
+
+    const nextExercise = buildExerciseSavePayload(editingState.draft)
 
     if (!nextExercise.name) {
       return
@@ -142,6 +152,8 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
     })
   }
 
+  const currentRpeError = editingState.draft ? getRpeValidationError(editingState.draft.rpe) : null
+
   return (
     <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
       <p className="text-sm font-semibold text-fitloop-mint">Tab 2</p>
@@ -171,6 +183,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
             onToggle={() => toggleDay(dayKey)}
             oneRmOptions={oneRmOptions}
             plan={plan}
+            rpeError={editingState.dayKey === dayKey ? currentRpeError : null}
           />
         ))}
       </div>

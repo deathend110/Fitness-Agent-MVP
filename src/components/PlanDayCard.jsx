@@ -24,12 +24,18 @@ function ExerciseItem({
   onCancel,
   onDelete,
   oneRmOptions,
+  rpeError,
 }) {
   return (
     <li className="rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-3">
       {isEditing ? (
         <div className="space-y-3">
-          <ExerciseEditor oneRmOptions={oneRmOptions} onChange={onDraftChange} value={draft} />
+          <ExerciseEditor
+            oneRmOptions={oneRmOptions}
+            onChange={onDraftChange}
+            rpeError={rpeError}
+            value={draft}
+          />
           <div className="flex flex-wrap gap-2">
             <button className={getButtonClassName('primary')} onClick={onSave} type="button">
               保存动作
@@ -77,6 +83,7 @@ function PlanDayCard({
   onSaveExercise,
   onCancelEditing,
   onDeleteExercise,
+  rpeError,
 }) {
   return (
     <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
@@ -123,7 +130,12 @@ function PlanDayCard({
 
           {editingExerciseId === '__new__' ? (
             <div className="space-y-3 rounded-md border border-dashed border-fitloop-line p-3">
-              <ExerciseEditor oneRmOptions={oneRmOptions} onChange={onDraftChange} value={exerciseDraft} />
+              <ExerciseEditor
+                oneRmOptions={oneRmOptions}
+                onChange={onDraftChange}
+                rpeError={rpeError}
+                value={exerciseDraft}
+              />
               <div className="flex flex-wrap gap-2">
                 <button className={getButtonClassName('primary')} onClick={onSaveExercise} type="button">
                   保存新增动作
@@ -137,7 +149,7 @@ function PlanDayCard({
 
           {plan.exercises.length === 0 ? (
             <p className="text-sm text-slate-400">
-              当前还没有安排动作。即使训练类型设为 rest，也会保留已有动作，避免误删历史计划。
+              当前还没有安排动作。即使训练类型设为 rest，也会保留已有动作，避免误删除历史计划。
             </p>
           ) : (
             <ul className="space-y-3">
@@ -154,6 +166,7 @@ function PlanDayCard({
                   onEdit={() => onEditExercise(exercise)}
                   onSave={onSaveExercise}
                   oneRmOptions={oneRmOptions}
+                  rpeError={rpeError}
                 />
               ))}
             </ul>

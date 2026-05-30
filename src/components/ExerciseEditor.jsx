@@ -1,8 +1,9 @@
 import { useId } from 'react'
-import { exerciseWeightModes } from '../utils/exerciseForm.js'
+import { exerciseWeightModes, getRpeFieldHint } from '../utils/exerciseForm.js'
 
-function ExerciseEditor({ value, onChange, oneRmOptions = [] }) {
+function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null }) {
   const modeName = useId()
+  const rpeHint = getRpeFieldHint(rpeError)
 
   function updateField(key, nextValue) {
     onChange({ ...value, [key]: nextValue })
@@ -131,13 +132,17 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [] }) {
         <label className="space-y-2">
           <span className="text-sm text-slate-300">RPE</span>
           <input
+            aria-invalid={Boolean(rpeError)}
             className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
             inputMode="decimal"
+            max="10"
+            min="0"
             onChange={(event) => updateField('rpe', event.target.value)}
             step="0.5"
             type="number"
             value={value.rpe}
           />
+          <p className={`text-xs ${rpeError ? 'text-rose-300' : 'text-slate-400'}`}>{rpeHint}</p>
         </label>
       </div>
 
