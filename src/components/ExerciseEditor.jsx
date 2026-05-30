@@ -40,7 +40,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
 
   return (
     <div className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-sm shadow-black/20">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4">
         <label className="space-y-2">
           <span className="text-sm text-slate-300">动作名称</span>
           <input
@@ -65,7 +65,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
           </select>
         </label>
 
-        <fieldset className="space-y-2 md:col-span-2 xl:col-span-2">
+        <fieldset className="space-y-2">
           <legend className="text-sm text-slate-300">重量来源</legend>
           <div className="flex flex-wrap gap-2">
             {exerciseWeightModes.map((option) => {

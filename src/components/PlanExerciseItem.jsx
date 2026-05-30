@@ -45,7 +45,7 @@ function PlanExerciseItem({
             </span>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2">
             {cardModel.metricItems.map((item) => (
               <div
                 className="rounded-xl border border-fitloop-line/60 bg-black/10 px-3 py-2.5"

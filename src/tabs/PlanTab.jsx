@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard.jsx'
+import PlanWeekGrid from '../components/plan-grid/PlanWeekGrid.jsx'
+import PlanWeekGridColumn from '../components/plan-grid/PlanWeekGridColumn.jsx'
 import PlanHeaderToolbar from '../components/plan-header/PlanHeaderToolbar.jsx'
 import { getTodayKey } from '../utils/calc.js'
 import {
@@ -8,7 +10,7 @@ import {
   getRpeValidationError,
 } from '../utils/exerciseForm.js'
 import { buildPlanHeaderModel } from '../utils/planHeader.js'
-import { buildWeeklyPlanColumns } from '../utils/planLayout.js'
+import { buildWeeklyPlanLayoutModel } from '../utils/planLayout.js'
 import {
   addExerciseToDay,
   getPlanDayTypes,
@@ -34,9 +36,10 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
     exerciseId: null,
     draft: null,
   })
+
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
-  const dayColumns = useMemo(() => buildWeeklyPlanColumns(weeklyPlan), [weeklyPlan])
+  const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
   // 头部展示信息集中在独立模型中，避免页面组件继续承担日期格式和图例拼装职责。
   const headerModel = useMemo(() => buildPlanHeaderModel(), [])
 
@@ -127,8 +130,8 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const currentRpeError = editingState.draft ? getRpeValidationError(editingState.draft.rpe) : null
 
   return (
-    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
-      <div className="space-y-6">
+    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-6 shadow-2xl shadow-black/20 xl:p-7">
+      <div className="space-y-5">
         <PlanHeaderToolbar headerModel={headerModel} />
 
         <p className="max-w-3xl text-sm leading-7 text-slate-300">
@@ -136,38 +139,45 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
           每次保存都会写回 <code>fitloop_weeklyPlan</code>，刷新页面后依然保留。
         </p>
 
-        <div className="rounded-[1.25rem] border border-fitloop-line bg-fitloop-ink/30 p-4 shadow-sm shadow-black/20">
-          <div className="overflow-x-auto pb-2">
-            <div className="flex min-w-max gap-4">
-              {dayColumns.map(({ dayKey, plan, widthClassName }) => (
-                <PlanDayCard
-                  dayKey={dayKey}
-                  dayTypeOptions={dayTypeOptions}
-                  editingExerciseId={editingState.dayKey === dayKey ? editingState.exerciseId : null}
-                  exerciseDraft={
-                    editingState.dayKey === dayKey
-                      ? editingState.draft
-                      : createEmptyExerciseDraft(oneRmOptions)
-                  }
-                  expanded={expandedDay === dayKey}
-                  key={dayKey}
-                  onCancelEditing={cancelEditing}
-                  onDayTypeChange={(nextType) => handleDayTypeChange(dayKey, nextType)}
-                  onDeleteExercise={(exerciseId) => deleteExercise(dayKey, exerciseId)}
-                  onDraftChange={updateDraft}
-                  onEditExercise={(exercise) => startEditExercise(dayKey, exercise)}
-                  onSaveExercise={saveExercise}
-                  onStartAdd={() => startAddExercise(dayKey)}
-                  onToggle={() => toggleDay(dayKey)}
-                  oneRmOptions={oneRmOptions}
-                  plan={plan}
-                  profile={profile}
-                  rpeError={editingState.dayKey === dayKey ? currentRpeError : null}
-                  widthClassName={widthClassName}
-                />
-              ))}
-            </div>
-          </div>
+        <div className="rounded-[1.25rem] border border-fitloop-line bg-fitloop-ink/30 p-3 shadow-sm shadow-black/20 xl:p-4">
+          <PlanWeekGrid
+            layoutModel={layoutModel}
+            renderColumn={(column) => {
+              const isEditingDay = editingState.dayKey === column.dayKey
+
+              return (
+                <PlanWeekGridColumn
+                  column={column}
+                  isExpanded={expandedDay === column.dayKey}
+                  key={column.dayKey}
+                >
+                  <PlanDayCard
+                    dayKey={column.dayKey}
+                    dayLabel={column.dayLabel}
+                    dayTypeOptions={dayTypeOptions}
+                    editingExerciseId={isEditingDay ? editingState.exerciseId : null}
+                    exerciseDraft={
+                      isEditingDay ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)
+                    }
+                    expanded={expandedDay === column.dayKey}
+                    isTrainingDay={column.isTrainingDay}
+                    onCancelEditing={cancelEditing}
+                    onDayTypeChange={(nextType) => handleDayTypeChange(column.dayKey, nextType)}
+                    onDeleteExercise={(exerciseId) => deleteExercise(column.dayKey, exerciseId)}
+                    onDraftChange={updateDraft}
+                    onEditExercise={(exercise) => startEditExercise(column.dayKey, exercise)}
+                    onSaveExercise={saveExercise}
+                    onStartAdd={() => startAddExercise(column.dayKey)}
+                    onToggle={() => toggleDay(column.dayKey)}
+                    oneRmOptions={oneRmOptions}
+                    plan={column.plan}
+                    profile={profile}
+                    rpeError={isEditingDay ? currentRpeError : null}
+                  />
+                </PlanWeekGridColumn>
+              )
+            }}
+          />
         </div>
       </div>
     </section>

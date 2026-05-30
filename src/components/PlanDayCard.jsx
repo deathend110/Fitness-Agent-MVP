@@ -8,8 +8,10 @@ import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 
 function PlanDayCard({
   dayKey,
+  dayLabel,
   plan,
   expanded,
+  isTrainingDay,
   dayTypeOptions,
   editingExerciseId,
   exerciseDraft,
@@ -24,19 +26,17 @@ function PlanDayCard({
   onDeleteExercise,
   profile,
   rpeError,
-  widthClassName = 'min-w-[12rem] flex-[1_1_12rem]',
 }) {
   const dayTypeListId = `${dayKey}-day-type-options`
   const dayTypeSuggestions = getPlanDayTypeSuggestions(plan.type)
 
   return (
-    <article
-      className={`flex h-full flex-col rounded-[1.25rem] border border-fitloop-line bg-fitloop-panel/85 p-4 shadow-sm shadow-black/20 ${widthClassName}`}
-    >
+    <div className="min-w-0">
       <PlanDayCardHeader
-        dayKey={dayKey}
+        dayLabel={dayLabel}
         expanded={expanded}
         exerciseCount={plan.exercises.length}
+        isTrainingDay={isTrainingDay}
         onToggle={onToggle}
         planType={plan.type}
       />
@@ -71,7 +71,7 @@ function PlanDayCard({
           ) : null}
 
           {plan.exercises.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm leading-6 text-slate-400">
               当前还没有安排动作。即使训练类型设为 rest，也会保留已有动作，避免误删历史计划。
             </p>
           ) : (
@@ -96,7 +96,7 @@ function PlanDayCard({
           )}
         </div>
       ) : null}
-    </article>
+    </div>
   )
 }
 

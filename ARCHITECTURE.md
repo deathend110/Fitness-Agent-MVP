@@ -21,6 +21,9 @@ src/
     PlanExerciseItem.jsx
     PromptPreviewPanel.jsx
     WeightChart.jsx
+    plan-grid/
+      PlanWeekGrid.jsx
+      PlanWeekGridColumn.jsx
     plan-header/
       PlanHeaderLegend.jsx
       PlanHeaderToolbar.jsx
@@ -73,8 +76,16 @@ docs/
 - `src/tabs/PlanTab.jsx`
   - 负责周计划页面组织
   - 通过 `buildPlanHeaderModel()` 与 `PlanHeaderToolbar` 组装头部工具栏
-  - 通过 `buildWeeklyPlanColumns()` 构建 7 列课表布局
+  - 通过 `buildWeeklyPlanLayoutModel()` 与 `PlanWeekGrid` 组装 7 列比例网格
   - 协调单日展开、动作新增、编辑、删除
+
+- `src/components/plan-grid/PlanWeekGrid.jsx`
+  - 负责桌面端周视图比例网格
+  - 统一承载训练日宽列、休息日窄列和非目标视口兜底策略
+
+- `src/components/plan-grid/PlanWeekGridColumn.jsx`
+  - 负责单列外壳、列跨度和展开态强调
+  - 让列容器和列内业务内容分离，降低 `PlanDayCard` 复杂度
 
 - `src/components/plan-header/PlanHeaderToolbar.jsx`
   - 负责训练计划页头部工具栏的布局编排
@@ -88,11 +99,11 @@ docs/
   - 统一生成周区间、ISO 周编号、图例配置与占位按钮配置
 
 - `src/components/PlanDayCard.jsx`
-  - 作为单日计划卡片的协调壳
+  - 作为单列内部业务内容的协调壳
   - 只负责组合头部、训练类型区、动作编辑区和动作列表
 
 - `src/components/PlanDayCardHeader.jsx`
-  - 展示日期、训练类型、动作数量和展开状态
+  - 展示星期标签、训练日 / 恢复日模式、训练类型、动作数量和展开状态
 
 - `src/components/PlanDayTypeSection.jsx`
   - 负责训练类型输入
@@ -107,6 +118,10 @@ docs/
 - `src/components/ExerciseEditor.jsx`
   - 负责动作编辑表单本体
   - 支持层级、组型、次数表达、负重模式、RPE、备注
+
+- `src/utils/planLayout.js`
+  - 负责把 weeklyPlan 映射成周视图列数据
+  - 统一生成桌面比例网格模板、训练日 / 休息日列跨度和布局兜底标记
 
 - `src/utils/weeklyPlan.js`
   - 负责周计划结构归一化
@@ -424,3 +439,45 @@ src/
 
 - 新增 `tests/appShellConfig.test.js`，覆盖四个核心导航顺序、未知 tab 回退、状态区文案和快捷按钮占位。
 - 该测试承担本任务的 TDD 自动化部分；UI 展示层通过 `npm run build` 和手动验收路径共同验证。
+
+## V1.5 Task 3 周视图网格补充
+
+### 新增结构
+
+```text
+src/
+  components/
+    plan-grid/
+      PlanWeekGrid.jsx
+      PlanWeekGridColumn.jsx
+```
+
+### 布局职责
+
+- `src/utils/planLayout.js`
+  - 输出 `buildWeeklyPlanLayoutModel()`，统一定义桌面端比例网格模板。
+  - 当前训练日列跨度为 `2`，休息日列跨度为 `1`，对应效果稿里的宽窄列结构。
+
+- `src/components/plan-grid/PlanWeekGrid.jsx`
+  - 负责把周计划列模型渲染为桌面比例网格。
+  - 桌面端默认避免横向滚动，非目标视口再降级为更紧凑堆叠策略。
+
+- `src/components/plan-grid/PlanWeekGridColumn.jsx`
+  - 负责每一列的外壳、列跨度和展开态强调。
+  - 让 `PlanDayCard` 不再承担宽度类和外层布局职责。
+
+### 组件调整
+
+- `src/components/PlanDayCard.jsx`
+  - 改为只承载列内业务内容，不再持有宽度类名。
+
+- `src/components/PlanExerciseItem.jsx`
+  - 指标块改为更保守的单列流，优先保证桌面无横向溢出。
+
+- `src/components/ExerciseEditor.jsx`
+  - 当前阶段使用单列编辑表单，避免窄列里被响应式多列布局硬撑开。
+
+### 验证补充
+
+- `tests/planLayout.test.js` 已补充桌面比例模板、列跨度与兜底标志断言。
+- 本任务的自动化验证重点是布局模型契约；真实 16:9 观感仍需后续 UI 验收继续确认。
