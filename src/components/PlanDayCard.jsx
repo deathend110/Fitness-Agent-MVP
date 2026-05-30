@@ -13,15 +13,14 @@ import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 function PlanDayCard({
   dayKey,
   dayLabel,
+  dateLabel,
   plan,
-  expanded,
   isTrainingDay,
   dayTypeOptions,
   editingExerciseId,
   isExerciseEditing,
   exerciseDraft,
   oneRmOptions,
-  onToggle,
   onDayTypeChange,
   onStartAdd,
   onEditExercise,
@@ -36,12 +35,16 @@ function PlanDayCard({
   const dayTypeSuggestions = getPlanDayTypeSuggestions(plan.type)
   const displayModel = buildPlanDayDisplayModel({
     dayLabel,
+    dateLabel,
     plan,
     isTrainingDay,
   })
   const showNewExerciseEditor =
     displayModel.showAddExerciseButton && editingExerciseId === NEW_PLAN_EXERCISE_ID
   const hasExercises = plan.exercises.length > 0
+  const showDayTypeSection = displayModel.showDayTypeSection !== false
+  const dayTypeSectionVariant = displayModel.dayTypeSectionVariant ?? 'full'
+  const isCompactRestDay = displayModel.layout === 'rest-compact'
   // 新增动作时优先展示新增表单，避免和空状态提示同时抢占注意力。
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
 
@@ -50,88 +53,92 @@ function PlanDayCard({
       <PlanDayCardHeader
         dayLabel={dayLabel}
         displayModel={displayModel}
-        expanded={expanded}
         exerciseCount={plan.exercises.length}
         isTrainingDay={isTrainingDay}
-        onToggle={onToggle}
         planType={plan.type}
       />
 
-      {expanded ? (
-        <div className="mt-4 space-y-4">
+      <div className={`mt-4 ${isCompactRestDay ? 'flex min-h-[9.5rem] flex-1 flex-col' : 'space-y-4'}`}>
+        {showDayTypeSection ? (
           <PlanDayTypeSection
+            compact={dayTypeSectionVariant === 'compact'}
             dayTypeListId={dayTypeListId}
-            dayTypeOptions={dayTypeOptions}
+            dayTypeOptions={
+              displayModel.dayTypeQuickOptions?.length > 0
+                ? displayModel.dayTypeQuickOptions
+                : dayTypeOptions
+            }
             dayTypeSuggestions={dayTypeSuggestions}
             onDayTypeChange={onDayTypeChange}
             planType={plan.type}
           />
+        ) : null}
 
-          {displayModel.showAddExerciseButton ? (
-            <div className="flex flex-wrap gap-2">
-              <PlanDayCardButton kind="primary" onClick={onStartAdd}>
-                添加动作
-              </PlanDayCardButton>
-            </div>
-          ) : null}
+        {displayModel.showAddExerciseButton ? (
+          <div className="flex flex-wrap gap-2">
+            <PlanDayCardButton kind="primary" onClick={onStartAdd}>
+              添加动作
+            </PlanDayCardButton>
+          </div>
+        ) : null}
 
-          {showNewExerciseEditor ? (
-            <PlanExerciseEditorCard
-              dashed
-              oneRmOptions={oneRmOptions}
-              onCancel={onCancelEditing}
-              onDraftChange={onDraftChange}
-              onSave={onSaveExercise}
-              rpeError={rpeError}
-              saveLabel="保存新增动作"
-              title="新增动作"
-              value={exerciseDraft}
+        {showNewExerciseEditor ? (
+          <PlanExerciseEditorCard
+            dashed
+            oneRmOptions={oneRmOptions}
+            onCancel={onCancelEditing}
+            onDraftChange={onDraftChange}
+            onSave={onSaveExercise}
+            rpeError={rpeError}
+            saveLabel="保存新增动作"
+            title="新增动作"
+            value={exerciseDraft}
+          />
+        ) : null}
+
+        {visibleEmptyState ? (
+          visibleEmptyState.tone === 'rest' ? (
+            <PlanRestDayPanel
+              description={visibleEmptyState.description}
+              descriptionLines={visibleEmptyState.descriptionLines}
+              title={visibleEmptyState.title}
             />
-          ) : null}
+          ) : (
+            <PlanDayEmptyState
+              description={visibleEmptyState.description}
+              title={visibleEmptyState.title}
+              tone={visibleEmptyState.tone}
+            />
+          )
+        ) : null}
 
-          {visibleEmptyState ? (
-            visibleEmptyState.tone === 'rest' ? (
-              <PlanRestDayPanel
-                description={visibleEmptyState.description}
-                title={visibleEmptyState.title}
+        {displayModel.historyHint ? (
+          <p className="rounded-2xl border border-fitloop-line/70 bg-fitloop-panel px-3 py-3 text-xs leading-6 text-slate-400">
+            {displayModel.historyHint}
+          </p>
+        ) : null}
+
+        {hasExercises ? (
+          <ul className="space-y-3">
+            {plan.exercises.map((exercise) => (
+              <PlanExerciseItem
+                draft={exerciseDraft}
+                exercise={exercise}
+                isEditing={isExerciseEditing(exercise.id)}
+                key={exercise.id}
+                onCancel={onCancelEditing}
+                onDelete={() => onDeleteExercise(exercise.id)}
+                onDraftChange={onDraftChange}
+                onEdit={() => onEditExercise(exercise)}
+                onSave={onSaveExercise}
+                oneRmOptions={oneRmOptions}
+                profile={profile}
+                rpeError={rpeError}
               />
-            ) : (
-              <PlanDayEmptyState
-                description={visibleEmptyState.description}
-                title={visibleEmptyState.title}
-                tone={visibleEmptyState.tone}
-              />
-            )
-          ) : null}
-
-          {displayModel.historyHint ? (
-            <p className="rounded-2xl border border-fitloop-line/70 bg-fitloop-panel px-3 py-3 text-xs leading-6 text-slate-400">
-              {displayModel.historyHint}
-            </p>
-          ) : null}
-
-          {hasExercises ? (
-            <ul className="space-y-3">
-              {plan.exercises.map((exercise) => (
-                <PlanExerciseItem
-                  draft={exerciseDraft}
-                  exercise={exercise}
-                  isEditing={isExerciseEditing(exercise.id)}
-                  key={exercise.id}
-                  onCancel={onCancelEditing}
-                  onDelete={() => onDeleteExercise(exercise.id)}
-                  onDraftChange={onDraftChange}
-                  onEdit={() => onEditExercise(exercise)}
-                  onSave={onSaveExercise}
-                  oneRmOptions={oneRmOptions}
-                  profile={profile}
-                  rpeError={rpeError}
-                />
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </div>
   )
 }

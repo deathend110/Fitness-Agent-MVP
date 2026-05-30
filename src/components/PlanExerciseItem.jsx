@@ -29,7 +29,7 @@ function PlanExerciseItem({
       return undefined
     }
 
-    // 局部菜单只服务单个动作卡片，点击外部或按 Esc 时立即关闭，避免挂出全局弹窗体系。
+    // 局部菜单只服务单个动作卡片，点外部或按 Esc 时立即关闭，避免悬挂出全局弹层体系。
     function handlePointerDown(event) {
       if (!menuRef.current?.contains(event.target)) {
         setMenuOpen(false)
@@ -64,7 +64,7 @@ function PlanExerciseItem({
 
   return (
     <li
-      className={`rounded-2xl border px-3 py-3.5 shadow-sm shadow-black/20 ${cardModel.cardClassName}`}
+      className={`rounded-xl border px-3 py-3 shadow-sm shadow-black/20 ${cardModel.cardClassName}`}
     >
       {isEditing ? (
         <PlanExerciseEditorCard
@@ -78,35 +78,27 @@ function PlanExerciseItem({
           value={draft}
         />
       ) : (
-        <div className="space-y-3">
-          <div className="flex items-start gap-3">
+        <div className="space-y-2.5">
+          <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="flex min-w-0 items-start gap-2">
                 <p
-                  className={`min-w-0 break-words text-[15px] font-semibold leading-6 ${cardModel.titleClassName}`}
+                  className={`min-w-0 flex-1 break-words text-[17px] font-extrabold leading-6 ${cardModel.titleClassName}`}
                 >
                   {cardModel.name}
                 </p>
                 <span
-                  className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${cardModel.tierBadgeClassName}`}
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${cardModel.tierBadgeClassName}`}
                 >
                   {cardModel.tierLabel}
                 </span>
               </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] leading-5 text-slate-400">
-                <span
-                  className={`rounded-full border px-2 py-0.5 font-medium ${cardModel.loadBadgeClassName}`}
-                >
-                  {cardModel.loadBadgeLabel}
-                </span>
-                <span className="min-w-0 break-words">{cardModel.loadDetailLabel}</span>
-              </div>
-
-              <p className="mt-2 text-xs leading-5 text-slate-400">{cardModel.summaryLabel}</p>
+              <p className={`mt-1 min-h-[1.25rem] text-[11px] leading-5 ${cardModel.topMetaClassName}`}>
+                {cardModel.topMetaLabel || '\u00A0'}
+              </p>
             </div>
 
-            <div className="relative flex shrink-0 items-start gap-2" ref={menuRef}>
+            <div className="relative shrink-0" ref={menuRef}>
               <button
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
@@ -116,12 +108,12 @@ function PlanExerciseItem({
                 title="更多操作"
                 type="button"
               >
-                ...
+                ⋮
               </button>
 
               {menuOpen ? (
                 <div
-                  className="absolute right-0 top-10 z-20 min-w-32 rounded-xl border border-fitloop-line bg-fitloop-panel p-1.5 shadow-lg shadow-black/30"
+                  className="absolute right-0 top-8 z-20 min-w-32 rounded-xl border border-fitloop-line bg-fitloop-panel p-1.5 shadow-lg shadow-black/30"
                   role="menu"
                 >
                   {menuActions.map((action) => (
@@ -144,37 +136,32 @@ function PlanExerciseItem({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {cardModel.metricItems.map((item) => (
-              <div
-                className="min-w-0 rounded-xl border border-fitloop-line/60 bg-black/10 px-2.5 py-2"
-                key={item.key}
-              >
-                <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
-                  {item.label}
-                </p>
-                <p
-                  className={`mt-1 break-words text-sm font-semibold leading-5 ${cardModel.metricValueClassName}`}
-                >
-                  {item.value}
-                </p>
-                <p className="mt-1 break-words text-[11px] leading-4 text-slate-400">
-                  {item.detail}
-                </p>
-              </div>
-            ))}
+          <div className="flex items-end justify-between gap-3">
+            <span
+              className={`inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${cardModel.volumePillClassName}`}
+            >
+              {cardModel.volumePill.value}
+            </span>
+
+            <div className="min-w-0 text-right">
+              <p className={`break-words text-base font-extrabold leading-none ${cardModel.weightValueClassName}`}>
+                {cardModel.weightValue}
+                {cardModel.weightUnitLabel ? (
+                  <span className={`ml-1 text-sm font-bold ${cardModel.weightUnitClassName}`}>
+                    {cardModel.weightUnitLabel}
+                  </span>
+                ) : null}
+              </p>
+            </div>
           </div>
 
-          <div className="rounded-xl border border-fitloop-line/60 bg-black/10 px-3 py-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
-                备注
-              </p>
-              <span className="rounded-full border border-fitloop-line/70 bg-fitloop-panel px-2 py-0.5 text-[10px] font-medium text-slate-400">
-                {cardModel.effortLabel}
-              </span>
-            </div>
-            <p className={`mt-2 break-words text-xs leading-5 ${cardModel.noteClassName}`}>
+          <div className="flex items-center justify-between gap-3 border-t border-dashed border-fitloop-line/70 pt-2 text-[11px]">
+            <span
+              className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-medium ${cardModel.effortPillClassName}`}
+            >
+              {cardModel.effortPill.value}
+            </span>
+            <p className={`min-w-0 flex-1 truncate text-right leading-5 ${cardModel.noteClassName}`}>
               {cardModel.noteLabel}
             </p>
           </div>

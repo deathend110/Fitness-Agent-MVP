@@ -3,7 +3,7 @@ import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard
 import PlanWeekGrid from '../components/plan-grid/PlanWeekGrid.jsx'
 import PlanWeekGridColumn from '../components/plan-grid/PlanWeekGridColumn.jsx'
 import PlanHeaderToolbar from '../components/plan-header/PlanHeaderToolbar.jsx'
-import { getTodayKey } from '../utils/calc.js'
+import { getTodayStr } from '../utils/calc.js'
 import { buildExerciseSavePayload, getRpeValidationError } from '../utils/exerciseForm.js'
 import { buildPlanHeaderModel } from '../utils/planHeader.js'
 import { buildWeeklyPlanLayoutModel } from '../utils/planLayout.js'
@@ -33,18 +33,27 @@ function getOneRmOptions(profile = {}) {
 }
 
 function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
-  const [expandedDay, setExpandedDay] = useState(() => getTodayKey())
   const [editingState, setEditingState] = useState(() => clearPlanEditorState())
 
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
-  const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
-  // 头部展示信息集中到独立模型中，避免页面组件继续承担日期格式和图例拼装职责。
-  const headerModel = useMemo(() => buildPlanHeaderModel(), [])
-
-  function toggleDay(dayKey) {
-    setExpandedDay((currentDay) => (currentDay === dayKey ? null : dayKey))
-  }
+  const todayStr = getTodayStr()
+  const layoutModel = useMemo(
+    () =>
+      buildWeeklyPlanLayoutModel(weeklyPlan, {
+        referenceDate: todayStr,
+      }),
+    [todayStr, weeklyPlan],
+  )
+  // 头部周信息优先复用 weeklyPlan 内的真实元数据，日期基准必须传入可解析的真实日期字符串。
+  const headerModel = useMemo(
+    () =>
+      buildPlanHeaderModel({
+        referenceDate: todayStr,
+        weeklyPlan,
+      }),
+    [todayStr, weeklyPlan],
+  )
 
   function handleDayTypeChange(dayKey, nextType) {
     onWeeklyPlanChange((currentPlan) => updateDayType(currentPlan, dayKey, nextType))
@@ -105,61 +114,47 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const currentRpeError = editingState.draft ? getRpeValidationError(editingState.draft.rpe) : null
 
   return (
-    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-6 shadow-2xl shadow-black/20 xl:p-7">
-      <div className="space-y-5">
-        <PlanHeaderToolbar headerModel={headerModel} />
+    <div className="space-y-5">
+      <PlanHeaderToolbar headerModel={headerModel} />
 
-        <p className="max-w-3xl text-sm leading-7 text-slate-300">
-          这里可以直接维护一周训练计划。你可以按天新增、编辑、删除动作，每次保存都会写回
-          <code>fitloop_weeklyPlan</code>，刷新页面后仍然保留。
-        </p>
+      <PlanWeekGrid
+        layoutModel={layoutModel}
+        renderColumn={(column) => {
+          const isEditingDay = editingState.dayKey === column.dayKey
+          const editingExerciseId = isEditingDay ? editingState.exerciseId : null
 
-        <div className="rounded-[1.25rem] border border-fitloop-line bg-fitloop-ink/30 p-3 shadow-sm shadow-black/20 xl:p-4">
-          <PlanWeekGrid
-            layoutModel={layoutModel}
-            renderColumn={(column) => {
-              const isEditingDay = editingState.dayKey === column.dayKey
-              const editingExerciseId = isEditingDay ? editingState.exerciseId : null
-
-              return (
-                <PlanWeekGridColumn
-                  column={column}
-                  isExpanded={expandedDay === column.dayKey}
-                  key={column.dayKey}
-                >
-                  <PlanDayCard
-                    dayKey={column.dayKey}
-                    dayLabel={column.dayLabel}
-                    dayTypeOptions={dayTypeOptions}
-                    editingExerciseId={editingExerciseId}
-                    exerciseDraft={
-                      isEditingDay ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)
-                    }
-                    expanded={expandedDay === column.dayKey}
-                    isExerciseEditing={(exerciseId) =>
-                      isPlanEditorTarget(editingState, column.dayKey, exerciseId)
-                    }
-                    isTrainingDay={column.isTrainingDay}
-                    onCancelEditing={cancelEditing}
-                    onDayTypeChange={(nextType) => handleDayTypeChange(column.dayKey, nextType)}
-                    onDeleteExercise={(exerciseId) => deleteExercise(column.dayKey, exerciseId)}
-                    onDraftChange={updateDraft}
-                    onEditExercise={(exercise) => handleStartEditExercise(column.dayKey, exercise)}
-                    onSaveExercise={saveExercise}
-                    onStartAdd={() => handleStartAddExercise(column.dayKey)}
-                    onToggle={() => toggleDay(column.dayKey)}
-                    oneRmOptions={oneRmOptions}
-                    plan={column.plan}
-                    profile={profile}
-                    rpeError={isEditingDay ? currentRpeError : null}
-                  />
-                </PlanWeekGridColumn>
-              )
-            }}
-          />
-        </div>
-      </div>
-    </section>
+          return (
+            <PlanWeekGridColumn column={column} key={column.dayKey}>
+              <PlanDayCard
+                dayKey={column.dayKey}
+                dayLabel={column.dayLabel}
+                dateLabel={column.dateLabel}
+                dayTypeOptions={dayTypeOptions}
+                editingExerciseId={editingExerciseId}
+                exerciseDraft={
+                  isEditingDay ? editingState.draft : createEmptyExerciseDraft(oneRmOptions)
+                }
+                isExerciseEditing={(exerciseId) =>
+                  isPlanEditorTarget(editingState, column.dayKey, exerciseId)
+                }
+                isTrainingDay={column.isTrainingDay}
+                onCancelEditing={cancelEditing}
+                onDayTypeChange={(nextType) => handleDayTypeChange(column.dayKey, nextType)}
+                onDeleteExercise={(exerciseId) => deleteExercise(column.dayKey, exerciseId)}
+                onDraftChange={updateDraft}
+                onEditExercise={(exercise) => handleStartEditExercise(column.dayKey, exercise)}
+                onSaveExercise={saveExercise}
+                onStartAdd={() => handleStartAddExercise(column.dayKey)}
+                oneRmOptions={oneRmOptions}
+                plan={column.plan}
+                profile={profile}
+                rpeError={isEditingDay ? currentRpeError : null}
+              />
+            </PlanWeekGridColumn>
+          )
+        }}
+      />
+    </div>
   )
 }
 

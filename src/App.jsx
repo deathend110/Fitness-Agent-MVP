@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import AppShell from './components/app-shell/AppShell.jsx'
 import {
-  appShellQuickActions,
   appShellTabs,
   buildAppShellStatus,
   getActiveShellTab,
@@ -129,10 +128,8 @@ function App() {
 
   return (
     <AppShell
-      activeTab={activeTab}
       activeTabId={activeTabId}
       onTabChange={setActiveTabId}
-      quickActions={appShellQuickActions}
       status={shellStatus}
       tabs={appShellTabs}
     >

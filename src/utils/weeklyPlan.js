@@ -152,11 +152,14 @@ function normalizeDayPlan(dayPlan = {}) {
 
 export function normalizeWeeklyPlan(weeklyPlan = {}) {
   const safeWeeklyPlan = isPlainObject(weeklyPlan) ? weeklyPlan : {}
+  const normalizedPlan = { ...safeWeeklyPlan }
 
-  return WEEKDAY_ORDER.reduce((plan, dayKey) => {
-    plan[dayKey] = normalizeDayPlan(safeWeeklyPlan[dayKey])
-    return plan
-  }, {})
+  // 归一化时只修正 7 天计划本体，保留 weekMeta 等顶层元数据，避免写回时丢失真实周锚点。
+  WEEKDAY_ORDER.forEach((dayKey) => {
+    normalizedPlan[dayKey] = normalizeDayPlan(safeWeeklyPlan[dayKey])
+  })
+
+  return normalizedPlan
 }
 
 function updateDayPlan(weeklyPlan, dayKey, updater) {

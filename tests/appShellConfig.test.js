@@ -29,13 +29,9 @@ test('buildAppShellStatus 提供底部状态区所需的默认文案', () => {
   assert.deepEqual(buildAppShellStatus(), {
     saveStateLabel: '数据已保存',
     storageLabel: '本地存储',
-    helperLabel: '当前浏览器自动保存',
   })
 })
 
-test('appShellQuickActions 暴露状态区占位快捷操作', () => {
-  assert.deepEqual(
-    appShellQuickActions.map((action) => action.label),
-    ['计划设置'],
-  )
+test('appShellQuickActions 在 V1.6 侧栏中保持为空，避免出现底部双按钮', () => {
+  assert.deepEqual(appShellQuickActions, [])
 })

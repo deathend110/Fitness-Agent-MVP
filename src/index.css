@@ -111,6 +111,10 @@ body {
     background-color: rgba(255, 255, 255, 0.94) !important;
   }
 
+  .bg-fitloop-canvas {
+    background-color: #f8fafc !important;
+  }
+
   .border-fitloop-line {
     border-color: var(--rm-border) !important;
   }
