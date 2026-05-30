@@ -39,13 +39,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const dayTypeOptions = getPlanDayTypes()
   void getTodayKey
   const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
-  const fixedBoardCardProps = useMemo(
-    () => ({
-      expanded: true,
-      onToggle: undefined,
-    }),
-    [],
-  )
   // 头部周信息优先复用 weeklyPlan 内的真实元数据，日期基准必须传入可解析的真实日期字符串。
   const headerModel = useMemo(
     () =>
@@ -149,7 +142,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
                 plan={column.plan}
                 profile={profile}
                 rpeError={isEditingDay ? currentRpeError : null}
-                {...fixedBoardCardProps}
               />
             </PlanWeekGridColumn>
           )

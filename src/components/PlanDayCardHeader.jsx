@@ -1,13 +1,4 @@
-function PlanDayCardHeader({
-  dayLabel,
-  displayModel,
-  expanded,
-  exerciseCount,
-  isTrainingDay,
-  onToggle,
-  planType,
-}) {
-  const toggleLabel = expanded ? '收起' : '展开'
+function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDay, planType }) {
   const typeLabel = !isTrainingDay && planType === 'rest' ? '休息' : planType
   const preview = displayModel?.preview ?? {
     eyebrow: isTrainingDay ? '训练日' : '轻安排',
@@ -18,20 +9,12 @@ function PlanDayCardHeader({
   const rootClassName = isTrainingDay
     ? 'flex w-full flex-col gap-3 text-left'
     : 'flex w-full flex-col gap-3 text-center'
-  const toggleClassName = isTrainingDay
-    ? 'shrink-0 rounded-full border border-fitloop-line/70 bg-black/10 px-2.5 py-1 text-[11px] font-medium text-slate-400'
-    : 'shrink-0 rounded-full border border-fitloop-line/70 bg-fitloop-panel px-2.5 py-1 text-[11px] font-medium text-slate-400'
   const typeBadgeClassName = isTrainingDay
     ? 'border-fitloop-orange/30 bg-fitloop-orange/10 text-fitloop-orange'
     : 'border-fitloop-line/70 bg-fitloop-panel text-slate-300'
 
   return (
-    <button
-      aria-expanded={expanded}
-      className={rootClassName}
-      onClick={onToggle}
-      type="button"
-    >
+    <div className={rootClassName}>
       <div
         className={`flex w-full gap-3 ${
           isTrainingDay ? 'items-start justify-between' : 'items-center justify-between'
@@ -43,8 +26,6 @@ function PlanDayCardHeader({
           </p>
           <h3 className="mt-2 truncate text-lg font-semibold text-slate-100">{dayLabel}</h3>
         </div>
-
-        <span className={toggleClassName}>{toggleLabel}</span>
       </div>
 
       <div
@@ -68,7 +49,7 @@ function PlanDayCardHeader({
           {isTrainingDay ? preview.meta : `${preview.title} · ${preview.meta}`}
         </p>
       </div>
-    </button>
+    </div>
   )
 }
 
