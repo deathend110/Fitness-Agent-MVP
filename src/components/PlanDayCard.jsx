@@ -1,5 +1,6 @@
 import ExerciseEditor from './ExerciseEditor.jsx'
 import { createExerciseDraft } from '../utils/exerciseForm.js'
+import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 
 function getButtonClassName(kind = 'secondary') {
   if (kind === 'danger') {
@@ -85,6 +86,9 @@ function PlanDayCard({
   onDeleteExercise,
   rpeError,
 }) {
+  const dayTypeListId = `${dayKey}-day-type-options`
+  const dayTypeSuggestions = getPlanDayTypeSuggestions(plan.type)
+
   return (
     <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
       <button
@@ -107,20 +111,34 @@ function PlanDayCard({
 
       {expanded ? (
         <div className="mt-4 space-y-4">
-          <label className="block space-y-2">
-            <span className="text-sm text-slate-300">训练类型</span>
-            <select
-              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
-              onChange={(event) => onDayTypeChange(event.target.value)}
-              value={plan.type}
-            >
-              {dayTypeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+          <div className="space-y-2">
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">训练类型</span>
+              <input
+                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+                list={dayTypeListId}
+                onChange={(event) => onDayTypeChange(event.target.value)}
+                value={plan.type}
+              />
+            </label>
+            <datalist id={dayTypeListId}>
+              {dayTypeSuggestions.map((option) => (
+                <option key={option} value={option} />
               ))}
-            </select>
-          </label>
+            </datalist>
+            <div className="flex flex-wrap gap-2">
+              {dayTypeOptions.map((option) => (
+                <button
+                  className={getButtonClassName()}
+                  key={option}
+                  onClick={() => onDayTypeChange(option)}
+                  type="button"
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             <button className={getButtonClassName('primary')} onClick={onStartAdd} type="button">

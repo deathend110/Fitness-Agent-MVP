@@ -3,17 +3,41 @@ import assert from 'node:assert/strict'
 import { demoWeeklyPlan } from '../src/utils/defaultData.js'
 import {
   addExerciseToDay,
+  getPlanDayTypes,
+  getPlanDayTypeSuggestions,
   removeExerciseFromDay,
   updateDayType,
   updateExerciseInDay,
 } from '../src/utils/weeklyPlan.js'
 
-test('updateDayType 将某天改成 rest 时保留原有动作', () => {
+test('updateDayType 将已有默认类型写回时保留动作', () => {
   const nextPlan = updateDayType(demoWeeklyPlan, 'Monday', 'rest')
 
   assert.equal(nextPlan.Monday.type, 'rest')
   assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length)
   assert.deepEqual(nextPlan.Tuesday, demoWeeklyPlan.Tuesday)
+})
+
+test('updateDayType 会保留自定义训练类型', () => {
+  const nextPlan = updateDayType(demoWeeklyPlan, 'Monday', 'upper body strength')
+
+  assert.equal(nextPlan.Monday.type, 'upper body strength')
+  assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length)
+})
+
+test('getPlanDayTypes 提供默认训练类型作为快捷起点', () => {
+  assert.deepEqual(getPlanDayTypes(), ['腿日', '推日', '拉日', '有氧', 'rest'])
+})
+
+test('getPlanDayTypeSuggestions 会把当前自定义类型补进快捷候选', () => {
+  assert.deepEqual(getPlanDayTypeSuggestions('upper body strength'), [
+    '腿日',
+    '推日',
+    '拉日',
+    '有氧',
+    'rest',
+    'upper body strength',
+  ])
 })
 
 test('addExerciseToDay 新增百分比动作时会生成 id 且 kg 为 null', () => {

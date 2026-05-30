@@ -86,12 +86,23 @@ export function getPlanDayTypes() {
   return PLAN_DAY_TYPES
 }
 
+export function getPlanDayTypeSuggestions(currentType = '') {
+  const suggestions = [...PLAN_DAY_TYPES]
+
+  if (typeof currentType === 'string' && currentType && !suggestions.includes(currentType)) {
+    suggestions.push(currentType)
+  }
+
+  return suggestions
+}
+
 export function getWeekdayOrder() {
   return WEEKDAY_ORDER
 }
 
 export function updateDayType(weeklyPlan, dayKey, nextType) {
-  const normalizedType = PLAN_DAY_TYPES.includes(nextType) ? nextType : 'rest'
+  const normalizedType =
+    typeof nextType === 'string' && nextType ? nextType : 'rest'
 
   return updateDayPlan(weeklyPlan, dayKey, (dayPlan) => ({
     ...dayPlan,
