@@ -135,6 +135,7 @@ task/
 - `src/utils/calc.js`
   - 统一处理 1RM 推算重量、BMR、训练消耗与 TDEE 计算
   - 提供重量、百分比、组数、次数、RPE 的统一格式化函数
+  - 百分比挂钩重量保留真实小数结果，展示层再统一决定保留位数
   - 作为 `TodayTab`、`PlanTab`、`AdoptCard`、`WeightChart` 的共享数值显示入口
 
 - `src/utils/todayPlan.js`

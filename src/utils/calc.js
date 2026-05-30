@@ -48,7 +48,7 @@ export function getExerciseKg(exercise = {}, oneRM = {}) {
   if (exercise.ref1RM) {
     const baseKg = toNumber(oneRM?.[exercise.ref1RM])
     const pct = toNumber(exercise.pct)
-    return Math.round(baseKg * pct)
+    return baseKg * pct
   }
 
   return toNumber(exercise.kg)
