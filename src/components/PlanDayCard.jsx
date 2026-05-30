@@ -1,5 +1,6 @@
 import ExerciseEditor from './ExerciseEditor.jsx'
 import { createExerciseDraft } from '../utils/exerciseForm.js'
+import { buildPlanExerciseCardModel } from '../utils/planExerciseCard.js'
 import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 
 function getButtonClassName(kind = 'secondary') {
@@ -16,7 +17,6 @@ function getButtonClassName(kind = 'secondary') {
 
 function ExerciseItem({
   exercise,
-  exerciseSummary,
   isEditing,
   draft,
   onEdit,
@@ -25,10 +25,13 @@ function ExerciseItem({
   onCancel,
   onDelete,
   oneRmOptions,
+  profile,
   rpeError,
 }) {
+  const cardModel = buildPlanExerciseCardModel(exercise, profile)
+
   return (
-    <li className="rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-3">
+    <li className={`rounded-md border p-3 ${cardModel.cardClassName}`}>
       {isEditing ? (
         <div className="space-y-3">
           <ExerciseEditor
@@ -47,12 +50,40 @@ function ExerciseItem({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-100">{exercise.name || '未命名动作'}</p>
-            <p className="mt-1 text-sm text-slate-300">{exerciseSummary}</p>
-            <p className="mt-1 text-xs text-slate-400">{exercise.note || '当前没有补充备注'}</p>
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={`truncate text-base font-semibold ${cardModel.titleClassName}`}>
+                {cardModel.name}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">{cardModel.summaryLabel}</p>
+            </div>
+            <span
+              className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${cardModel.tierBadgeClassName}`}
+            >
+              {cardModel.tierLabel}
+            </span>
           </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {cardModel.metricItems.map((item) => (
+              <div
+                className="rounded-md border border-fitloop-line/60 bg-black/10 px-3 py-2"
+                key={item.label}
+              >
+                <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
+                <p className={`mt-1 text-sm font-semibold ${cardModel.metricValueClassName}`}>
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-md border border-fitloop-line/60 bg-black/10 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">备注</p>
+            <p className={`mt-1 text-xs leading-6 ${cardModel.noteClassName}`}>{cardModel.noteLabel}</p>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <button className={getButtonClassName()} onClick={onEdit} type="button">
               编辑
@@ -74,7 +105,6 @@ function PlanDayCard({
   dayTypeOptions,
   editingExerciseId,
   exerciseDraft,
-  exerciseSummaries,
   oneRmOptions,
   onToggle,
   onDayTypeChange,
@@ -84,6 +114,7 @@ function PlanDayCard({
   onSaveExercise,
   onCancelEditing,
   onDeleteExercise,
+  profile,
   rpeError,
   widthClassName = 'min-w-[12rem] flex-[1_1_12rem]',
 }) {
@@ -184,7 +215,6 @@ function PlanDayCard({
                 <ExerciseItem
                   draft={exerciseDraft}
                   exercise={exercise}
-                  exerciseSummary={exerciseSummaries[exercise.id]}
                   isEditing={editingExerciseId === exercise.id}
                   key={exercise.id}
                   onCancel={onCancelEditing}
@@ -193,6 +223,7 @@ function PlanDayCard({
                   onEdit={() => onEditExercise(exercise)}
                   onSave={onSaveExercise}
                   oneRmOptions={oneRmOptions}
+                  profile={profile}
                   rpeError={rpeError}
                 />
               ))}

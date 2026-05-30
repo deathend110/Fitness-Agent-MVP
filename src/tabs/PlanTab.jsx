@@ -5,13 +5,7 @@ import {
   createExerciseDraft,
   getRpeValidationError,
 } from '../utils/exerciseForm.js'
-import {
-  formatCountDisplay,
-  formatPercentDisplay,
-  formatWeightDisplay,
-  getExerciseKg,
-  getTodayKey,
-} from '../utils/calc.js'
+import { getTodayKey } from '../utils/calc.js'
 import { buildWeeklyPlanColumns } from '../utils/planLayout.js'
 import {
   addExerciseToDay,
@@ -22,15 +16,6 @@ import {
 } from '../utils/weeklyPlan.js'
 
 const NEW_EXERCISE_ID = '__new__'
-
-function getExerciseDisplay(profile, exercise) {
-  if (exercise.ref1RM) {
-    const actualKg = getExerciseKg(exercise, profile.oneRM)
-    return `${formatPercentDisplay(exercise.pct)} -> ${formatWeightDisplay(actualKg)}`
-  }
-
-  return formatWeightDisplay(getExerciseKg(exercise, profile.oneRM))
-}
 
 function getOneRmOptions(profile) {
   return [
@@ -50,20 +35,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
   const dayColumns = useMemo(() => buildWeeklyPlanColumns(weeklyPlan), [weeklyPlan])
-
-  const exerciseSummaries = useMemo(() => {
-    const summaries = {}
-
-    dayColumns.forEach(({ plan }) => {
-      plan.exercises.forEach((exercise) => {
-        summaries[exercise.id] = `${getExerciseDisplay(profile, exercise)} × ${formatCountDisplay(
-          exercise.sets,
-        )} 组 × ${formatCountDisplay(exercise.reps)} 次`
-      })
-    })
-
-    return summaries
-  }, [dayColumns, profile])
 
   function toggleDay(dayKey) {
     setExpandedDay((currentDay) => (currentDay === dayKey ? null : dayKey))
@@ -157,7 +128,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
       <h2 className="mt-3 text-2xl font-bold text-white">训练计划</h2>
       <p className="mt-4 max-w-3xl leading-7 text-slate-300">
         这里已经接入真实的训练计划维护能力。你可以修改每天训练类型，新增、编辑、删除动作，
-        每次保存都会写回 <code>fitloop_weeklyPlan</code>，刷新页面后仍然保留。
+        每次保存都会写回 <code>fitloop_weeklyPlan</code>，刷新页面后依然保留。
       </p>
 
       <div className="mt-8 overflow-x-auto pb-2">
@@ -172,7 +143,6 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
                   ? editingState.draft
                   : createEmptyExerciseDraft(oneRmOptions)
               }
-              exerciseSummaries={exerciseSummaries}
               expanded={expandedDay === dayKey}
               key={dayKey}
               onCancelEditing={cancelEditing}
@@ -185,6 +155,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
               onToggle={() => toggleDay(dayKey)}
               oneRmOptions={oneRmOptions}
               plan={plan}
+              profile={profile}
               rpeError={editingState.dayKey === dayKey ? currentRpeError : null}
               widthClassName={widthClassName}
             />
