@@ -25,14 +25,7 @@ export const appShellTabs = [
   },
 ]
 
-export const appShellQuickActions = [
-  {
-    id: 'plan-settings',
-    label: '计划设置',
-    icon: 'settings',
-    tone: 'secondary',
-  },
-]
+export const appShellQuickActions = []
 
 export function getActiveShellTab(activeTabId) {
   return appShellTabs.find((tab) => tab.id === activeTabId) ?? appShellTabs[0]
@@ -42,6 +35,6 @@ export function buildAppShellStatus() {
   return {
     saveStateLabel: '数据已保存',
     storageLabel: '本地存储',
-    helperLabel: '当前浏览器自动保存',
+    helperLabel: '侧栏状态会同步到当前浏览器',
   }
 }

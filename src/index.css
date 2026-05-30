@@ -54,6 +54,12 @@ body {
   scrollbar-gutter: stable;
 }
 
+.fitloop-shell__main {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
 .fitloop-shell__content::-webkit-scrollbar {
   width: 10px;
 }
@@ -109,6 +115,10 @@ body {
   .bg-fitloop-panel\/70,
   .bg-fitloop-panel\/80 {
     background-color: rgba(255, 255, 255, 0.94) !important;
+  }
+
+  .bg-fitloop-canvas {
+    background-color: #f8fafc !important;
   }
 
   .border-fitloop-line {
