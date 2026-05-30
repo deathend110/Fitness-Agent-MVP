@@ -57,6 +57,16 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
     onWeeklyPlanChange((currentPlan) => updateDayType(currentPlan, dayKey, nextType))
   }
 
+  function handleWeekNumberChange(nextWeekNumber) {
+    onWeeklyPlanChange((currentPlan) => ({
+      ...currentPlan,
+      weekMeta: {
+        ...(currentPlan?.weekMeta ?? {}),
+        weekNumber: nextWeekNumber,
+      },
+    }))
+  }
+
   function handleStartAddExercise(dayKey) {
     setEditingState(startAddingExercise(dayKey, oneRmOptions))
   }
@@ -113,7 +123,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
 
   return (
     <div className="space-y-5">
-      <PlanHeaderToolbar headerModel={headerModel} />
+      <PlanHeaderToolbar headerModel={headerModel} onWeekNumberChange={handleWeekNumberChange} />
 
       <PlanWeekGrid
         layoutModel={layoutModel}

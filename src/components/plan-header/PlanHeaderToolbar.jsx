@@ -1,6 +1,53 @@
+import { useEffect, useRef, useState } from 'react'
 import PlanHeaderLegend from './PlanHeaderLegend.jsx'
 
-function PlanHeaderToolbar({ headerModel }) {
+function PlanHeaderToolbar({ headerModel, onWeekNumberChange }) {
+  const weekNumber = headerModel.weekMeta?.weekNumber ?? ''
+  const [isEditingWeekNumber, setIsEditingWeekNumber] = useState(false)
+  const [weekNumberDraft, setWeekNumberDraft] = useState(`${weekNumber}`)
+  const weekNumberInputRef = useRef(null)
+
+  useEffect(() => {
+    if (!isEditingWeekNumber) {
+      setWeekNumberDraft(`${weekNumber}`)
+    }
+  }, [isEditingWeekNumber, weekNumber])
+
+  useEffect(() => {
+    if (!isEditingWeekNumber) {
+      return
+    }
+
+    const input = weekNumberInputRef.current
+    input?.focus()
+    input?.select()
+  }, [isEditingWeekNumber])
+
+  function commitWeekNumber() {
+    const nextWeekNumber = Number.parseInt(weekNumberDraft, 10)
+    const isValidWeekNumber = Number.isInteger(nextWeekNumber) && nextWeekNumber > 0
+
+    if (isValidWeekNumber && nextWeekNumber !== weekNumber && onWeekNumberChange) {
+      onWeekNumberChange(nextWeekNumber)
+    }
+
+    setIsEditingWeekNumber(false)
+    setWeekNumberDraft(`${isValidWeekNumber ? nextWeekNumber : weekNumber}`)
+  }
+
+  function handleWeekNumberKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      commitWeekNumber()
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setIsEditingWeekNumber(false)
+      setWeekNumberDraft(`${weekNumber}`)
+    }
+  }
+
   return (
     <header className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -20,9 +67,28 @@ function PlanHeaderToolbar({ headerModel }) {
           </svg>
         </span>
 
-        <span className="inline-flex items-center rounded-md bg-fitloop-orange/10 px-2.5 py-1 text-xs font-bold text-fitloop-orange">
-          {headerModel.weekBadgeLabel}
-        </span>
+        <button
+          className="inline-flex items-center gap-1 rounded-md bg-fitloop-orange/10 px-2.5 py-1 text-xs font-bold text-fitloop-orange transition hover:bg-fitloop-orange/15"
+          onClick={() => setIsEditingWeekNumber(true)}
+          type="button"
+        >
+          <span>第</span>
+          {isEditingWeekNumber ? (
+            <input
+              aria-label="编辑周数"
+              className="w-14 border-none bg-transparent p-0 text-center text-xs font-bold text-fitloop-orange outline-none"
+              inputMode="numeric"
+              onBlur={commitWeekNumber}
+              onChange={(event) => setWeekNumberDraft(event.target.value)}
+              onKeyDown={handleWeekNumberKeyDown}
+              ref={weekNumberInputRef}
+              value={weekNumberDraft}
+            />
+          ) : (
+            <span>{weekNumber}</span>
+          )}
+          <span>周</span>
+        </button>
 
         <button
           aria-label={headerModel.settingsButton.label}
