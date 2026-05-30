@@ -8,7 +8,7 @@ function PlanDayCardHeader({ dayKey, expanded, exerciseCount, planType, onToggle
         type="button"
       >
         <div className="min-w-0">
-          <h3 className="truncate text-lg font-semibold text-white">{dayKey}</h3>
+          <h3 className="truncate text-lg font-semibold text-slate-100">{dayKey}</h3>
           <p className="mt-1 text-sm text-slate-400">{exerciseCount} 个动作</p>
         </div>
         <div className="flex items-center gap-2">
@@ -19,7 +19,7 @@ function PlanDayCardHeader({ dayKey, expanded, exerciseCount, planType, onToggle
         </div>
       </button>
 
-      <div className="mt-3 rounded-md border border-fitloop-line/60 bg-black/10 px-3 py-2">
+      <div className="mt-3 rounded-xl border border-fitloop-line/60 bg-black/10 px-3 py-3">
         <p className="text-xs uppercase tracking-[0.18em] text-slate-500">训练日</p>
         <p className="mt-1 text-sm font-semibold text-slate-100">{planType}</p>
         <p className="mt-1 text-xs text-slate-400">{exerciseCount} 个动作</p>

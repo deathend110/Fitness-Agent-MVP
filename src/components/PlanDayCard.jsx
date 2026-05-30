@@ -31,7 +31,7 @@ function PlanDayCard({
 
   return (
     <article
-      className={`flex h-full flex-col rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4 ${widthClassName}`}
+      className={`flex h-full flex-col rounded-[1.25rem] border border-fitloop-line bg-fitloop-panel/85 p-4 shadow-sm shadow-black/20 ${widthClassName}`}
     >
       <PlanDayCardHeader
         dayKey={dayKey}

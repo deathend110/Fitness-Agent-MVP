@@ -50,12 +50,12 @@ function CoachTab({
   )
   const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
   const statusTone = apiKeyStatus.hasKey
-    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
-    : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-amber-200 bg-amber-50 text-amber-700'
   const adoptFeedbackTone =
     adoptFeedback?.tone === 'success'
-      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
-      : 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : 'border-rose-200 bg-rose-50 text-rose-600'
 
   async function requestReplyWithFallback(payload) {
     try {
@@ -140,16 +140,16 @@ function CoachTab({
   }
 
   return (
-    <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
-      <p className="text-sm font-semibold text-fitloop-mint">Tab 4</p>
-      <h2 className="mt-3 text-2xl font-bold text-white">AI 教练</h2>
-      <p className="mt-4 max-w-3xl leading-7 text-slate-300">
+    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
+      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Coach</p>
+      <h2 className="mt-3 text-3xl font-semibold text-slate-100">AI 教练</h2>
+      <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
         这里已经接入真实对话流程。每次发送都会重新构建最新训练上下文，再调用 DeepSeek
         聊天接口；默认优先尝试流式输出，失败时自动回退到普通回复。聊天历史会写入
         <code>fitloop_chatHistory</code>，刷新后仍会保留最近 20 条消息。
       </p>
 
-      <article className={`mt-6 rounded-md border p-4 ${statusTone}`}>
+      <article className={`mt-6 rounded-2xl border p-5 shadow-sm shadow-black/20 ${statusTone}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">配置与调用状态</h3>
@@ -159,19 +159,19 @@ function CoachTab({
             {apiKeyStatus.hasKey ? 'Ready' : 'Action Required'}
           </span>
         </div>
-        <dl className="mt-4 grid gap-3 text-sm text-slate-200 md:grid-cols-2">
-          <div className="rounded-md border border-white/10 bg-black/10 p-3">
+        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+          <div className="rounded-xl border border-fitloop-line bg-fitloop-panel p-3 text-slate-200">
             <dt className="text-xs uppercase tracking-[0.16em] text-slate-300">Endpoint</dt>
             <dd className="mt-1 break-all">{deepSeekDefaults.baseUrl}/chat/completions</dd>
           </div>
-          <div className="rounded-md border border-white/10 bg-black/10 p-3">
+          <div className="rounded-xl border border-fitloop-line bg-fitloop-panel p-3 text-slate-200">
             <dt className="text-xs uppercase tracking-[0.16em] text-slate-300">Default Model</dt>
             <dd className="mt-1">{deepSeekDefaults.model}</dd>
           </div>
         </dl>
       </article>
 
-      <div className="mt-8 grid gap-4 xl:grid-cols-[1.05fr_0.85fr_1.1fr]">
+      <div className="mt-8 grid gap-5 xl:grid-cols-[1.05fr_0.85fr_1.1fr]">
         <div className="space-y-4">
           <CoachConversationPanel
             chatHistory={chatHistory}
@@ -194,8 +194,8 @@ function CoachTab({
           ) : null}
         </div>
 
-        <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-          <h3 className="text-lg font-semibold text-white">最近日志摘要</h3>
+        <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
+          <h3 className="text-lg font-semibold text-slate-100">最近日志摘要</h3>
           {recentDates.length ? (
             <ul className="mt-4 space-y-3">
               {recentDates.map((date) => {
@@ -203,7 +203,7 @@ function CoachTab({
 
                 return (
                   <li
-                    className="rounded-md border border-fitloop-line/80 bg-fitloop-panel/70 p-3"
+                    className="rounded-xl border border-fitloop-line/80 bg-fitloop-ink/30 p-3"
                     key={date}
                   >
                     <p className="text-sm font-semibold text-slate-100">{date}</p>

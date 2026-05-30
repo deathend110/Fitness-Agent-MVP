@@ -132,7 +132,6 @@ body {
     color: var(--rm-success) !important;
   }
 
-  .text-white,
   .text-slate-100,
   .text-slate-200,
   .text-slate-50 {
@@ -160,10 +159,6 @@ body {
 
   .hover\:border-slate-400:hover {
     border-color: var(--rm-border-strong) !important;
-  }
-
-  .hover\:text-white:hover {
-    color: var(--rm-text) !important;
   }
 
   .focus\:border-fitloop-orange:focus {

@@ -62,8 +62,8 @@ export function buildPlanExerciseCardModel(exercise = {}, profile = {}) {
       tierTone === 'main'
         ? 'border-fitloop-orange/30 bg-fitloop-orange/15 text-fitloop-orange'
         : 'border-fitloop-line/70 bg-black/10 text-slate-300',
-    titleClassName: tierTone === 'main' ? 'text-white' : 'text-slate-100',
-    metricValueClassName: tierTone === 'main' ? 'text-slate-50' : 'text-slate-100',
+    titleClassName: 'text-slate-100',
+    metricValueClassName: 'text-slate-100',
     noteClassName: tierTone === 'main' ? 'text-slate-300' : 'text-slate-400',
   }
 }

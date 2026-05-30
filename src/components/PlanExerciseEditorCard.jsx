@@ -12,7 +12,7 @@ function PlanExerciseEditorCard({
   dashed = false,
 }) {
   const cardClassName = dashed
-    ? 'space-y-3 rounded-md border border-dashed border-fitloop-line p-3'
+    ? 'space-y-3 rounded-xl border border-dashed border-fitloop-line bg-fitloop-ink/30 p-3'
     : 'space-y-3'
 
   return (

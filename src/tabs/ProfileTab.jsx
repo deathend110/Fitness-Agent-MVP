@@ -43,7 +43,7 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
         <label className="space-y-2" key={field.key}>
           <span className="text-sm text-slate-300">{field.label}</span>
           <select
-            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             onChange={(event) => updateNestedField('basic', field.key, event.target.value)}
             value={draft.basic[field.key]}
           >
@@ -61,7 +61,7 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
       <label className="space-y-2" key={field.key}>
         <span className="text-sm text-slate-300">{field.label}</span>
         <input
-          className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+          className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
           inputMode={field.inputMode}
           onChange={(event) => updateNestedField('basic', field.key, event.target.value)}
           step={field.step}
@@ -73,10 +73,12 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
   }
 
   return (
-    <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
-      <p className="text-sm font-semibold text-fitloop-mint">Tab 1</p>
-      <h2 className="mt-3 text-2xl font-bold text-white">我的档案</h2>
-      <p className="mt-4 max-w-2xl leading-7 text-slate-300">
+    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
+      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">
+        Profile
+      </p>
+      <h2 className="mt-3 text-3xl font-semibold text-slate-100">我的档案</h2>
+      <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
         这里直接编辑并保存用户档案，所有数字字段都会以数字形式写入
         <code>fitloop_profile</code>，刷新后仍会保留。
       </p>
@@ -91,7 +93,7 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
             <label className="space-y-2">
               <span className="text-sm text-slate-300">目标体重 (kg)</span>
               <input
-                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
                 inputMode="numeric"
                 onChange={(event) => updateTopLevelField('targetWeight', event.target.value)}
                 step="0.1"
@@ -103,7 +105,7 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
             <label className="space-y-2">
               <span className="text-sm text-slate-300">训练目标</span>
               <input
-                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
                 onChange={(event) => updateTopLevelField('goal', event.target.value)}
                 value={draft.goal}
               />
@@ -112,21 +114,24 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
             <label className="space-y-2">
               <span className="text-sm text-slate-300">备注</span>
               <textarea
-                className="min-h-24 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                className="min-h-28 w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
                 onChange={(event) => updateTopLevelField('notes', event.target.value)}
                 value={draft.notes}
               />
             </label>
           </div>
 
-          <div className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
-            <p className="text-sm font-semibold text-slate-100">三大项 1RM</p>
+          <div className="rounded-2xl border border-fitloop-line bg-fitloop-ink/30 p-5 shadow-sm shadow-black/20">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">
+              Strength Base
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-slate-100">三大项 1RM</h3>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               {oneRmFields.map((field) => (
                 <label className="space-y-2" key={field.key}>
                   <span className="text-sm text-slate-300">{field.label}</span>
                   <input
-                    className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                    className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
                     inputMode="numeric"
                     onChange={(event) => updateNestedField('oneRM', field.key, event.target.value)}
                     step="0.1"

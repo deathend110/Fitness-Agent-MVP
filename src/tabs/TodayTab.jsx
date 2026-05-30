@@ -53,26 +53,26 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
   }
 
   return (
-    <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
-      <p className="text-sm font-semibold text-fitloop-mint">Tab 3</p>
-      <h2 className="mt-3 text-2xl font-bold text-white">今日日志</h2>
-      <p className="mt-4 max-w-3xl leading-7 text-slate-300">
+    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
+      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Today</p>
+      <h2 className="mt-3 text-3xl font-semibold text-slate-100">今日日志</h2>
+      <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
         这里先录入当天恢复与训练情况，再在右侧对照已保存摘要、近 14 天体重趋势和今日日计划。
         保存后会写回 <code>fitloop_dailyLog</code>，刷新页面后仍会保留。
       </p>
 
-      <div className="mt-8 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="mt-8 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
         <form
-          className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4"
+          className="rounded-2xl border border-fitloop-line bg-fitloop-ink/30 p-5 shadow-sm shadow-black/20"
           onSubmit={handleSubmit}
         >
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayDate}</p>
-              <h3 className="mt-3 text-lg font-semibold text-white">填写今天的数据</h3>
+              <h3 className="mt-3 text-lg font-semibold text-slate-100">填写今天的数据</h3>
             </div>
             <button
-              className="rounded-md bg-fitloop-orange px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+              className="rounded-md border border-fitloop-orange bg-fitloop-orange px-4 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110"
               type="submit"
             >
               保存今日日志
@@ -84,7 +84,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
               <label className="space-y-2" key={field.key}>
                 <span className="text-sm text-slate-300">{field.label}</span>
                 <input
-                  className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                  className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
                   inputMode={field.inputMode}
                   max={field.max}
                   min={field.min}
@@ -98,7 +98,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
             ))}
           </div>
 
-          <label className="mt-4 flex items-center gap-3 rounded-md border border-fitloop-line bg-fitloop-ink/40 px-3 py-3 text-sm text-slate-200">
+          <label className="mt-4 flex items-center gap-3 rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-3 text-sm text-slate-200">
             <input
               checked={draft.trainingDone}
               className="h-4 w-4 accent-fitloop-orange"
@@ -111,7 +111,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
           <label className="mt-4 block space-y-2">
             <span className="text-sm text-slate-300">训练备注</span>
             <textarea
-              className="min-h-28 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+              className="min-h-32 w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
               onChange={(event) => updateDraftField('trainingNotes', event.target.value)}
               placeholder="例如：主项速度下降、某个部位发紧、是否需要下调训练量。"
               value={draft.trainingNotes}
@@ -124,9 +124,9 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
         </form>
 
         <div className="space-y-4">
-          <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+          <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayDate}</p>
-            <h3 className="mt-3 text-lg font-semibold text-white">已保存摘要</h3>
+            <h3 className="mt-3 text-lg font-semibold text-slate-100">已保存摘要</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <p className="text-sm text-slate-300">体重：{formatMetric(todayLog?.weight, ' kg')}</p>
               <p className="text-sm text-slate-300">热量：{formatMetric(todayLog?.kcal, ' kcal')}</p>
@@ -145,7 +145,7 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
           <Suspense
             fallback={(
               <article className="rounded-md border border-fitloop-line bg-fitloop-ink/30 p-4">
-                <p className="text-sm font-medium text-white">体重趋势</p>
+                <p className="text-sm font-medium text-slate-100">体重趋势</p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">图表组件加载中...</p>
               </article>
             )}
@@ -153,9 +153,9 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
             <WeightChart model={weightChartModel} />
           </Suspense>
 
-          <article className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+          <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
             <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayPlanKey}</p>
-            <h3 className="mt-3 text-lg font-semibold text-white">今日计划</h3>
+            <h3 className="mt-3 text-lg font-semibold text-slate-100">今日计划</h3>
             <p className="mt-4 text-sm text-slate-300">训练类型：{todayPlanSummary.typeLabel}</p>
 
             {todayPlanSummary.isRestDay ? (
@@ -164,10 +164,10 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange }) {
               <ul className="mt-4 space-y-3">
                 {todayPlanSummary.exercises.map((exercise) => (
                   <li
-                    className="rounded-md border border-fitloop-line/80 bg-fitloop-ink/50 px-3 py-3"
+                    className="rounded-xl border border-fitloop-line/80 bg-fitloop-ink/30 px-3 py-3"
                     key={exercise.id}
                   >
-                    <p className="text-sm font-medium text-white">{exercise.name}</p>
+                    <p className="text-sm font-medium text-slate-100">{exercise.name}</p>
                     <p className="mt-1 text-sm leading-6 text-slate-300">{exercise.detail}</p>
                   </li>
                 ))}

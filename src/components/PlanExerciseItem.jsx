@@ -18,7 +18,7 @@ function PlanExerciseItem({
   const cardModel = buildPlanExerciseCardModel(exercise, profile)
 
   return (
-    <li className={`rounded-md border p-3 ${cardModel.cardClassName}`}>
+    <li className={`rounded-xl border p-3 shadow-sm shadow-black/20 ${cardModel.cardClassName}`}>
       {isEditing ? (
         <PlanExerciseEditorCard
           oneRmOptions={oneRmOptions}
@@ -48,7 +48,7 @@ function PlanExerciseItem({
           <div className="grid gap-2 sm:grid-cols-2">
             {cardModel.metricItems.map((item) => (
               <div
-                className="rounded-md border border-fitloop-line/60 bg-black/10 px-3 py-2"
+                className="rounded-xl border border-fitloop-line/60 bg-black/10 px-3 py-2.5"
                 key={item.label}
               >
                 <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
@@ -61,7 +61,7 @@ function PlanExerciseItem({
             ))}
           </div>
 
-          <div className="rounded-md border border-fitloop-line/60 bg-black/10 px-3 py-2">
+          <div className="rounded-xl border border-fitloop-line/60 bg-black/10 px-3 py-2.5">
             <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">备注</p>
             <p className={`mt-1 text-xs leading-6 ${cardModel.noteClassName}`}>
               {cardModel.noteLabel}

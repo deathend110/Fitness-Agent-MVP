@@ -123,15 +123,28 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const currentRpeError = editingState.draft ? getRpeValidationError(editingState.draft.rpe) : null
 
   return (
-    <section className="rounded-lg border border-fitloop-line bg-fitloop-panel p-8 shadow-2xl shadow-black/20">
-      <p className="text-sm font-semibold text-fitloop-mint">Tab 2</p>
-      <h2 className="mt-3 text-2xl font-bold text-white">训练计划</h2>
-      <p className="mt-4 max-w-3xl leading-7 text-slate-300">
+    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
+      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Plan</p>
+      <h2 className="mt-3 text-3xl font-semibold text-slate-100">训练计划</h2>
+      <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
         这里已经接入真实的训练计划维护能力。你可以修改每天训练类型，新增、编辑、删除动作，
         每次保存都会写回 <code>fitloop_weeklyPlan</code>，刷新页面后依然保留。
       </p>
 
-      <div className="mt-8 overflow-x-auto pb-2">
+      <div className="mt-8 rounded-[1.25rem] border border-fitloop-line bg-fitloop-ink/30 p-4 shadow-sm shadow-black/20">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-fitloop-line/60 pb-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-100">一周课表视图</p>
+            <p className="mt-1 text-sm text-slate-300">
+              训练日列更宽，休息日列更窄，便于一眼扫完整周安排。
+            </p>
+          </div>
+          <span className="rounded-full border border-fitloop-orange/30 bg-fitloop-orange/10 px-3 py-1 text-xs font-semibold text-fitloop-orange">
+            Monday - Sunday
+          </span>
+        </div>
+
+        <div className="overflow-x-auto pb-2">
         <div className="flex min-w-max gap-4">
           {dayColumns.map(({ dayKey, plan, widthClassName }) => (
             <PlanDayCard
@@ -160,6 +173,7 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
               widthClassName={widthClassName}
             />
           ))}
+        </div>
         </div>
       </div>
     </section>

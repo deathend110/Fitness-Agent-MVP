@@ -39,12 +39,12 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
   }
 
   return (
-    <div className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
+    <div className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-sm shadow-black/20">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <label className="space-y-2">
           <span className="text-sm text-slate-300">动作名称</span>
           <input
-            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             onChange={(event) => updateField('name', event.target.value)}
             value={value.name}
           />
@@ -53,7 +53,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         <label className="space-y-2">
           <span className="text-sm text-slate-300">动作层级</span>
           <select
-            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             onChange={(event) => updateField('tier', event.target.value)}
             value={value.tier}
           >
@@ -75,8 +75,8 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
                 <label
                   className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition ${
                     checked
-                      ? 'border-fitloop-orange bg-fitloop-orange/15 text-white'
-                      : 'border-fitloop-line bg-fitloop-ink/60 text-slate-300'
+                      ? 'border-fitloop-orange bg-fitloop-orange/15 text-fitloop-orange'
+                      : 'border-fitloop-line bg-fitloop-panel text-slate-300'
                   }`}
                   key={option.value}
                 >
@@ -99,7 +99,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
             <label className="space-y-2">
               <span className="text-sm text-slate-300">参考 1RM</span>
               <select
-                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+                className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
                 onChange={(event) => updateField('ref1RM', event.target.value)}
                 value={value.ref1RM}
               >
@@ -114,7 +114,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
             <label className="space-y-2">
               <span className="text-sm text-slate-300">百分比</span>
               <input
-                className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+                className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
                 inputMode="decimal"
                 onChange={(event) => updateField('pct', event.target.value)}
                 step="0.01"
@@ -127,7 +127,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
           <label className="space-y-2">
             <span className="text-sm text-slate-300">固定 kg</span>
             <input
-              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+              className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
               inputMode="decimal"
               onChange={(event) => updateField('kg', event.target.value)}
               step="0.5"
@@ -140,7 +140,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         <label className="space-y-2">
           <span className="text-sm text-slate-300">组数</span>
           <input
-            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             inputMode="numeric"
             onChange={(event) => updateField('sets', event.target.value)}
             step="1"
@@ -152,7 +152,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         <label className="space-y-2">
           <span className="text-sm text-slate-300">组型</span>
           <select
-            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             onChange={(event) => updateSetType(event.target.value)}
             value={value.setType}
           >
@@ -168,7 +168,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
           <label className="space-y-2">
             <span className="text-sm text-slate-300">次数表达</span>
             <input
-              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+              className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
               onChange={(event) => updateField('repsText', event.target.value)}
               placeholder="例如：6-8、AMRAP、阶梯"
               value={value.repsText}
@@ -178,7 +178,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
           <label className="space-y-2">
             <span className="text-sm text-slate-300">次数</span>
             <input
-              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+              className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
               inputMode="numeric"
               onChange={(event) => updateField('reps', event.target.value)}
               step="1"
@@ -197,7 +197,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         <label className="space-y-2">
           <span className="text-sm text-slate-300">RPE</span>
           <input
-            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             aria-invalid={Boolean(rpeError)}
             inputMode="decimal"
             max="10"
@@ -214,7 +214,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
       <label className="mt-4 block space-y-2">
         <span className="text-sm text-slate-300">备注</span>
         <textarea
-          className="min-h-24 w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+          className="min-h-24 w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
           onChange={(event) => updateField('note', event.target.value)}
           value={value.note}
         />
