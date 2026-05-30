@@ -1,6 +1,6 @@
 # FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4 已完成的训练计划升级。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4 与 Task 5 已完成的训练计划和界面主题升级。
 
 ## 当前项目结构
 
@@ -61,6 +61,7 @@ docs/
 - `src/App.jsx`
   - 负责加载和持久化顶层状态
   - 统一管理 `profile / weeklyPlan / dailyLog / chatHistory`
+  - 负责应用级标题区、导航切换和页面外壳视觉节奏
 
 - `src/tabs/PlanTab.jsx`
   - 负责周计划页面组织
@@ -97,6 +98,11 @@ docs/
 
 - `src/utils/planExerciseCard.js`
   - 负责把动作结构转换成卡片展示模型
+
+- `tailwind.config.js` + `src/index.css`
+  - 负责定义 `repmind.*` 语义色 token
+  - 负责明亮主题基底、边框、阴影和强调色策略
+  - 在过渡阶段兼容旧的 `fitloop-*` 类名
 
 ## 数据流说明
 
@@ -267,3 +273,29 @@ CoachTab
 - 支持更复杂的动作块和组型
 - 增加趋势图、热力图和训练负荷统计
 - 增强 AI 建议类型和对话体验
+
+## Task 5 已完成升级说明
+
+### 1. 全局主题 token
+
+- `tailwind.config.js` 新增 `repmind.bg / panel / border / text / accent / success / warning / danger`
+- `src/index.css` 建立冷白底板、浅蓝紫径向高光和统一选区颜色
+
+### 2. 通用壳层与控件
+
+- `src/App.jsx` 把应用头部和导航统一为白色面板 + 蓝紫选中态
+- `PlanDayCardButton / CoachConversationPanel / DataTransferPanel / AdoptCard / PromptPreviewPanel / WeightChart`
+  统一到同一套边框、阴影和强调色逻辑
+
+### 3. 页面级视觉细修
+
+- `ProfileTab / PlanTab / TodayTab / CoachTab` 统一标题层级、说明文密度、表单区留白和信息卡对比度
+- `ExerciseEditor / PlanDayCard / PlanExerciseItem / PlanDayTypeSection`
+  跟随页面语法调整为更轻的卡片和输入样式
+
+### 4. 当前主题策略
+
+- 主视觉：白色或冷白色底板
+- 强调色：清亮蓝紫，仅用于主按钮、选中态、重要标签和焦点反馈
+- 次级信息：灰蓝与冷灰，避免页面发灰或过暗
+- 阴影：轻量、低对比，用于区分桌面级信息层级而不是制造漂浮感
