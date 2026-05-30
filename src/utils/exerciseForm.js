@@ -2,6 +2,14 @@ export const exerciseWeightModes = [
   { value: 'percentage', label: '挂钩 1RM 百分比' },
   { value: 'fixed', label: '直接填写 kg' },
 ]
+export const exerciseTierOptions = [
+  { value: 'main', label: '主项' },
+  { value: 'accessory', label: '辅项' },
+]
+export const exerciseSetTypeOptions = [
+  { value: 'straight', label: '直组' },
+  { value: 'custom', label: '自定义' },
+]
 
 const RPE_MIN = 0
 const RPE_MAX = 10
@@ -13,14 +21,25 @@ function toInputValue(value) {
 }
 
 export function createExerciseDraft(exercise = {}, fallbackRef1RM = 'squat') {
+  const setType = exercise.template?.setType === 'custom' ? 'custom' : 'straight'
+  const repsText = exercise.template?.repsText ?? exercise.reps
+  const repsValue =
+    setType === 'custom'
+      ? ''
+      : toInputValue(exercise.reps ?? toNumberOrNull(exercise.template?.repsText ?? ''))
+
   return {
     name: exercise.name ?? '',
-    weightMode: exercise.ref1RM ? 'percentage' : 'fixed',
-    ref1RM: exercise.ref1RM ?? fallbackRef1RM,
+    tier: exercise.tier === 'main' ? 'main' : 'accessory',
+    setType,
+    weightMode:
+      exercise.ref1RM || exercise.template?.loadMode === 'percentage' ? 'percentage' : 'fixed',
+    ref1RM: exercise.ref1RM ?? exercise.template?.ref1RM ?? fallbackRef1RM,
     pct: toInputValue(exercise.pct),
     kg: toInputValue(exercise.kg),
     sets: toInputValue(exercise.sets),
-    reps: toInputValue(exercise.reps),
+    reps: repsValue,
+    repsText: toInputValue(repsText),
     rpe: toInputValue(exercise.rpe),
     note: exercise.note ?? '',
   }
@@ -54,14 +73,44 @@ export function getRpeFieldHint(rpeError) {
   return rpeError ?? RPE_RANGE_HINT
 }
 
+function toRepsText(draftRepsText, reps) {
+  const normalizedText = typeof draftRepsText === 'string' ? draftRepsText.trim() : ''
+
+  if (normalizedText) {
+    return normalizedText
+  }
+
+  return reps === null ? '' : `${reps}`
+}
+
+function toNumericReps(reps, repsText) {
+  if (reps !== null) {
+    return reps
+  }
+
+  const parsedFromText = Number(repsText)
+  return Number.isFinite(parsedFromText) ? parsedFromText : null
+}
+
 export function draftToExercise(draft = {}) {
   const weightMode = draft.weightMode === 'percentage' ? 'percentage' : 'fixed'
+  const tier = draft.tier === 'main' ? 'main' : 'accessory'
+  const setType = draft.setType === 'custom' ? 'custom' : 'straight'
+  const parsedReps = toNumberOrNull(draft.reps)
+  const repsText =
+    setType === 'custom' ? toRepsText(draft.repsText, null) : toRepsText(draft.repsText, parsedReps)
+  const nextReps = setType === 'custom' ? toNumericReps(null, repsText) : parsedReps
   const baseExercise = {
     name: (draft.name ?? '').trim(),
     sets: toNumberOrNull(draft.sets),
-    reps: toNumberOrNull(draft.reps),
+    reps: nextReps,
     rpe: toNumberOrNull(draft.rpe),
     note: (draft.note ?? '').trim(),
+    tier,
+    template: {
+      setType,
+      repsText,
+    },
   }
 
   if (weightMode === 'percentage') {

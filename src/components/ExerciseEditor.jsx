@@ -1,5 +1,10 @@
 import { useId } from 'react'
-import { exerciseWeightModes, getRpeFieldHint } from '../utils/exerciseForm.js'
+import {
+  exerciseSetTypeOptions,
+  exerciseTierOptions,
+  exerciseWeightModes,
+  getRpeFieldHint,
+} from '../utils/exerciseForm.js'
 
 function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null }) {
   const modeName = useId()
@@ -21,6 +26,18 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
     })
   }
 
+  function updateSetType(nextSetType) {
+    const nextRepsText =
+      nextSetType === 'custom' ? value.repsText || value.reps : value.repsText || value.reps || ''
+
+    onChange({
+      ...value,
+      setType: nextSetType,
+      reps: nextSetType === 'custom' ? '' : value.reps,
+      repsText: nextRepsText,
+    })
+  }
+
   return (
     <div className="rounded-md border border-fitloop-line bg-fitloop-ink/40 p-4">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -31,6 +48,21 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
             onChange={(event) => updateField('name', event.target.value)}
             value={value.name}
           />
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-sm text-slate-300">动作层级</span>
+          <select
+            className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            onChange={(event) => updateField('tier', event.target.value)}
+            value={value.tier}
+          >
+            {exerciseTierOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <fieldset className="space-y-2 md:col-span-2 xl:col-span-2">
@@ -118,22 +150,55 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm text-slate-300">次数</span>
-          <input
+          <span className="text-sm text-slate-300">组型</span>
+          <select
             className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
-            inputMode="numeric"
-            onChange={(event) => updateField('reps', event.target.value)}
-            step="1"
-            type="number"
-            value={value.reps}
-          />
+            onChange={(event) => updateSetType(event.target.value)}
+            value={value.setType}
+          >
+            {exerciseSetTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </label>
+
+        {value.setType === 'custom' ? (
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">次数表达</span>
+            <input
+              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+              onChange={(event) => updateField('repsText', event.target.value)}
+              placeholder="例如：6-8、AMRAP、阶梯"
+              value={value.repsText}
+            />
+          </label>
+        ) : (
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">次数</span>
+            <input
+              className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+              inputMode="numeric"
+              onChange={(event) => updateField('reps', event.target.value)}
+              step="1"
+              type="number"
+              value={value.reps}
+            />
+          </label>
+        )}
+
+        {value.setType === 'custom' ? (
+          <p className="self-end text-xs leading-6 text-slate-400">
+            自定义组型会以“次数表达”为唯一来源，便于兼容 AMRAP、范围次数和周期计划写法。
+          </p>
+        ) : null}
 
         <label className="space-y-2">
           <span className="text-sm text-slate-300">RPE</span>
           <input
-            aria-invalid={Boolean(rpeError)}
             className="w-full rounded-md border border-fitloop-line bg-fitloop-ink/60 px-3 py-2 text-white outline-none transition focus:border-fitloop-orange"
+            aria-invalid={Boolean(rpeError)}
             inputMode="decimal"
             max="10"
             min="0"
