@@ -6,6 +6,7 @@ import PlanExerciseItem from './PlanExerciseItem.jsx'
 import PlanDayEmptyState from './plan-rest/PlanDayEmptyState.jsx'
 import PlanRestDayPanel from './plan-rest/PlanRestDayPanel.jsx'
 import { createExerciseDraft } from '../utils/exerciseForm.js'
+import { NEW_PLAN_EXERCISE_ID } from '../utils/planEditorState.js'
 import { buildPlanDayDisplayModel } from '../utils/planDayDisplay.js'
 import { getPlanDayTypeSuggestions } from '../utils/weeklyPlan.js'
 
@@ -17,6 +18,7 @@ function PlanDayCard({
   isTrainingDay,
   dayTypeOptions,
   editingExerciseId,
+  isExerciseEditing,
   exerciseDraft,
   oneRmOptions,
   onToggle,
@@ -38,9 +40,9 @@ function PlanDayCard({
     isTrainingDay,
   })
   const showNewExerciseEditor =
-    displayModel.showAddExerciseButton && editingExerciseId === '__new__'
+    displayModel.showAddExerciseButton && editingExerciseId === NEW_PLAN_EXERCISE_ID
   const hasExercises = plan.exercises.length > 0
-  // 正在新增动作时优先展示编辑器，避免空状态和表单同时抢占注意力。
+  // 新增动作时优先展示新增表单，避免和空状态提示同时抢占注意力。
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
 
   return (
@@ -68,7 +70,7 @@ function PlanDayCard({
           {displayModel.showAddExerciseButton ? (
             <div className="flex flex-wrap gap-2">
               <PlanDayCardButton kind="primary" onClick={onStartAdd}>
-                新增动作
+                添加动作
               </PlanDayCardButton>
             </div>
           ) : null}
@@ -82,6 +84,7 @@ function PlanDayCard({
               onSave={onSaveExercise}
               rpeError={rpeError}
               saveLabel="保存新增动作"
+              title="新增动作"
               value={exerciseDraft}
             />
           ) : null}
@@ -113,7 +116,7 @@ function PlanDayCard({
                 <PlanExerciseItem
                   draft={exerciseDraft}
                   exercise={exercise}
-                  isEditing={editingExerciseId === exercise.id}
+                  isEditing={isExerciseEditing(exercise.id)}
                   key={exercise.id}
                   onCancel={onCancelEditing}
                   onDelete={() => onDeleteExercise(exercise.id)}

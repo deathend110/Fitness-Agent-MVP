@@ -66,7 +66,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         </label>
 
         <fieldset className="space-y-2">
-          <legend className="text-sm text-slate-300">重量来源</legend>
+          <legend className="text-sm text-slate-300">负重来源</legend>
           <div className="flex flex-wrap gap-2">
             {exerciseWeightModes.map((option) => {
               const checked = value.weightMode === option.value
@@ -82,9 +82,9 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
                 >
                   <input
                     checked={checked}
+                    name={modeName}
                     onChange={() => updateWeightMode(option.value)}
                     type="radio"
-                    name={modeName}
                     value={option.value}
                   />
                   {option.label}
@@ -170,7 +170,7 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
             <input
               className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
               onChange={(event) => updateField('repsText', event.target.value)}
-              placeholder="例如：6-8、AMRAP、阶梯"
+              placeholder="例如：6-8、AMRAP、阶梯组"
               value={value.repsText}
             />
           </label>
@@ -190,15 +190,15 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
 
         {value.setType === 'custom' ? (
           <p className="self-end text-xs leading-6 text-slate-400">
-            自定义组型会以“次数表达”为唯一来源，便于兼容 AMRAP、范围次数和周期计划写法。
+            自定义组型会把“次数表达”作为唯一来源，便于兼容 AMRAP、范围次数和周期计划写法。
           </p>
         ) : null}
 
         <label className="space-y-2">
           <span className="text-sm text-slate-300">RPE</span>
           <input
-            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             aria-invalid={Boolean(rpeError)}
+            className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             inputMode="decimal"
             max="10"
             min="0"

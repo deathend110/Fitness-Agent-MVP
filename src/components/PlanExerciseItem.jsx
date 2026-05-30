@@ -1,5 +1,9 @@
+import { useEffect, useRef, useState } from 'react'
 import { buildPlanExerciseCardModel } from '../utils/planExerciseCard.js'
-import PlanDayCardButton from './PlanDayCardButton.jsx'
+import {
+  executePlanExerciseMenuAction,
+  getPlanExerciseMenuActions,
+} from '../utils/planEditorState.js'
 import PlanExerciseEditorCard from './PlanExerciseEditorCard.jsx'
 
 function PlanExerciseItem({
@@ -16,6 +20,47 @@ function PlanExerciseItem({
   rpeError,
 }) {
   const cardModel = buildPlanExerciseCardModel(exercise, profile)
+  const menuActions = getPlanExerciseMenuActions()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return undefined
+    }
+
+    // 局部菜单只服务单个动作卡片，点击外部或按 Esc 时立即关闭，避免挂出全局弹窗体系。
+    function handlePointerDown(event) {
+      if (!menuRef.current?.contains(event.target)) {
+        setMenuOpen(false)
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [menuOpen])
+
+  function handleMenuAction(actionKey) {
+    const didHandle = executePlanExerciseMenuAction(actionKey, {
+      edit: onEdit,
+      delete: onDelete,
+    })
+
+    if (didHandle) {
+      setMenuOpen(false)
+    }
+  }
 
   return (
     <li
@@ -29,6 +74,7 @@ function PlanExerciseItem({
           onSave={onSave}
           rpeError={rpeError}
           saveLabel="保存动作"
+          title={`编辑动作 · ${cardModel.name}`}
           value={draft}
         />
       ) : (
@@ -60,15 +106,41 @@ function PlanExerciseItem({
               <p className="mt-2 text-xs leading-5 text-slate-400">{cardModel.summaryLabel}</p>
             </div>
 
-            <div className="flex shrink-0 items-start gap-2">
+            <div className="relative flex shrink-0 items-start gap-2" ref={menuRef}>
               <button
-                aria-label="更多操作（预留）"
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                aria-label="更多操作"
                 className={cardModel.actionSlotClassName}
-                title="更多操作（预留）"
+                onClick={() => setMenuOpen((current) => !current)}
+                title="更多操作"
                 type="button"
               >
                 ...
               </button>
+
+              {menuOpen ? (
+                <div
+                  className="absolute right-0 top-10 z-20 min-w-32 rounded-xl border border-fitloop-line bg-fitloop-panel p-1.5 shadow-lg shadow-black/30"
+                  role="menu"
+                >
+                  {menuActions.map((action) => (
+                    <button
+                      className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition ${
+                        action.tone === 'danger'
+                          ? 'text-rose-300 hover:bg-rose-500/10'
+                          : 'text-slate-200 hover:bg-white/5'
+                      }`}
+                      key={action.key}
+                      onClick={() => handleMenuAction(action.key)}
+                      role="menuitem"
+                      type="button"
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -105,13 +177,6 @@ function PlanExerciseItem({
             <p className={`mt-2 break-words text-xs leading-5 ${cardModel.noteClassName}`}>
               {cardModel.noteLabel}
             </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <PlanDayCardButton onClick={onEdit}>编辑</PlanDayCardButton>
-            <PlanDayCardButton kind="danger" onClick={onDelete}>
-              删除
-            </PlanDayCardButton>
           </div>
         </div>
       )}

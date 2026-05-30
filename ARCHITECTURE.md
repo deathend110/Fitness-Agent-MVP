@@ -114,7 +114,7 @@ docs/
 
 - `src/components/PlanExerciseItem.jsx`
   - 负责单个动作卡片的展示和局部编辑切换
-  - 当前训练日卡片采用高信息密度布局，统一承载主辅项、负重来源、组次、RPE、备注与后续菜单占位入口
+  - 当前训练日卡片采用高信息密度布局，统一承载主辅项、负重来源、组次、RPE、备注与右上角轻量操作菜单
 
 - `src/components/ExerciseEditor.jsx`
   - 负责动作编辑表单本体
@@ -130,6 +130,10 @@ docs/
 
 - `src/utils/exerciseForm.js`
   - 负责表单草稿与计划动作结构之间的转换
+
+- `src/utils/planEditorState.js`
+  - 负责训练计划页新增 / 编辑 / 删除动作时的局部编辑状态契约
+  - 集中约束“当前编辑的是哪一天哪一个动作”，避免跨日期误编辑，并为卡片菜单动作提供稳定映射
 
 - `src/utils/planExerciseCard.js`
   - 负责把动作结构转换成卡片展示模型
