@@ -3,14 +3,175 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family:
-    "Microsoft YaHei",
-    "PingFang SC",
+    'Microsoft YaHei',
+    'PingFang SC',
     system-ui,
     sans-serif;
+  --rm-bg: #f7f9ff;
+  --rm-canvas: #f3f6ff;
+  --rm-panel: #ffffff;
+  --rm-panel-muted: #eef2ff;
+  --rm-border: #d7def0;
+  --rm-border-strong: #c3cee7;
+  --rm-text: #182033;
+  --rm-text-muted: #5f6b85;
+  --rm-text-soft: #7f8aa3;
+  --rm-accent: #6d5efc;
+  --rm-accent-strong: #5a4cf2;
+  --rm-accent-soft: #eef0ff;
+  --rm-success: #12a150;
+  --rm-success-soft: #e9f9ef;
+  --rm-warning: #b86a00;
+  --rm-warning-soft: #fff4df;
+  --rm-danger: #d33b57;
+  --rm-danger-soft: #ffedf0;
+  background-color: var(--rm-bg);
+  color: var(--rm-text);
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(109, 94, 252, 0.08), transparent 38%),
+    linear-gradient(180deg, #fbfcff 0%, var(--rm-bg) 52%, #f1f5ff 100%);
 }
 
 body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent;
+  color: var(--rm-text);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+
+  ::selection {
+    background: rgba(109, 94, 252, 0.18);
+    color: var(--rm-text);
+  }
+}
+
+@layer utilities {
+  /* 过渡阶段用全局工具覆盖旧的深色 token，让现有页面先落到明亮主题上。 */
+  .bg-fitloop-ink {
+    background-color: var(--rm-bg) !important;
+  }
+
+  .bg-fitloop-ink\/30 {
+    background-color: rgba(238, 242, 255, 0.72) !important;
+  }
+
+  .bg-fitloop-ink\/40 {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  .bg-fitloop-ink\/50 {
+    background-color: rgba(238, 242, 255, 0.9) !important;
+  }
+
+  .bg-fitloop-ink\/60 {
+    background-color: rgba(243, 246, 255, 0.98) !important;
+  }
+
+  .bg-fitloop-panel {
+    background-color: var(--rm-panel) !important;
+  }
+
+  .bg-fitloop-panel\/70,
+  .bg-fitloop-panel\/80 {
+    background-color: rgba(255, 255, 255, 0.94) !important;
+  }
+
+  .border-fitloop-line {
+    border-color: var(--rm-border) !important;
+  }
+
+  .border-fitloop-line\/60,
+  .border-fitloop-line\/70,
+  .border-fitloop-line\/80 {
+    border-color: rgba(215, 222, 240, 0.92) !important;
+  }
+
+  .border-fitloop-orange,
+  .border-fitloop-orange\/30,
+  .border-fitloop-orange\/35,
+  .border-fitloop-orange\/40 {
+    border-color: rgba(109, 94, 252, 0.32) !important;
+  }
+
+  .bg-fitloop-orange {
+    background-color: var(--rm-accent) !important;
+  }
+
+  .bg-fitloop-orange\/8 {
+    background-color: rgba(109, 94, 252, 0.08) !important;
+  }
+
+  .bg-fitloop-orange\/10 {
+    background-color: rgba(109, 94, 252, 0.1) !important;
+  }
+
+  .bg-fitloop-orange\/15 {
+    background-color: rgba(109, 94, 252, 0.14) !important;
+  }
+
+  .text-fitloop-orange {
+    color: var(--rm-accent) !important;
+  }
+
+  .text-fitloop-mint {
+    color: var(--rm-success) !important;
+  }
+
+  .text-white,
+  .text-slate-100,
+  .text-slate-200,
+  .text-slate-50 {
+    color: var(--rm-text) !important;
+  }
+
+  .text-slate-300 {
+    color: var(--rm-text-muted) !important;
+  }
+
+  .text-slate-400,
+  .text-slate-500 {
+    color: var(--rm-text-soft) !important;
+  }
+
+  .bg-black\/10 {
+    background-color: rgba(238, 242, 255, 0.76) !important;
+  }
+
+  .shadow-black\/20 {
+    --tw-shadow-color: rgba(157, 169, 206, 0.16) !important;
+    --tw-shadow: 0 20px 45px -28px var(--tw-shadow-color) !important;
+    --tw-shadow-colored: 0 20px 45px -28px var(--tw-shadow-color) !important;
+  }
+
+  .hover\:border-slate-400:hover {
+    border-color: var(--rm-border-strong) !important;
+  }
+
+  .hover\:text-white:hover {
+    color: var(--rm-text) !important;
+  }
+
+  .focus\:border-fitloop-orange:focus {
+    border-color: var(--rm-accent) !important;
+    box-shadow: 0 0 0 3px rgba(109, 94, 252, 0.12);
+  }
+
+  .accent-fitloop-orange {
+    accent-color: var(--rm-accent);
+  }
 }
