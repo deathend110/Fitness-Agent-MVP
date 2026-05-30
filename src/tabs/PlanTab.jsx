@@ -3,7 +3,7 @@ import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard
 import PlanWeekGrid from '../components/plan-grid/PlanWeekGrid.jsx'
 import PlanWeekGridColumn from '../components/plan-grid/PlanWeekGridColumn.jsx'
 import PlanHeaderToolbar from '../components/plan-header/PlanHeaderToolbar.jsx'
-import { getTodayKey } from '../utils/calc.js'
+import { getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildExerciseSavePayload, getRpeValidationError } from '../utils/exerciseForm.js'
 import { buildPlanHeaderModel } from '../utils/planHeader.js'
 import { buildWeeklyPlanLayoutModel } from '../utils/planLayout.js'
@@ -39,11 +39,11 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
   const oneRmOptions = getOneRmOptions(profile)
   const dayTypeOptions = getPlanDayTypes()
   const layoutModel = useMemo(() => buildWeeklyPlanLayoutModel(weeklyPlan), [weeklyPlan])
-  // 头部周信息优先复用 weeklyPlan 内的真实元数据，空数据时再回退到当前自然周。
+  // 头部周信息优先复用 weeklyPlan 内的真实元数据，日期基准必须传入可解析的真实日期字符串。
   const headerModel = useMemo(
     () =>
       buildPlanHeaderModel({
-        referenceDate: getTodayKey(),
+        referenceDate: getTodayStr(),
         weeklyPlan,
       }),
     [weeklyPlan],
