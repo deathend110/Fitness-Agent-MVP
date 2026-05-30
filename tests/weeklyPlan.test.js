@@ -10,12 +10,41 @@ import {
   updateExerciseInDay,
 } from '../src/utils/weeklyPlan.js'
 
-test('updateDayType 将已有默认类型写回时保留动作', () => {
+test('updateDayType 切换到 rest 时保留原有动作', () => {
   const nextPlan = updateDayType(demoWeeklyPlan, 'Monday', 'rest')
 
   assert.equal(nextPlan.Monday.type, 'rest')
   assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length)
   assert.deepEqual(nextPlan.Tuesday, demoWeeklyPlan.Tuesday)
+})
+
+test('updateDayType 遇到空字符串或纯空白时回退到 rest 并保留动作', () => {
+  const weeklyPlan = {
+    ...demoWeeklyPlan,
+    Monday: {
+      type: '',
+      exercises: demoWeeklyPlan.Monday.exercises,
+    },
+  }
+
+  const nextPlan = updateDayType(weeklyPlan, 'Monday', '   ')
+
+  assert.equal(nextPlan.Monday.type, 'rest')
+  assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length)
+})
+
+test('updateDayType 会把损坏的单日计划恢复为默认结构', () => {
+  const nextPlan = updateDayType(
+    {
+      ...demoWeeklyPlan,
+      Monday: null,
+    },
+    'Monday',
+    '',
+  )
+
+  assert.equal(nextPlan.Monday.type, 'rest')
+  assert.deepEqual(nextPlan.Monday.exercises, [])
 })
 
 test('updateDayType 会保留自定义训练类型', () => {
@@ -25,7 +54,14 @@ test('updateDayType 会保留自定义训练类型', () => {
   assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length)
 })
 
-test('getPlanDayTypes 提供默认训练类型作为快捷起点', () => {
+test('updateDayType 会保留旧枚举训练类型', () => {
+  const nextPlan = updateDayType(demoWeeklyPlan, 'Monday', '腿日')
+
+  assert.equal(nextPlan.Monday.type, '腿日')
+  assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length)
+})
+
+test('getPlanDayTypes 提供默认训练类型快捷选项', () => {
   assert.deepEqual(getPlanDayTypes(), ['腿日', '推日', '拉日', '有氧', 'rest'])
 })
 
@@ -38,6 +74,10 @@ test('getPlanDayTypeSuggestions 会把当前自定义类型补进快捷候选', 
     'rest',
     'upper body strength',
   ])
+})
+
+test('getPlanDayTypeSuggestions 会忽略空白当前类型', () => {
+  assert.deepEqual(getPlanDayTypeSuggestions('   '), ['腿日', '推日', '拉日', '有氧', 'rest'])
 })
 
 test('addExerciseToDay 新增百分比动作时会生成 id 且 kg 为 null', () => {

@@ -15,6 +15,34 @@ function createFallbackId() {
   return `exercise-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeDayType(type) {
+  if (typeof type !== 'string') {
+    return 'rest'
+  }
+
+  const trimmedType = type.trim()
+
+  return trimmedType || 'rest'
+}
+
+function normalizeDayPlan(dayPlan = {}) {
+  if (!isPlainObject(dayPlan)) {
+    return {
+      type: 'rest',
+      exercises: [],
+    }
+  }
+
+  return {
+    type: normalizeDayType(dayPlan.type),
+    exercises: Array.isArray(dayPlan.exercises) ? dayPlan.exercises : [],
+  }
+}
+
 export function createExerciseId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -23,14 +51,7 @@ export function createExerciseId() {
   return createFallbackId()
 }
 
-function getDefaultDayPlan(dayPlan = {}) {
-  return {
-    type: dayPlan.type ?? 'rest',
-    exercises: Array.isArray(dayPlan.exercises) ? dayPlan.exercises : [],
-  }
-}
-
-// 计划数据层只接受 0-10 的 RPE，超出范围时统一压成 null，避免非法强度写入 localStorage。
+// 训练计划层只保留合法的 0-10 RPE，越界或空值统一归一成 null，避免脏数据写回本地存储。
 function normalizeRpe(rpe) {
   if (!Number.isFinite(rpe)) {
     return null
@@ -73,11 +94,12 @@ function normalizeExercise(exercise = {}, fallbackId) {
 }
 
 function updateDayPlan(weeklyPlan, dayKey, updater) {
-  const currentDayPlan = getDefaultDayPlan(weeklyPlan?.[dayKey])
+  const safeWeeklyPlan = isPlainObject(weeklyPlan) ? weeklyPlan : {}
+  const currentDayPlan = normalizeDayPlan(safeWeeklyPlan[dayKey])
   const nextDayPlan = updater(currentDayPlan)
 
   return {
-    ...weeklyPlan,
+    ...safeWeeklyPlan,
     [dayKey]: nextDayPlan,
   }
 }
@@ -88,9 +110,10 @@ export function getPlanDayTypes() {
 
 export function getPlanDayTypeSuggestions(currentType = '') {
   const suggestions = [...PLAN_DAY_TYPES]
+  const normalizedCurrentType = normalizeDayType(currentType)
 
-  if (typeof currentType === 'string' && currentType && !suggestions.includes(currentType)) {
-    suggestions.push(currentType)
+  if (normalizedCurrentType !== 'rest' && !suggestions.includes(normalizedCurrentType)) {
+    suggestions.push(normalizedCurrentType)
   }
 
   return suggestions
@@ -101,8 +124,7 @@ export function getWeekdayOrder() {
 }
 
 export function updateDayType(weeklyPlan, dayKey, nextType) {
-  const normalizedType =
-    typeof nextType === 'string' && nextType ? nextType : 'rest'
+  const normalizedType = normalizeDayType(nextType)
 
   return updateDayPlan(weeklyPlan, dayKey, (dayPlan) => ({
     ...dayPlan,
