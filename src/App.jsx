@@ -11,6 +11,7 @@ import {
   storageKeys,
 } from './utils/defaultData.js'
 import { loadStorage, migrateLegacyDemoData, saveStorage } from './utils/storage.js'
+import { normalizeWeeklyPlan } from './utils/weeklyPlan.js'
 
 function loadInitialState(key, fallback) {
   // 先执行一次性迁移，再读取当前版本的本地数据，避免旧 demo 数据继续灌入页面。
@@ -22,7 +23,7 @@ function App() {
   const [activeTabId, setActiveTabId] = useState('profile')
   const [profile, setProfile] = useState(() => loadInitialState(storageKeys.profile, defaultProfile))
   const [weeklyPlan, setWeeklyPlan] = useState(() =>
-    loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan),
+    normalizeWeeklyPlan(loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan)),
   )
   const [dailyLog, setDailyLog] = useState(() =>
     loadInitialState(storageKeys.dailyLog, defaultDailyLog),
@@ -54,7 +55,7 @@ function App() {
     chatHistory: nextChatHistory,
   }) {
     setProfile(nextProfile)
-    setWeeklyPlan(nextWeeklyPlan)
+    setWeeklyPlan(normalizeWeeklyPlan(nextWeeklyPlan))
     setDailyLog(nextDailyLog)
     setChatHistory(nextChatHistory)
   }

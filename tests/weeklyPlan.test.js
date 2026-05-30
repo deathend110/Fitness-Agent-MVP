@@ -5,6 +5,7 @@ import {
   addExerciseToDay,
   getPlanDayTypes,
   getPlanDayTypeSuggestions,
+  normalizeWeeklyPlan,
   removeExerciseFromDay,
   updateDayType,
   updateExerciseInDay,
@@ -98,6 +99,13 @@ test('addExerciseToDay 新增百分比动作时会生成 id 且 kg 为 null', ()
   assert.equal(addedExercise.ref1RM, 'squat')
   assert.equal(addedExercise.pct, 0.75)
   assert.equal(addedExercise.kg, null)
+  assert.equal(addedExercise.tier, 'main')
+  assert.equal(addedExercise.template.loadMode, 'percentage')
+  assert.equal(addedExercise.template.setType, 'straight')
+  assert.equal(addedExercise.template.sets, 4)
+  assert.equal(addedExercise.template.repsText, '6')
+  assert.equal(addedExercise.instance.pct, 0.75)
+  assert.equal(addedExercise.instance.kg, null)
 })
 
 test('addExerciseToDay 新增固定重量动作时会清空 ref1RM 和 pct', () => {
@@ -153,6 +161,10 @@ test('updateExerciseInDay 只更新目标日期中的目标动作', () => {
   assert.equal(nextPlan.Monday.exercises[0].name, '暂停深蹲')
   assert.equal(nextPlan.Monday.exercises[0].kg, null)
   assert.equal(nextPlan.Monday.exercises[0].pct, 0.7)
+  assert.equal(nextPlan.Monday.exercises[0].tier, 'main')
+  assert.equal(nextPlan.Monday.exercises[0].template.repsText, '4')
+  assert.equal(nextPlan.Monday.exercises[0].instance.pct, 0.7)
+  assert.equal(nextPlan.Monday.exercises[0].instance.rpe, 8)
   assert.equal(nextPlan.Wednesday.exercises[0].name, demoWeeklyPlan.Wednesday.exercises[0].name)
 })
 
@@ -178,4 +190,32 @@ test('removeExerciseFromDay 删除动作时不会影响其他日期', () => {
   assert.equal(nextPlan.Monday.exercises.some((exercise) => exercise.id === 'monday-rdl'), false)
   assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length - 1)
   assert.equal(nextPlan.Friday.exercises.length, demoWeeklyPlan.Friday.exercises.length)
+})
+
+test('normalizeWeeklyPlan 会把旧结构动作升级为结构化字段并补齐 7 天', () => {
+  const normalizedPlan = normalizeWeeklyPlan({
+    Monday: {
+      type: '腿日',
+      exercises: [
+        {
+          id: 'legacy-squat',
+          name: '深蹲',
+          ref1RM: 'squat',
+          pct: 0.8,
+          kg: null,
+          sets: 5,
+          reps: 3,
+          rpe: 8,
+          note: '主项',
+        },
+      ],
+    },
+  })
+
+  assert.equal(normalizedPlan.Monday.exercises[0].tier, 'main')
+  assert.equal(normalizedPlan.Monday.exercises[0].template.loadMode, 'percentage')
+  assert.equal(normalizedPlan.Monday.exercises[0].template.repsText, '3')
+  assert.equal(normalizedPlan.Monday.exercises[0].instance.pct, 0.8)
+  assert.equal(normalizedPlan.Monday.exercises[0].instance.note, '主项')
+  assert.deepEqual(normalizedPlan.Sunday, { type: 'rest', exercises: [] })
 })

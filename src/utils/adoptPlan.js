@@ -1,3 +1,5 @@
+import { normalizePlannedExercise } from './weeklyPlan.js'
+
 function buildFailureResult(weeklyPlan, message) {
   return {
     ok: false,
@@ -54,10 +56,13 @@ export function adoptPlanChange(weeklyPlan = {}, day, changes = []) {
       )
     }
 
-    nextExercises[targetIndex] = {
-      ...nextExercises[targetIndex],
-      [field]: change.newValue,
-    }
+    nextExercises[targetIndex] = normalizePlannedExercise(
+      {
+        ...nextExercises[targetIndex],
+        [field]: change.newValue,
+      },
+      nextExercises[targetIndex].id,
+    )
   }
 
   return {
