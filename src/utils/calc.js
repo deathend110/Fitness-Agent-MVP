@@ -13,6 +13,11 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function toNullableNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function normalizeDecimal(value, fractionDigits = 1) {
   const parsed = Number(value)
 
@@ -22,6 +27,14 @@ function normalizeDecimal(value, fractionDigits = 1) {
 
   const normalized = Number(parsed.toFixed(fractionDigits))
   return `${normalized}`
+}
+
+function roundTo(value, fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return null
+  }
+
+  return Number(value.toFixed(fractionDigits))
 }
 
 function getRestPlan() {
@@ -97,8 +110,57 @@ export function calcTrainingKcal(exercises = [], oneRM = {}) {
   return Math.round(totalVolume * 0.1)
 }
 
-// 汇总今天的训练与热量上下文，供页面或后续 prompt 构建按需解构。
-export function calcTDEE(profile = {}, weeklyPlan = {}, dailyLog = {}) {
+function calcBMI(profileBasic = {}) {
+  const weight = toNullableNumber(profileBasic.weight)
+  const heightCm = toNullableNumber(profileBasic.height)
+
+  if (weight === null || weight <= 0 || heightCm === null || heightCm <= 0) {
+    return null
+  }
+
+  const heightM = heightCm / 100
+  return roundTo(weight / (heightM * heightM), 1)
+}
+
+// 蛋白质按体重折算采用 g/kg，适合作为 prompt 与 UI 的统一口径。
+function calcProteinPerKg(proteinIntake, weight) {
+  if (!Number.isFinite(proteinIntake) || proteinIntake <= 0) {
+    return null
+  }
+
+  if (!Number.isFinite(weight) || weight <= 0) {
+    return null
+  }
+
+  return roundTo(proteinIntake / weight, 1)
+}
+
+function getCalorieStatus(delta) {
+  if (!Number.isFinite(delta)) {
+    return 'unknown'
+  }
+
+  if (delta > 100) {
+    return 'surplus'
+  }
+
+  if (delta < -100) {
+    return 'deficit'
+  }
+
+  return 'balanced'
+}
+
+function getProteinStatus(proteinPerKg) {
+  if (!Number.isFinite(proteinPerKg)) {
+    return 'unknown'
+  }
+
+  return proteinPerKg >= 1.6 ? 'met' : 'low'
+}
+
+// 汇总今日本地即可确定的训练、营养与恢复指标，供 prompt 注入和页面展示复用。
+export function buildDailyMetricsSummary(profile = {}, weeklyPlan = {}, dailyLog = {}) {
   const todayKey = getTodayKey()
   const todayStr = getTodayStr()
   const todayPlan = weeklyPlan?.[todayKey] ?? getRestPlan()
@@ -108,7 +170,14 @@ export function calcTDEE(profile = {}, weeklyPlan = {}, dailyLog = {}) {
     ? calcTrainingKcal(todayPlan.exercises, profile.oneRM)
     : 0
   const tdee = Math.round(bmr * 1.2 + trainingKcal)
-  const todayKcal = toNumber(dailyLog?.[todayStr]?.kcal)
+  const todayLog = dailyLog?.[todayStr] ?? {}
+  const calorieIntake = toNullableNumber(todayLog.kcal)
+  const proteinIntake = toNullableNumber(todayLog.protein)
+  const sleepHours = toNullableNumber(todayLog.sleep)
+  const fatigueLevel = toNullableNumber(todayLog.fatigue)
+  const calorieDelta = calorieIntake === null ? null : calorieIntake - tdee
+  const bodyWeight = toNullableNumber(profile?.basic?.weight)
+  const proteinPerKg = calcProteinPerKg(proteinIntake, bodyWeight)
 
   return {
     todayKey,
@@ -116,9 +185,39 @@ export function calcTDEE(profile = {}, weeklyPlan = {}, dailyLog = {}) {
     todayPlan,
     isTrainingDay,
     bmr,
+    bmi: calcBMI(profile.basic),
     trainingKcal,
     tdee,
-    todayKcal,
-    delta: todayKcal - tdee,
+    calorie: {
+      intake: calorieIntake,
+      delta: calorieDelta,
+      status: getCalorieStatus(calorieDelta),
+    },
+    protein: {
+      intake: proteinIntake,
+      gramsPerKg: proteinPerKg,
+      status: getProteinStatus(proteinPerKg),
+    },
+    recovery: {
+      sleepHours,
+      fatigueLevel,
+    },
+  }
+}
+
+// 保持现有 prompt 等调用方的返回结构，避免 6.1 阶段扩散改动范围。
+export function calcTDEE(profile = {}, weeklyPlan = {}, dailyLog = {}) {
+  const summary = buildDailyMetricsSummary(profile, weeklyPlan, dailyLog)
+
+  return {
+    todayKey: summary.todayKey,
+    todayStr: summary.todayStr,
+    todayPlan: summary.todayPlan,
+    isTrainingDay: summary.isTrainingDay,
+    bmr: summary.bmr,
+    trainingKcal: summary.trainingKcal,
+    tdee: summary.tdee,
+    todayKcal: summary.calorie.intake ?? 0,
+    delta: summary.calorie.delta ?? 0,
   }
 }
