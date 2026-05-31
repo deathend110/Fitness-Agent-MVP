@@ -325,19 +325,14 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6">
-        <div
-          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
-            backendStatus.mode === 'fallback'
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
-              : backendStatus.mode === 'ready'
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
-                : 'border-slate-700 bg-slate-900/80 text-slate-200'
-          }`}
-        >
-          {backendStatus.message}
+      {backendStatus.mode === 'fallback' ? (
+        <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6">
+          {/* 只在后端不可用时提醒用户，正常同步成功不再占用顶部空间。 */}
+          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            {backendStatus.message}
+          </div>
         </div>
-      </div>
+      ) : null}
       <AppShell
         activeTabId={activeTabId}
         onTabChange={setActiveTabId}
