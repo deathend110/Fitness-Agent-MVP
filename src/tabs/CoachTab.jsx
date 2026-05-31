@@ -100,9 +100,12 @@ function CoachTab({
   weeklyPlan,
 }) {
   const [activeSessionId, setActiveSessionId] = useState(null)
+  const [attachedFiles, setAttachedFiles] = useState([])
+  const [backendSessionId, setBackendSessionId] = useState(null)
   const [draft, setDraft] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
   const [modelConfig, setModelConfig] = useState(FALLBACK_MODEL_CONFIG)
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODEL_CONFIG.defaultModel)
@@ -207,6 +210,67 @@ function CoachTab({
   }, [])
 
   useEffect(() => {
+    let ignore = false
+    const client = createBackendClient()
+
+    client
+      .getDefaultChatSession()
+      .then(async (session) => {
+        if (ignore || !Number.isInteger(session?.id)) {
+          return
+        }
+        setBackendSessionId(session.id)
+        const draftPayload = await client.getCoachDraft(session.id)
+        if (ignore) {
+          return
+        }
+        setDraft(draftPayload.content || '')
+        if (draftPayload.model) {
+          setSelectedModel(draftPayload.model)
+        }
+        if (draftPayload.thinking) {
+          setThinking(draftPayload.thinking)
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setBackendSessionId(null)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!Number.isInteger(backendSessionId)) {
+      return undefined
+    }
+
+    const client = createBackendClient()
+    const payload = {
+      content: draft,
+      model: selectedModel,
+      thinking,
+      attachedFileIds: attachedFiles.map((file) => file.id).filter(Number.isInteger),
+    }
+    const timer = window.setTimeout(() => {
+      client.saveCoachDraft(backendSessionId, payload).catch(() => null)
+    }, 500)
+
+    function flushDraft() {
+      client.saveCoachDraft(backendSessionId, payload).catch(() => null)
+    }
+
+    window.addEventListener('pagehide', flushDraft)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pagehide', flushDraft)
+    }
+  }, [attachedFiles, backendSessionId, draft, selectedModel, thinking])
+
+  useEffect(() => {
     let pollTimer = null
 
     function readStoredTask() {
@@ -300,7 +364,7 @@ function CoachTab({
 
       backgroundSubmitPromiseRef.current = (async () => {
         const task = await startBackgroundCoachReply(payload)
-        const taskRecord = buildBackgroundCoachTaskRecord(task, {
+        const taskRecord = buildBackgroundCoachTaskRecord({ ...task, files: payload.files }, {
           sourceUserIndex: payload.sourceUserIndex,
           userInput: payload.userInput,
         })
@@ -392,6 +456,7 @@ function CoachTab({
     }
 
     setActiveSessionId(null)
+    setAttachedFiles([])
     setDraft('')
     setErrorMessage('')
     setMessageMeta([])
@@ -459,6 +524,7 @@ function CoachTab({
     event.preventDefault()
 
     const userInput = draft.trim()
+    const draftBeforeSend = draft
     if (!userInput || isSending) {
       return
     }
@@ -473,8 +539,9 @@ function CoachTab({
     const requestPayload = {
       chatHistory,
       dailyLog,
+      files: attachedFiles,
       profile,
-      sessionId: getBackendSessionId(activeSessionId),
+      sessionId: backendSessionId ?? getBackendSessionId(activeSessionId),
       sourceUserIndex: nextHistory.length - 1,
       model: selectedModel,
       thinking,
@@ -490,7 +557,6 @@ function CoachTab({
     backgroundTaskStartedRef.current = false
     pendingRequestRef.current = requestPayload
     setStreamingText('')
-    setDraft('')
     setMessageMeta((currentMeta) => mergeMessageMeta(nextHistory, currentMeta))
     onChatHistoryChange(nextHistory)
 
@@ -520,6 +586,8 @@ function CoachTab({
       onChatHistoryChange(
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
+      setDraft('')
+      setAttachedFiles([])
     } catch (error) {
       if (backgroundSubmitPromiseRef.current) {
         await backgroundSubmitPromiseRef.current.catch(() => null)
@@ -528,6 +596,7 @@ function CoachTab({
       if (backgroundFallbackTriggeredRef.current) {
         return
       }
+      setDraft(draftBeforeSend)
       setErrorMessage(error?.message || 'AI 教练暂时不可用，请稍后重试。')
     } finally {
       setIsSending(false)
@@ -538,16 +607,43 @@ function CoachTab({
     }
   }
 
+  async function handleFilesSelected(files) {
+    if (!files.length) {
+      return
+    }
+
+    const client = createBackendClient()
+    setIsUploading(true)
+    setErrorMessage('')
+    try {
+      const uploadedFiles = []
+      for (const file of files) {
+        uploadedFiles.push(await client.uploadFile(file, { sessionId: backendSessionId }))
+      }
+      setAttachedFiles((current) => [...current, ...uploadedFiles])
+    } catch (error) {
+      setErrorMessage(error?.message || '文件上传失败，请稍后重试。')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   return (
     <CoachLayout
       composer={
         <Composer
+          attachedFiles={attachedFiles}
           draft={draft}
           errorMessage={errorMessage}
           isSending={isSending}
+          isUploading={isUploading}
           modelOptions={modelConfig.models}
           onDraftChange={setDraft}
+          onFilesSelected={handleFilesSelected}
           onModelChange={setSelectedModel}
+          onRemoveFile={(fileId) =>
+            setAttachedFiles((current) => current.filter((file) => file.id !== fileId))
+          }
           onSubmit={handleSubmit}
           onThinkingChange={setThinking}
           selectedModel={selectedModel}

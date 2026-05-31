@@ -131,6 +131,31 @@ export function createBackendClient(options = {}) {
     }
   }
 
+  async function uploadRequest(path, formData, requestOptions = {}) {
+    const { query, signal } = requestOptions
+
+    try {
+      const response = await fetchImpl(createRequestUrl(baseUrl, path, query), {
+        method: 'POST',
+        headers,
+        body: formData,
+        signal,
+      })
+
+      await assertOkResponse(response)
+      return readResponseData(response)
+    } catch (error) {
+      if (error instanceof BackendApiError) {
+        throw error
+      }
+
+      throw new BackendApiError(`后端服务连接失败，请确认本地后端已启动：${error.message}`, {
+        code: 'network_error',
+        cause: error,
+      })
+    }
+  }
+
   return {
     getProfile({ signal } = {}) {
       return request('/profile', { signal })
@@ -161,6 +186,22 @@ export function createBackendClient(options = {}) {
     },
     getModels({ signal } = {}) {
       return request('/models', { signal })
+    },
+    getDefaultChatSession({ signal } = {}) {
+      return request('/chat/sessions/default', { signal })
+    },
+    getCoachDraft(sessionId, { signal } = {}) {
+      return request(`/chat/sessions/${sessionId}/draft`, { signal })
+    },
+    saveCoachDraft(sessionId, payload, { signal } = {}) {
+      return request(`/chat/sessions/${sessionId}/draft`, { method: 'PUT', body: payload, signal })
+    },
+    async uploadFile(file, { sessionId, signal } = {}) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const query = sessionId === undefined || sessionId === null ? {} : { sessionId }
+      const data = await uploadRequest('/files/upload', formData, { query, signal })
+      return data?.file ?? data
     },
   }
 }

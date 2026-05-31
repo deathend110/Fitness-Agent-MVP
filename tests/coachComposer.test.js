@@ -14,6 +14,15 @@ test('ModelSelector 源码包含模型下拉和 thinking 控制契约', () => {
   assert.match(source, /value="max"/)
 })
 
+test('FileAttachmentTray 源码包含上传状态、文件 chip 和删除契约', () => {
+  const source = readFileSync('src/components/coach/FileAttachmentTray.jsx', 'utf-8')
+
+  assert.match(source, /type="file"/)
+  assert.match(source, /onFilesSelected/)
+  assert.match(source, /onRemoveFile/)
+  assert.match(source, /parserStatus/)
+})
+
 test('Coach 请求会携带模型和 thinking 配置', async () => {
   await requestCoachReply(
     {

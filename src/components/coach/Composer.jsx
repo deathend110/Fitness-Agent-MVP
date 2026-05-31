@@ -1,14 +1,19 @@
 import { useEffect, useRef } from 'react'
+import FileAttachmentTray from './FileAttachmentTray.jsx'
 import ModelSelector from './ModelSelector.jsx'
 
 function Composer({
+  attachedFiles = [],
   draft = '',
   errorMessage = '',
   helperText = 'AI 教练基于你的本地数据作答，不上传到服务器',
   isSending = false,
+  isUploading = false,
   modelOptions = [],
   onDraftChange,
+  onFilesSelected,
   onModelChange,
+  onRemoveFile,
   onSubmit,
   onThinkingChange,
   placeholder = 'Ask RepMind...',
@@ -52,16 +57,23 @@ function Composer({
         />
 
         <div className="flex items-center justify-between gap-3 px-3 pb-3">
-          <ModelSelector
-            disabled={isSending}
-            models={modelOptions}
-            onModelChange={onModelChange}
-            onThinkingChange={onThinkingChange}
-            selectedModel={selectedModel}
-            thinking={thinking}
+          <FileAttachmentTray
+            attachedFiles={attachedFiles}
+            disabled={isSending || isUploading}
+            isUploading={isUploading}
+            onFilesSelected={onFilesSelected}
+            onRemoveFile={onRemoveFile}
           />
 
           <div className="flex items-center gap-1.5">
+            <ModelSelector
+              disabled={isSending}
+              models={modelOptions}
+              onModelChange={onModelChange}
+              onThinkingChange={onThinkingChange}
+              selectedModel={selectedModel}
+              thinking={thinking}
+            />
             <button
               aria-label="语音输入占位"
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-fitloop-line text-slate-400 transition hover:border-fitloop-orange/30 hover:text-fitloop-orange disabled:opacity-40"
@@ -74,7 +86,7 @@ function Composer({
             <button
               aria-label="发送消息"
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-fitloop-orange text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={!draft.trim() || isSending}
+              disabled={!draft.trim() || isSending || isUploading}
               type="submit"
             >
               <span className="text-sm leading-none">{isSending ? '…' : '➤'}</span>

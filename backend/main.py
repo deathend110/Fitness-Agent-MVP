@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.chat import initialize_background_worker, router as chat_router
 from backend.api.daily_log import router as daily_log_router
+from backend.api.drafts import router as drafts_router
 from backend.api.files import router as files_router
 from backend.api.memory import router as memory_router
 from backend.api.models import router as models_router
@@ -50,6 +51,7 @@ async def get_health() -> dict[str, str]:
 app.include_router(profile_router)
 app.include_router(weekly_plan_router)
 app.include_router(daily_log_router)
+app.include_router(drafts_router)
 app.include_router(chat_router)
 app.include_router(files_router)
 app.include_router(memory_router)
