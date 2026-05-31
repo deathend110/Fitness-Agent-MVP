@@ -11,6 +11,9 @@ backend/.env
 backend/data/
 backend/__pycache__/
 backend/tests/__pycache__/
+backend/db/__pycache__/
+backend/db/migrations/__pycache__/
+backend/db/migrations/versions/__pycache__/
 .venv/
 
 npm-debug.log*
