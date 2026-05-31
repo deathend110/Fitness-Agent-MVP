@@ -148,6 +148,42 @@ class KnowledgeItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
 
+class UploadedFile(Base):
+    __tablename__ = "uploaded_file"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    extension: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # storage_path 保存相对 uploads_dir 的路径，避免把用户机器绝对路径写进数据库。
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    # 上传文件是本地缓存资料；只有摘要或用户确认后的稳定事实才能进入 knowledge/memory。
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    parser_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    parser_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
+class CoachDraft(Base):
+    __tablename__ = "coach_draft"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    thinking: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    attached_file_ids: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
 class ToolCallLog(Base):
     __tablename__ = "tool_call_log"
 

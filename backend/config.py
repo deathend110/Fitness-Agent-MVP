@@ -34,13 +34,33 @@ class Settings(BaseSettings):
 
     # 数据目录默认跟随后端工作目录，不额外写入系统盘的公共位置。
     data_dir: str = "./data"
+    uploads_dir: str = "./data/uploads"
     database_url: str = "sqlite+aiosqlite:///./data/repmind.db"
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    max_upload_mb: int = 15
+    allowed_upload_extensions: list[str] = Field(
+        default_factory=lambda: [
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp",
+            ".xlsx",
+            ".xlsm",
+            ".docx",
+            ".md",
+            ".txt",
+        ]
+    )
 
     # DeepSeek 密钥只允许保存在后端 .env 中，前端 bundle 永不直接读取。
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     default_model: str = "deepseek-v4-flash"
+    model_allowlist: list[str] = Field(
+        default_factory=lambda: ["deepseek-v4-flash", "deepseek-v4-pro"]
+    )
+    default_thinking_enabled: bool = False
+    default_thinking_budget: str = "auto"
     deepseek_timeout_seconds: float = 30.0
 
     @model_validator(mode="after")
@@ -48,6 +68,9 @@ class Settings(BaseSettings):
         data_path = Path(self.data_dir)
         if not data_path.is_absolute():
             self.data_dir = str((BACKEND_DIR / data_path).resolve())
+        uploads_path = Path(self.uploads_dir)
+        if not uploads_path.is_absolute():
+            self.uploads_dir = str((BACKEND_DIR / uploads_path).resolve())
         self.database_url = resolve_sqlite_url(self.database_url)
         return self
 
@@ -57,4 +80,5 @@ def get_settings() -> Settings:
     # 缓存配置对象，避免应用启动后重复读取环境变量。
     settings = Settings()
     Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
     return settings
