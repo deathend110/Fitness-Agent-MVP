@@ -471,6 +471,11 @@ src/
 - `src/components/app-shell/AppShell.jsx`
   - 负责整体“侧栏 + 主内容区 + 底部状态区”的编排。
   - 使用 `min-w-0` 与独立内容滚动区约束宽度和 overflow，避免默认制造整页横向滚动。
+  - 只消费 `appShellLayout.js` 输出的壳层布局契约，减少 JSX 内部散落的 coach 特判。
+
+- `src/components/app-shell/appShellLayout.js`
+  - 负责定义壳层布局模式契约。
+  - 当前提供 `default / coach` 两种模式，统一约束外层留白与内容区滚动策略。
 
 - `src/components/app-shell/ShellSidebar.jsx`
   - 负责品牌区、四个导航入口和当前工作区提示。
@@ -482,6 +487,10 @@ src/
 - `src/components/app-shell/appShellConfig.js`
   - 负责四个导航项、快捷按钮和状态文案配置。
   - 提供可被 `node --test` 直接验证的最小壳层契约。
+
+- `tests/appShellConfig.test.js`
+  - 直接校验 `appShellConfig.js` 与 `appShellLayout.js` 导出的稳定契约。
+  - 不再通过读取 `AppShell.jsx` 源码字符串推断 coach 页承载模式，降低重构噪音。
 
 ### 验证补充
 

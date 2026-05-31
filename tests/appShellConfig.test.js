@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -8,6 +7,10 @@ import {
   buildAppShellStatus,
   getActiveShellTab,
 } from '../src/components/app-shell/appShellConfig.js'
+import {
+  appShellLayoutModes,
+  getAppShellLayout,
+} from '../src/components/app-shell/appShellLayout.js'
 
 test('appShellTabs 保留四个核心导航并按壳层顺序排列', () => {
   assert.deepEqual(
@@ -37,14 +40,26 @@ test('appShellQuickActions 在 V1.6 侧栏中保持为空，避免出现底部�
   assert.deepEqual(appShellQuickActions, [])
 })
 
-test('AppShell 为 coach 页预留独立壳层类名分支', () => {
-  const appShellSource = fs.readFileSync(
-    new URL('../src/components/app-shell/AppShell.jsx', import.meta.url),
-    'utf8',
-  )
+test('appShellLayoutModes 暴露 coach 与默认页的稳定壳层布局契约', () => {
+  assert.deepEqual(Object.keys(appShellLayoutModes), ['default', 'coach'])
 
-  assert.match(appShellSource, /activeTabId === 'coach'/)
-  assert.match(appShellSource, /p-0/)
-  assert.match(appShellSource, /overflow-hidden/)
-  assert.match(appShellSource, /p-4 sm:p-5 lg:p-6/)
+  assert.deepEqual(appShellLayoutModes.coach, {
+    mode: 'coach',
+    wrapperClassName: 'flex min-w-0 flex-1 flex-col overflow-hidden bg-fitloop-canvas p-0',
+    contentClassName: 'fitloop-shell__content min-h-0 flex-1 overflow-hidden',
+  })
+
+  assert.deepEqual(appShellLayoutModes.default, {
+    mode: 'default',
+    wrapperClassName:
+      'flex min-w-0 flex-1 flex-col overflow-hidden bg-fitloop-canvas p-4 sm:p-5 lg:p-6',
+    contentClassName:
+      'fitloop-shell__content min-h-0 flex-1 overflow-y-auto overflow-x-hidden',
+  })
+})
+
+test('getAppShellLayout 让 coach 页使用沉浸承载模式，其他页面回退默认模式', () => {
+  assert.deepEqual(getAppShellLayout('coach'), appShellLayoutModes.coach)
+  assert.deepEqual(getAppShellLayout('plan'), appShellLayoutModes.default)
+  assert.deepEqual(getAppShellLayout('unknown'), appShellLayoutModes.default)
 })
