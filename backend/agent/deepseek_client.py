@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 import json
 from json import JSONDecodeError
 from typing import Any
@@ -23,6 +24,20 @@ class DeepSeekClientError(Exception):
         self.status = status
         self.code = code
         self.reason = reason
+
+
+@dataclass(frozen=True)
+class DeepSeekChatResult:
+    content: str
+    usage: dict[str, int] | None = None
+    reasoning_content: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
+class DeepSeekStreamEvent:
+    text: str = ""
+    usage: dict[str, int] | None = None
 
 
 class DeepSeekClient:
@@ -48,6 +63,26 @@ class DeepSeekClient:
     ) -> str | AsyncIterator[str]:
         if stream:
             return self.stream_chat(messages=messages, model=model)
+
+        result = await self.request_chat_with_usage(
+            messages=messages,
+            model=model,
+            stream=False,
+        )
+        return result.content
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        stream: bool = False,
+    ) -> DeepSeekChatResult:
+        if stream:
+            raise DeepSeekClientError(
+                "带 usage 的非流式请求不能启用 stream=True，请使用 stream_chat_with_usage。",
+                code="invalid_request",
+            )
 
         self._assert_api_key()
         payload = self._build_payload(messages=messages, model=model, stream=False)
@@ -75,7 +110,12 @@ class DeepSeekClient:
                 code="empty_content",
             )
 
-        return content
+        return DeepSeekChatResult(
+            content=content,
+            usage=self._read_usage_payload(payload),
+            reasoning_content=self._read_reasoning_content(payload),
+            tool_calls=self._read_tool_calls(payload),
+        )
 
     async def stream_chat(
         self,
@@ -83,6 +123,16 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
     ) -> AsyncIterator[str]:
+        async for event in self.stream_chat_with_usage(messages=messages, model=model):
+            if event.text:
+                yield event.text
+
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
         self._assert_api_key()
         payload = self._build_payload(messages=messages, model=model, stream=True)
 
@@ -98,6 +148,7 @@ class DeepSeekClient:
 
                     saw_done = False
                     yielded_text = False
+                    usage: dict[str, int] | None = None
 
                     async for raw_line in response.aiter_lines():
                         data = self._parse_sse_data_line(raw_line)
@@ -116,12 +167,16 @@ class DeepSeekClient:
                                 code="stream_parse_error",
                             ) from exc
 
+                        event_usage = self._read_usage_payload(event)
+                        if event_usage is not None:
+                            usage = event_usage
+
                         delta = self._read_delta_content(event)
                         if not delta:
                             continue
 
                         yielded_text = True
-                        yield delta
+                        yield DeepSeekStreamEvent(text=delta)
 
         except httpx.HTTPError as exc:
             raise DeepSeekClientError(
@@ -140,6 +195,9 @@ class DeepSeekClient:
                 "DeepSeek 流式响应已结束，但没有返回可展示的消息内容。",
                 code="empty_content",
             )
+
+        if usage is not None:
+            yield DeepSeekStreamEvent(usage=usage)
 
     def _assert_api_key(self) -> None:
         if self.api_key:
@@ -237,6 +295,59 @@ class DeepSeekClient:
 
         return content.strip()
 
+    def _read_reasoning_content(self, payload: Any) -> str | None:
+        message = self._read_first_message(payload)
+        if not isinstance(message, dict):
+            return None
+
+        reasoning_content = message.get("reasoning_content")
+        return reasoning_content if isinstance(reasoning_content, str) else None
+
+    def _read_tool_calls(self, payload: Any) -> list[dict[str, Any]] | None:
+        message = self._read_first_message(payload)
+        if not isinstance(message, dict):
+            return None
+
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            return None
+        return [item for item in tool_calls if isinstance(item, dict)]
+
+    def _read_first_message(self, payload: Any) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            return None
+
+        message = first_choice.get("message")
+        return message if isinstance(message, dict) else None
+
+    def _read_usage_payload(self, payload: Any) -> dict[str, int] | None:
+        if not isinstance(payload, dict):
+            return None
+
+        usage = payload.get("usage")
+        if not isinstance(usage, dict):
+            return None
+
+        fields = (
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "prompt_cache_hit_tokens",
+            "prompt_cache_miss_tokens",
+        )
+        normalized = {field: self._to_non_negative_int(usage.get(field)) for field in fields}
+        if normalized["total_tokens"] == 0:
+            normalized["total_tokens"] = normalized["prompt_tokens"] + normalized["completion_tokens"]
+        return normalized
+
     def _parse_sse_data_line(self, line: str) -> str | None:
         trimmed = line.strip()
         if not trimmed or trimmed.startswith(":") or not trimmed.startswith("data:"):
@@ -265,3 +376,12 @@ class DeepSeekClient:
             return ""
 
         return content
+
+    def _to_non_negative_int(self, value: Any) -> int:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int | float):
+            return max(0, int(value))
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        return 0

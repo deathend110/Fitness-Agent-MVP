@@ -199,6 +199,10 @@ docs/
   - 从 SQLite 读取 `profile / weekly_plan / daily_log / memory / knowledge / summary / recent_messages`
   - 返回 DeepSeek messages、模型配置和上下文调试信息，供 Chat API 与后续后台/工具循环复用
 
+- `backend/agent/usage_ledger.py`
+  - 负责规范化 DeepSeek `usage` 字段并写入 `UsageRecord`
+  - 汇总会话级 prompt/completion/total token 与 prompt cache hit/miss，用于评估稳定 prompt 前缀是否有效
+
 - `backend/agent/adopt_plan.py`
   - 负责 AI 计划建议的后端采纳校验、动作字段更新和动作结构归一化
   - 只支持 `action: "update"`，目标日期、动作名、字段名或 RPE 边界非法时返回失败结果，不写入数据库
@@ -444,9 +448,13 @@ CoachTab
   -> POST /api/chat/reply
       -> 若请求为 userInput，先 build_agent_request()
       -> 若请求为 messages[]，走 Phase 2 兼容路径
-      -> DeepSeek request_chat()
+      -> DeepSeek request_chat_with_usage()
       -> parse_ai_response(content)
       -> 成功后写入 user + assistant
+      -> 若 DeepSeek 返回 usage，同事务写入 UsageRecord
+  -> GET /api/chat/sessions/{id}/context/debug
+      -> summarize_session_usage()
+      -> 返回 token budget 与 cache hit/miss 汇总
   -> POST /api/chat/{session_id}/background
       -> BackgroundWorker.submit()
       -> asyncio.create_task()

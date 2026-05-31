@@ -17,11 +17,12 @@
 - 计划采纳后端校验与写回接口
 - Phase 3 数据模型：会话摘要、长期记忆、知识条目、工具调用日志和 usage 记录
 - Phase 3 后端上下文拼装：`userInput/sessionId` 可由后端读取 SQLite 状态并构建 DeepSeek messages
+- Phase 3 usage 观测：非流式与支持 usage 的流式响应完成后写入 `UsageRecord`，可查看 prompt cache hit/miss 汇总
 
 后续阶段仍未落地的内容：
 
 - AI 教练页真实多会话 UI
-- 长对话摘要压缩、memory 提取确认、usage/cache 统计写入与工具调用编排
+- 长对话摘要压缩、memory 提取确认与工具调用编排
 - 文件上传解析、模型选择、知识库、周期计划与预制计划库
 
 V2.3 Phase 2 已完成密钥后移、SSE 流式代理、离页后台思考和计划采纳后端化；Phase 3 已开始把 prompt 与上下文管理迁入后端 Agent Orchestrator。
@@ -153,6 +154,7 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `POST /api/chat/reply`
 - `POST /api/chat/{session_id}/background`
 - `GET /api/chat/background/{task_id}`
+- `GET /api/chat/sessions/{id}/context/debug`
 
 说明：
 
@@ -172,6 +174,7 @@ uv run alembic -c backend\alembic.ini upgrade head
 - 前端本地 `fitloop:coach-background-task` 会记录 `taskId / sessionId / sourceUserIndex / userContent / createdAt`，回页合并前用源 user 下标和内容确认仍是原始轮次
 - 后台任务失败或返回空内容时只记录 `failed` 状态和友好 message，不写入脏 assistant
 - 后台任务表当前存放在后端进程内存中，服务重启后旧 task_id 会返回 `not_found`
+- `/context/debug` 当前返回会话 usage 汇总和 token budget；`prompt_cache_hit_tokens / prompt_cache_miss_tokens` 直接来自 DeepSeek `usage`，不会伪造流式缺失字段
 
 ### localStorage 迁移
 
@@ -256,4 +259,5 @@ Phase 3 数据模型与上下文拼装定向测试：
 
 ```powershell
 uv run pytest backend\tests\test_phase3_models.py backend\tests\test_context_manager.py backend\tests\test_chat_session_context.py
+uv run pytest backend\tests\test_usage_ledger.py backend\tests\test_deepseek_client.py backend\tests\test_chat_stream.py
 ```

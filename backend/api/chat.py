@@ -15,6 +15,8 @@ from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWork
 from backend.agent.chat_session import build_agent_request
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
+from backend.agent.context_manager import TokenBudgetConfig
+from backend.agent.usage_ledger import record_usage, summarize_session_usage
 from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
 from backend.db.models import ChatMessage, ChatSession, utc_now
@@ -241,29 +243,85 @@ async def persist_successful_chat_turn(
     user_content: str,
     assistant_text: str,
     suggestion: dict[str, Any] | None,
+    model: str | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> None:
     now = utc_now()
     # 流式阶段不写半截 assistant；只有拿到完整回复并解析成功后，才把本轮 user + assistant 一起落库。
-    session.add_all(
-        [
-            ChatMessage(
-                session_id=chat_session.id,
-                role="user",
-                content=user_content,
-                suggestion=None,
-                created_at=now,
-            ),
-            ChatMessage(
-                session_id=chat_session.id,
-                role="assistant",
-                content=assistant_text,
-                suggestion=suggestion,
-                created_at=now,
-            ),
-        ]
+    user_message = ChatMessage(
+        session_id=chat_session.id,
+        role="user",
+        content=user_content,
+        suggestion=None,
+        created_at=now,
     )
+    assistant_message = ChatMessage(
+        session_id=chat_session.id,
+        role="assistant",
+        content=assistant_text,
+        suggestion=suggestion,
+        created_at=now,
+    )
+    session.add_all([user_message, assistant_message])
+    await session.flush()
+    if model is not None and usage is not None:
+        await record_usage(
+            session,
+            session_id=chat_session.id,
+            message_id=assistant_message.id,
+            model=model,
+            usage=usage,
+        )
     chat_session.updated_at = now
     await session.commit()
+
+
+async def request_deepseek_reply_with_usage(
+    *,
+    deepseek_client: DeepSeekClient,
+    messages: list[dict[str, Any]],
+    model: str,
+) -> tuple[str, dict[str, Any] | None]:
+    if hasattr(deepseek_client, "request_chat_with_usage"):
+        result = await deepseek_client.request_chat_with_usage(
+            messages=messages,
+            model=model,
+            stream=False,
+        )
+        return result.content, result.usage
+
+    content = await deepseek_client.request_chat(
+        messages=messages,
+        model=model,
+        stream=False,
+    )
+    if not isinstance(content, str):
+        raise DeepSeekClientError(
+            "DeepSeek 非流式响应格式异常，请稍后重试。",
+            code="invalid_response",
+        )
+    return content, None
+
+
+async def stream_deepseek_reply_with_usage(
+    *,
+    deepseek_client: DeepSeekClient,
+    messages: list[dict[str, Any]],
+    model: str,
+) -> AsyncIterator[tuple[str | None, dict[str, Any] | None]]:
+    if hasattr(deepseek_client, "stream_chat_with_usage"):
+        async for event in deepseek_client.stream_chat_with_usage(
+            messages=messages,
+            model=model,
+        ):
+            yield (event.text or None, event.usage)
+        return
+
+    async for chunk in deepseek_client.stream_chat(
+        messages=messages,
+        model=model,
+    ):
+        yield chunk, None
 
 
 @router.get("/sessions", response_model=list[ChatSessionSchema], response_model_by_alias=True)
@@ -329,12 +387,19 @@ async def stream_chat_reply(
 
     async def event_stream() -> AsyncIterator[str]:
         chunks: list[str] = []
+        usage: dict[str, Any] | None = None
 
         try:
-            async for chunk in deepseek_client.stream_chat(
+            async for chunk, event_usage in stream_deepseek_reply_with_usage(
+                deepseek_client=deepseek_client,
                 messages=request_messages,
                 model=selected_model,
             ):
+                if event_usage is not None:
+                    usage = event_usage
+                    continue
+                if chunk is None:
+                    continue
                 chunks.append(chunk)
                 yield build_sse_frame("delta", {"text": chunk})
 
@@ -347,6 +412,8 @@ async def stream_chat_reply(
                 user_content=user_content,
                 assistant_text=assistant_text,
                 suggestion=suggestion,
+                model=selected_model,
+                usage=usage,
             )
 
             yield build_sse_frame("suggestion", {"suggestion": suggestion})
@@ -386,16 +453,11 @@ async def request_chat_reply(
         request_messages = payload.messages
 
     try:
-        content = await deepseek_client.request_chat(
+        content, usage = await request_deepseek_reply_with_usage(
+            deepseek_client=deepseek_client,
             messages=request_messages,
             model=selected_model,
-            stream=False,
         )
-        if not isinstance(content, str):
-            raise DeepSeekClientError(
-                "DeepSeek 非流式响应格式异常，请稍后重试。",
-                code="invalid_response",
-            )
 
         parsed_reply = parse_ai_response(content)
         await persist_successful_chat_turn(
@@ -404,6 +466,8 @@ async def request_chat_reply(
             user_content=user_content,
             assistant_text=parsed_reply["text"],
             suggestion=parsed_reply["suggestion"],
+            model=selected_model,
+            usage=usage,
         )
         return ChatReplyResponseSchema(
             text=parsed_reply["text"],
@@ -450,6 +514,31 @@ async def submit_background_chat_task(
 )
 async def get_background_chat_task(task_id: str) -> ChatBackgroundTaskResponseSchema:
     return build_background_task_response(get_background_worker().get(task_id))
+
+
+@router.get("/sessions/{session_id}/context/debug")
+async def get_chat_context_debug(
+    session_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, Any]:
+    chat_session = await session.get(ChatSession, session_id)
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    budget = TokenBudgetConfig()
+    return {
+        "sessionId": session_id,
+        "usageSummary": await summarize_session_usage(session, session_id),
+        "tokenBudget": {
+            "max_context_tokens": budget.max_context_tokens,
+            "reserved_response_tokens": budget.reserved_response_tokens,
+            "available_for_prompt": budget.available_for_prompt,
+            "warning_ratio": budget.warning_ratio,
+            "compression_trigger_ratio": budget.compression_trigger_ratio,
+            "hard_trim_ratio": budget.hard_trim_ratio,
+        },
+        "lastContext": None,
+    }
 
 
 @router.get(
