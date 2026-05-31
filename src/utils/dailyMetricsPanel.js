@@ -56,16 +56,16 @@ export function getMetricToneClassNames(tone) {
   if (tone === 'success') {
     return {
       cardClassName: 'border-emerald-400/30 bg-emerald-500/10',
-      labelClassName: 'text-emerald-200/80',
-      valueClassName: 'text-emerald-100',
+      labelClassName: 'text-emerald-700',
+      valueClassName: 'text-emerald-800',
     }
   }
 
   if (tone === 'warning') {
     return {
       cardClassName: 'border-amber-400/30 bg-amber-500/10',
-      labelClassName: 'text-amber-100/80',
-      valueClassName: 'text-amber-50',
+      labelClassName: 'text-amber-700',
+      valueClassName: 'text-amber-800',
     }
   }
 
