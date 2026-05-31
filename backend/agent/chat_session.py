@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.context_manager import AgentContext, PromptAssembler, SummaryCompressor
+from backend.agent.deepseek_client import DeepSeekChatResult
 from backend.agent.memory import MemoryRetriever
+from backend.agent.tool_calling import ToolRegistry, ToolResultSlimmer
 from backend.db.models import (
     ChatMessage,
     ChatSessionSummary,
@@ -15,8 +18,10 @@ from backend.db.models import (
     KnowledgeItem,
     MemoryItem,
     Profile,
+    ToolCallLog,
     WEEKDAY_ORDER,
     WeeklyPlanDay,
+    utc_now,
 )
 from backend.db.seed import DEFAULT_PROFILE_ID
 
@@ -26,6 +31,13 @@ class AgentRequest:
     messages: list[dict[str, str]]
     debug: dict[str, Any]
     model: str | None = None
+
+
+@dataclass(frozen=True)
+class ToolLoopResult:
+    content: str
+    messages: list[dict[str, Any]]
+    tool_rounds: int
 
 
 async def build_agent_request(
@@ -60,6 +72,107 @@ async def build_agent_request(
         },
         model=(model_config or {}).get("model"),
     )
+
+
+async def run_tool_calling_chat(
+    *,
+    session: AsyncSession,
+    session_id: int,
+    messages: list[dict[str, Any]],
+    model: str,
+    deepseek_client: Any,
+    registry: ToolRegistry,
+    max_tool_rounds: int = 4,
+    slimmer: ToolResultSlimmer | None = None,
+) -> ToolLoopResult:
+    active_messages = list(messages)
+    active_slimmer = slimmer or ToolResultSlimmer()
+    tools = registry.to_deepseek_tools()
+
+    for round_index in range(max_tool_rounds + 1):
+        result: DeepSeekChatResult = await deepseek_client.request_chat_with_usage(
+            messages=active_messages,
+            model=model,
+            tools=tools,
+            tool_choice="auto",
+            stream=False,
+        )
+        if not result.tool_calls:
+            return ToolLoopResult(content=result.content, messages=active_messages, tool_rounds=round_index)
+
+        if round_index >= max_tool_rounds:
+            return ToolLoopResult(
+                content="工具调用次数过多，请稍后重试或缩小问题范围。",
+                messages=active_messages,
+                tool_rounds=round_index,
+            )
+
+        active_messages.append(
+            {
+                "role": "assistant",
+                "content": result.content,
+                "tool_calls": result.tool_calls,
+            }
+        )
+        for tool_call in result.tool_calls:
+            tool_name, tool_arguments = _read_tool_call(tool_call)
+            tool_call_id = str(tool_call.get("id") or tool_name)
+            try:
+                tool_result = await registry.execute(session, tool_name, tool_arguments)
+                result_summary = active_slimmer.slim(tool_name, tool_result)
+                status = "succeeded"
+                error_message = None
+            except Exception as exc:
+                result_summary = json.dumps({"error": str(exc)}, ensure_ascii=False)
+                status = "failed"
+                error_message = str(exc)
+
+            session.add(
+                ToolCallLog(
+                    session_id=session_id,
+                    message_id=None,
+                    tool_name=tool_name,
+                    arguments_json=tool_arguments,
+                    result_summary=result_summary,
+                    status=status,
+                    error_message=error_message,
+                    created_at=utc_now(),
+                )
+            )
+            active_messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": tool_name,
+                    "content": result_summary,
+                }
+            )
+        await session.commit()
+
+    return ToolLoopResult(
+        content="工具调用次数过多，请稍后重试或缩小问题范围。",
+        messages=active_messages,
+        tool_rounds=max_tool_rounds,
+    )
+
+
+def _read_tool_call(tool_call: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    function = tool_call.get("function") if isinstance(tool_call, dict) else {}
+    if not isinstance(function, dict):
+        function = {}
+    name = str(function.get("name") or "").strip()
+    raw_arguments = function.get("arguments") or "{}"
+    if not name:
+        raise ValueError("工具调用缺少 function.name")
+    if isinstance(raw_arguments, dict):
+        return name, raw_arguments
+    try:
+        parsed = json.loads(raw_arguments)
+    except json.JSONDecodeError as exc:
+        raise ValueError("工具调用参数不是合法 JSON") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("工具调用参数必须是 JSON object")
+    return name, parsed
 
 
 async def _load_profile(session: AsyncSession) -> dict[str, Any] | None:

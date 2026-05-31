@@ -60,6 +60,9 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> str | AsyncIterator[str]:
         if stream:
             return self.stream_chat(messages=messages, model=model)
@@ -68,6 +71,9 @@ class DeepSeekClient:
             messages=messages,
             model=model,
             stream=False,
+            tools=tools,
+            tool_choice=tool_choice,
+            reasoning_effort=reasoning_effort,
         )
         return result.content
 
@@ -77,6 +83,9 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> DeepSeekChatResult:
         if stream:
             raise DeepSeekClientError(
@@ -85,7 +94,14 @@ class DeepSeekClient:
             )
 
         self._assert_api_key()
-        payload = self._build_payload(messages=messages, model=model, stream=False)
+        payload = self._build_payload(
+            messages=messages,
+            model=model,
+            stream=False,
+            tools=tools,
+            tool_choice=tool_choice,
+            reasoning_effort=reasoning_effort,
+        )
 
         try:
             async with self.client_factory(timeout=self.timeout) as client:
@@ -224,12 +240,22 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "stream": stream,
         }
+        if tools is not None:
+            payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+        if reasoning_effort is not None:
+            payload["reasoning_effort"] = reasoning_effort
+        return payload
 
     def _raise_for_error_response(self, response: Any) -> None:
         if getattr(response, "is_success", False):
