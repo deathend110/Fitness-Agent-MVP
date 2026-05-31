@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { requestCoachReply, requestCoachReplyStream } from '../src/utils/coachChat.js'
+import {
+  requestCoachReply,
+  requestCoachReplyStream,
+  shouldFallbackCoachStream,
+} from '../src/utils/coachChat.js'
 
 test('requestCoachReply 会先构建 system prompt 再调用聊天请求，并返回纯文本解析结果', async () => {
   const calls = []
@@ -159,4 +163,9 @@ test('requestCoachReplyStream 会把流式文本拼成最终回复并保留 sugg
       },
     ],
   })
+})
+
+test('shouldFallbackCoachStream 只允许在尚未收到流式文本时回退普通请求', () => {
+  assert.equal(shouldFallbackCoachStream({ hasReceivedText: false }), true)
+  assert.equal(shouldFallbackCoachStream({ hasReceivedText: true }), false)
 })

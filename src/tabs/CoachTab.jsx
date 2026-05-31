@@ -7,7 +7,11 @@ import MessageList from '../components/coach/MessageList.jsx'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import { adoptPlanChange } from '../utils/adoptPlan.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
-import { requestCoachReply, requestCoachReplyStream } from '../utils/coachChat.js'
+import {
+  requestCoachReply,
+  requestCoachReplyStream,
+  shouldFallbackCoachStream,
+} from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import {
   buildCoachHistoryView,
@@ -163,14 +167,20 @@ function CoachTab({
   }, [activeSessionId, chatHistory.length, historyView])
 
   async function requestReplyWithFallback(payload) {
+    let hasReceivedStreamText = false
+
     try {
       return await requestCoachReplyStream(payload, {
         onText: (fullText) => {
+          hasReceivedStreamText = true
           setStreamingText(getVisibleStreamText(fullText))
         },
       })
-    } catch {
+    } catch (error) {
       setStreamingText('')
+      if (!shouldFallbackCoachStream({ hasReceivedText: hasReceivedStreamText })) {
+        throw error
+      }
       return requestCoachReply(payload)
     }
   }

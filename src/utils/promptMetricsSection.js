@@ -56,7 +56,7 @@ export function buildStructuredMetrics(summary) {
     tdee_source: summary.tdeeSource,
     tdee_kcal: summary.tdee,
     bmi: summary.bmi,
-    steps_count: summary.steps,
+    steps_count: summary.activity.steps,
     calorie_intake_kcal: summary.calorie.intake,
     calorie_delta_kcal: summary.calorie.delta,
     calorie_status: summary.calorie.status,
@@ -85,7 +85,7 @@ export function buildMetricsSection(
   const proteinIntake = formatMetricNumber(summary.protein.intake, 'g', 0)
   const proteinPerKg = formatMetricNumber(summary.protein.gramsPerKg, 'g/kg', 1)
   const sleepHours = formatMetricNumber(summary.recovery.sleepHours, 'h', 1)
-  const steps = formatMetricNumber(summary.steps, '步', 0)
+  const steps = formatMetricNumber(summary.activity.steps, '步', 0)
   const fatigueLevel = formatMetricNumber(summary.recovery.fatigueLevel, '/5', 0)
   const tdeeSourceLabel = summary.tdeeSource === 'manual' ? '手填' : '估算'
 

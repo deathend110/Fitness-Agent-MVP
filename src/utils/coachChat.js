@@ -11,6 +11,11 @@ function buildCoachMessages({ chatHistory = [], dailyLog = {}, profile = {}, use
   ]
 }
 
+export function shouldFallbackCoachStream({ hasReceivedText = false } = {}) {
+  // 已经收到流式文本时，后端可能已经完成或即将完成本轮落库；此时自动重试普通请求会制造重复消息。
+  return !hasReceivedText
+}
+
 export async function requestCoachReply(
   { chatHistory = [], dailyLog = {}, profile = {}, sessionId = null, userInput = '', weeklyPlan = {} },
   { buildPromptImpl = buildSystemPrompt, requestImpl = requestBackendCoachReply } = {},

@@ -31,9 +31,11 @@ class FakeDeepSeekClient:
         chunks: list[str] | None = None,
         *,
         error: DeepSeekClientError | None = None,
+        error_after_chunks: DeepSeekClientError | None = None,
     ) -> None:
         self.chunks = chunks or []
         self.error = error
+        self.error_after_chunks = error_after_chunks
 
     async def stream_chat(self, *, messages: list[dict[str, Any]], model: str) -> AsyncIterator[str]:
         del messages, model
@@ -42,6 +44,9 @@ class FakeDeepSeekClient:
 
         for chunk in self.chunks:
             yield chunk
+
+        if self.error_after_chunks is not None:
+            raise self.error_after_chunks
 
     async def request_chat(
         self,
@@ -163,6 +168,30 @@ async def test_chat_stream_emits_delta_suggestion_done_and_persists_clean_messag
 
 
 @pytest.mark.asyncio
+async def test_chat_stream_emits_null_suggestion_for_plain_text_reply(
+    api_client: AsyncClient,
+):
+    fake_client = FakeDeepSeekClient(["只建议今天降低一点容量。"])
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == ["delta", "suggestion", "done"]
+    assert events[1]["data"] == {"suggestion": None}
+    assert events[2]["data"] == {"text": "只建议今天降低一点容量。"}
+
+
+@pytest.mark.asyncio
 async def test_chat_stream_emits_error_and_does_not_persist_partial_assistant(
     api_client: AsyncClient,
 ):
@@ -190,6 +219,42 @@ async def test_chat_stream_emits_error_and_does_not_persist_partial_assistant(
     assert [event["event"] for event in events] == ["error"]
     assert events[0]["data"]["code"] == "missing_api_key"
     assert "DeepSeek API Key" in events[0]["data"]["message"]
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+
+    assert messages_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_rolls_back_when_upstream_breaks_after_delta(
+    api_client: AsyncClient,
+):
+    fake_client = FakeDeepSeekClient(
+        ["已经发给前端的半截回复"],
+        error_after_chunks=DeepSeekClientError(
+            "DeepSeek 流式响应在完成前中断，请稍后重试。",
+            code="stream_interrupted",
+        ),
+    )
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == ["delta", "error"]
+    assert events[0]["data"] == {"text": "已经发给前端的半截回复"}
+    assert events[1]["data"]["code"] == "stream_interrupted"
 
     messages_response = await api_client.get(
         f"/api/chat/sessions/{default_session['id']}/messages"

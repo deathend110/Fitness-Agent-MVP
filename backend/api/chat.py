@@ -258,9 +258,7 @@ async def stream_chat_reply(
                 suggestion=suggestion,
             )
 
-            if suggestion is not None:
-                yield build_sse_frame("suggestion", {"suggestion": suggestion})
-
+            yield build_sse_frame("suggestion", {"suggestion": suggestion})
             yield build_sse_frame("done", {"text": assistant_text})
         except Exception as exc:
             await session.rollback()
