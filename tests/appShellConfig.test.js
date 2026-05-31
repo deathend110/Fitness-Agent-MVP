@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -34,4 +35,16 @@ test('buildAppShellStatus 提供底部状态区所需的默认文案', () => {
 
 test('appShellQuickActions 在 V1.6 侧栏中保持为空，避免出现底部双按钮', () => {
   assert.deepEqual(appShellQuickActions, [])
+})
+
+test('AppShell 为 coach 页预留独立壳层类名分支', () => {
+  const appShellSource = fs.readFileSync(
+    new URL('../src/components/app-shell/AppShell.jsx', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(appShellSource, /activeTabId === 'coach'/)
+  assert.match(appShellSource, /p-0/)
+  assert.match(appShellSource, /overflow-hidden/)
+  assert.match(appShellSource, /p-4 sm:p-5 lg:p-6/)
 })
