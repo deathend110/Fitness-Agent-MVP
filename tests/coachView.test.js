@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -90,4 +91,12 @@ test('getCoachEmptyQuestionView 返回固定四条空状态建议问题', () => 
     questions.map((item) => item.label),
     ['恢复分析', '营养检查', '强度优化', '容量评估'],
   )
+})
+
+test('MessageList 使用底部 sentinel 和 autoScrollKey 控制滚动', () => {
+  const source = readFileSync('src/components/coach/MessageList.jsx', 'utf-8')
+
+  assert.match(source, /bottomRef/)
+  assert.match(source, /autoScrollKey/)
+  assert.match(source, /scrollIntoView/)
 })

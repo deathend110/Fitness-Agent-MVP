@@ -1,4 +1,5 @@
 import AdoptCard from '../AdoptCard.jsx'
+import MarkdownMessage from './MarkdownMessage.jsx'
 
 function AssistantActions({ onCopy, onRetry }) {
   return (
@@ -57,14 +58,25 @@ function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggest
               : 'border-fitloop-line bg-fitloop-canvas'
           }`}
         >
-          <p className="whitespace-pre-wrap">
-            {message.content}
+          {isUser ? (
+            <p className="whitespace-pre-wrap">
+              {message.content}
+              {isStreaming ? (
+                <span aria-hidden="true" className="ml-0.5 animate-pulse text-fitloop-orange">
+                  ▋
+                </span>
+              ) : null}
+            </p>
+          ) : (
+            <div>
+              <MarkdownMessage content={message.content} />
             {isStreaming ? (
               <span aria-hidden="true" className="ml-0.5 animate-pulse text-fitloop-orange">
                 ▋
               </span>
             ) : null}
-          </p>
+            </div>
+          )}
         </div>
 
         {!isUser && !isStreaming ? (

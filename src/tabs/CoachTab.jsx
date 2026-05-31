@@ -562,6 +562,7 @@ function CoachTab({
           onAdopt={handleAdoptSuggestion}
           onDismissSuggestion={handleDismissSuggestion}
           onSuggestionClick={handleSuggestionQuestion}
+          autoScrollKey={`${messageList.length}:${isSending ? 'sending' : 'idle'}`}
           streamingText={streamingText}
         />
       }

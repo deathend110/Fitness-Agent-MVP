@@ -16,8 +16,10 @@ function MessageList({
   onAdopt,
   onDismissSuggestion,
   onSuggestionClick,
+  autoScrollKey = '',
   streamingText = '',
 }) {
+  const bottomRef = useRef(null)
   const scrollRef = useRef(null)
   const isEmpty = messages.length === 0
 
@@ -31,10 +33,10 @@ function MessageList({
     // 只有用户本来就在底部附近，或当前处于流式回复时，才自动追到底部。
     if (isSending || shouldAutoScroll(element)) {
       requestAnimationFrame(() => {
-        element.scrollTop = element.scrollHeight
+        bottomRef.current?.scrollIntoView({ block: 'end' })
       })
     }
-  }, [isEmpty, isSending, messages, streamingText])
+  }, [autoScrollKey, isEmpty, isSending, messages.length, streamingText])
 
   if (isEmpty) {
     return (
@@ -69,6 +71,7 @@ function MessageList({
             }}
           />
         ) : null}
+        <div aria-hidden="true" ref={bottomRef} />
       </div>
     </div>
   )
