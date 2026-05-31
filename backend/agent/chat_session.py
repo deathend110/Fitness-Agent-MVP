@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.agent.context_manager import AgentContext, PromptAssembler
+from backend.agent.context_manager import AgentContext, PromptAssembler, SummaryCompressor
 from backend.db.models import (
     ChatMessage,
     ChatSessionSummary,
@@ -34,8 +34,12 @@ async def build_agent_request(
     user_input: str,
     model_config: dict[str, Any] | None = None,
     assembler: PromptAssembler | None = None,
+    compressor: SummaryCompressor | None = None,
 ) -> AgentRequest:
     active_assembler = assembler or PromptAssembler()
+    if compressor is not None:
+        await compressor.compress_if_needed(session, session_id=session_id)
+
     context = active_assembler.assemble(
         user_input=user_input,
         profile=await _load_profile(session),
