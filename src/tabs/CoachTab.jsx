@@ -191,12 +191,8 @@ function CoachTab({
         if (ignore) {
           return
         }
+        // 当前选择由 draft 接口统一恢复；模型列表只更新可选项，避免慢回包覆盖用户草稿。
         setModelConfig(config)
-        setSelectedModel(config.defaultModel || FALLBACK_MODEL_CONFIG.defaultModel)
-        setThinking({
-          enabled: Boolean(config.thinking?.enabled),
-          budget: config.thinking?.budget || 'auto',
-        })
       })
       .catch(() => {
         if (!ignore) {

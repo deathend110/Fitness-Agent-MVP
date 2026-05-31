@@ -60,17 +60,24 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
+        thinking: dict[str, Any] | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
     ) -> str | AsyncIterator[str]:
         if stream:
-            return self.stream_chat(messages=messages, model=model)
+            return self.stream_chat(
+                messages=messages,
+                model=model,
+                thinking=thinking,
+                reasoning_effort=reasoning_effort,
+            )
 
         result = await self.request_chat_with_usage(
             messages=messages,
             model=model,
             stream=False,
+            thinking=thinking,
             tools=tools,
             tool_choice=tool_choice,
             reasoning_effort=reasoning_effort,
@@ -83,6 +90,7 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
+        thinking: dict[str, Any] | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
@@ -98,6 +106,7 @@ class DeepSeekClient:
             messages=messages,
             model=model,
             stream=False,
+            thinking=thinking,
             tools=tools,
             tool_choice=tool_choice,
             reasoning_effort=reasoning_effort,
@@ -119,8 +128,9 @@ class DeepSeekClient:
         self._raise_for_error_response(response)
         payload = self._read_json_payload(response)
         content = self._read_message_content(payload)
+        tool_calls = self._read_tool_calls(payload)
 
-        if not content:
+        if not content and not tool_calls:
             raise DeepSeekClientError(
                 "DeepSeek 已返回成功响应，但没有可展示的消息内容。",
                 code="empty_content",
@@ -130,7 +140,7 @@ class DeepSeekClient:
             content=content,
             usage=self._read_usage_payload(payload),
             reasoning_content=self._read_reasoning_content(payload),
-            tool_calls=self._read_tool_calls(payload),
+            tool_calls=tool_calls,
         )
 
     async def stream_chat(
@@ -138,8 +148,15 @@ class DeepSeekClient:
         *,
         messages: list[dict[str, Any]],
         model: str,
+        thinking: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[str]:
-        async for event in self.stream_chat_with_usage(messages=messages, model=model):
+        async for event in self.stream_chat_with_usage(
+            messages=messages,
+            model=model,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
+        ):
             if event.text:
                 yield event.text
 
@@ -148,9 +165,17 @@ class DeepSeekClient:
         *,
         messages: list[dict[str, Any]],
         model: str,
+        thinking: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[DeepSeekStreamEvent]:
         self._assert_api_key()
-        payload = self._build_payload(messages=messages, model=model, stream=True)
+        payload = self._build_payload(
+            messages=messages,
+            model=model,
+            stream=True,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
+        )
 
         try:
             async with self.client_factory(timeout=self.timeout) as client:
@@ -265,6 +290,7 @@ class DeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool,
+        thinking: dict[str, Any] | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
@@ -274,6 +300,8 @@ class DeepSeekClient:
             "messages": messages,
             "stream": stream,
         }
+        if thinking is not None:
+            payload["thinking"] = thinking
         if tools is not None:
             payload["tools"] = tools
         if tool_choice is not None:

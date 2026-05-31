@@ -44,3 +44,10 @@ test('Coach 请求会携带模型和 thinking 配置', async () => {
     },
   )
 })
+
+test('CoachTab 模型列表回包不会覆盖后端草稿恢复的模型和 thinking', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.doesNotMatch(source, /setSelectedModel\(config\.defaultModel/)
+  assert.doesNotMatch(source, /enabled: Boolean\(config\.thinking\?\.enabled\)/)
+})

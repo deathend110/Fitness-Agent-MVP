@@ -46,6 +46,27 @@ class ToolLoopClient:
         return DeepSeekChatResult(content="我读取了本周计划，建议保持深蹲容量。")
 
 
+class ThinkingToolLoopClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def request_chat_with_usage(self, **kwargs: Any) -> DeepSeekChatResult:
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                reasoning_content="需要先读取本周计划。",
+                tool_calls=[
+                    {
+                        "id": "call_weekly",
+                        "type": "function",
+                        "function": {"name": "get_weekly_plan", "arguments": "{}"},
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="读取后建议保持容量。")
+
+
 @pytest_asyncio.fixture
 async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'tool-loop.db'}"
@@ -125,3 +146,34 @@ async def test_tool_loop_returns_error_when_tool_rounds_exceed_limit(
     )
 
     assert result.content == "工具调用次数过多，请稍后重试或缩小问题范围。"
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_preserves_thinking_reasoning_content_between_rounds(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = ChatSession(title="tool-loop-thinking", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add(WeeklyPlanDay(day_key="Monday", type="strength", exercises=[{"name": "深蹲"}]))
+    await db_session.commit()
+
+    client = ThinkingToolLoopClient()
+    result = await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "思考后读取计划"}],
+        model="deepseek-v4-pro",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+        thinking={"type": "enabled"},
+        reasoning_effort="max",
+    )
+
+    assert result.content == "读取后建议保持容量。"
+    assert client.calls[0]["thinking"] == {"type": "enabled"}
+    assert client.calls[0]["reasoning_effort"] == "max"
+    assert client.calls[0]["tool_choice"] is None
+    assistant_message = client.calls[1]["messages"][1]
+    assert assistant_message["role"] == "assistant"
+    assert assistant_message["reasoning_content"] == "需要先读取本周计划。"

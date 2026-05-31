@@ -37,7 +37,7 @@ class FakeDeepSeekClient:
         self.error = error
         self.error_after_chunks = error_after_chunks
 
-    async def stream_chat(self, *, messages: list[dict[str, Any]], model: str) -> AsyncIterator[str]:
+    async def stream_chat(self, *, messages: list[dict[str, Any]], model: str, **_: Any) -> AsyncIterator[str]:
         del messages, model
         if self.error is not None:
             raise self.error
@@ -54,6 +54,7 @@ class FakeDeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
+        **_: Any,
     ) -> str:
         del messages, model, stream
         if self.error is not None:
@@ -63,7 +64,7 @@ class FakeDeepSeekClient:
 
 class FakeToolProposalClient:
     def __init__(self) -> None:
-        self.calls: list[list[dict[str, Any]]] = []
+        self.calls: list[dict[str, Any]] = []
 
     async def request_chat_with_usage(
         self,
@@ -73,9 +74,17 @@ class FakeToolProposalClient:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
         stream: bool = False,
+        **_: Any,
     ) -> DeepSeekChatResult:
-        del model, tools, tool_choice, stream
-        self.calls.append(messages)
+        del model, tools, stream
+        self.calls.append(
+            {
+                "messages": messages,
+                "thinking": _.get("thinking"),
+                "reasoning_effort": _.get("reasoning_effort"),
+                "tool_choice": tool_choice,
+            }
+        )
         if len(self.calls) == 1:
             return DeepSeekChatResult(
                 content="",
@@ -275,6 +284,7 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
         params={
             "session_id": default_session["id"],
             "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
+            "thinking": json.dumps({"enabled": True, "budget": "max"}),
         },
     )
 
@@ -295,6 +305,9 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
     assert events[2]["data"] == {"suggestion": None}
     assert events[3]["data"] == {"text": "已生成一张需要你确认的训练计划调整卡。"}
     assert len(fake_client.calls) == 2
+    assert fake_client.calls[0]["thinking"] == {"type": "enabled"}
+    assert fake_client.calls[0]["reasoning_effort"] == "max"
+    assert fake_client.calls[0]["tool_choice"] is None
 
 
 @pytest.mark.asyncio

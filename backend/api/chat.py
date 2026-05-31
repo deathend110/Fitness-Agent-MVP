@@ -237,6 +237,32 @@ def parse_file_ids_query(raw_file_ids: list[str] | None) -> list[int]:
     return list(dict.fromkeys(value for value in values if value > 0))
 
 
+def parse_thinking_query(raw_thinking: str | None) -> dict[str, Any] | None:
+    if raw_thinking is None or not raw_thinking.strip():
+        return None
+    try:
+        parsed = json.loads(raw_thinking)
+    except JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="thinking 必须是 JSON 对象") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=422, detail="thinking 必须是 JSON 对象")
+    return parsed
+
+
+def normalize_deepseek_thinking(
+    thinking: dict[str, Any] | None,
+) -> tuple[dict[str, str] | None, str | None]:
+    if thinking is None:
+        return None, None
+
+    enabled = bool(thinking.get("enabled"))
+    if not enabled:
+        return {"type": "disabled"}, None
+
+    budget = str(thinking.get("budget") or "auto").lower()
+    return {"type": "enabled"}, "max" if budget == "max" else "high"
+
+
 def build_sse_frame(event: str, payload: dict[str, Any]) -> str:
     # SSE 的 data 始终写 JSON，前端只需要按 event 名称分派，不解析 DeepSeek 原始协议。
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -268,12 +294,16 @@ async def request_agent_tool_reply(
     model: str,
     session: AsyncSession,
     session_id: int,
+    thinking: dict[str, str] | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
     if not hasattr(deepseek_client, "request_chat_with_usage"):
         content, _usage = await request_deepseek_reply_with_usage(
             deepseek_client=deepseek_client,
             messages=messages,
             model=model,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
         )
         parsed_reply = parse_ai_response(content)
         return parsed_reply["text"], parsed_reply["suggestion"], None
@@ -285,6 +315,8 @@ async def request_agent_tool_reply(
         model=model,
         deepseek_client=deepseek_client,
         registry=build_default_tool_registry(),
+        thinking=thinking,
+        reasoning_effort=reasoning_effort,
     )
     parsed_reply = parse_ai_response(tool_result.content)
     proposal = tool_result.proposals[-1] if tool_result.proposals else None
@@ -336,12 +368,21 @@ async def request_deepseek_reply_with_usage(
     deepseek_client: DeepSeekClient,
     messages: list[dict[str, Any]],
     model: str,
+    thinking: dict[str, str] | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
+    thinking_kwargs: dict[str, Any] = {}
+    if thinking is not None:
+        thinking_kwargs["thinking"] = thinking
+    if reasoning_effort is not None:
+        thinking_kwargs["reasoning_effort"] = reasoning_effort
+
     if hasattr(deepseek_client, "request_chat_with_usage"):
         result = await deepseek_client.request_chat_with_usage(
             messages=messages,
             model=model,
             stream=False,
+            **thinking_kwargs,
         )
         return result.content, result.usage
 
@@ -349,6 +390,7 @@ async def request_deepseek_reply_with_usage(
         messages=messages,
         model=model,
         stream=False,
+        **thinking_kwargs,
     )
     if not isinstance(content, str):
         raise DeepSeekClientError(
@@ -363,11 +405,20 @@ async def stream_deepseek_reply_with_usage(
     deepseek_client: DeepSeekClient,
     messages: list[dict[str, Any]],
     model: str,
+    thinking: dict[str, str] | None = None,
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str | None, dict[str, Any] | None]]:
+    thinking_kwargs: dict[str, Any] = {}
+    if thinking is not None:
+        thinking_kwargs["thinking"] = thinking
+    if reasoning_effort is not None:
+        thinking_kwargs["reasoning_effort"] = reasoning_effort
+
     if hasattr(deepseek_client, "stream_chat_with_usage"):
         async for event in deepseek_client.stream_chat_with_usage(
             messages=messages,
             model=model,
+            **thinking_kwargs,
         ):
             yield (event.text or None, event.usage)
         return
@@ -375,6 +426,7 @@ async def stream_deepseek_reply_with_usage(
     async for chunk in deepseek_client.stream_chat(
         messages=messages,
         model=model,
+        **thinking_kwargs,
     ):
         yield chunk, None
 
@@ -417,6 +469,7 @@ async def stream_chat_reply(
     user_input: str | None = Query(default=None, alias="userInput"),
     session_id: int | None = None,
     model: str | None = None,
+    thinking: str | None = None,
     file_ids: list[str] | None = Query(default=None, alias="fileIds"),
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
@@ -426,6 +479,7 @@ async def stream_chat_reply(
     selected_model = model or settings.default_model
     direct_user_input = read_user_input(user_input)
     selected_file_ids = parse_file_ids_query(file_ids)
+    thinking_payload, reasoning_effort = normalize_deepseek_thinking(parse_thinking_query(thinking))
 
     if direct_user_input is not None:
         user_content = direct_user_input
@@ -455,6 +509,8 @@ async def stream_chat_reply(
                     model=selected_model,
                     session=session,
                     session_id=chat_session.id,
+                    thinking=thinking_payload,
+                    reasoning_effort=reasoning_effort,
                 )
                 if assistant_text:
                     yield build_sse_frame("delta", {"text": assistant_text})
@@ -477,6 +533,8 @@ async def stream_chat_reply(
                 deepseek_client=deepseek_client,
                 messages=request_messages,
                 model=selected_model,
+                thinking=thinking_payload,
+                reasoning_effort=reasoning_effort,
             ):
                 if event_usage is not None:
                     usage = event_usage
@@ -522,6 +580,7 @@ async def request_chat_reply(
     chat_session = await resolve_chat_session(payload.sessionId, session)
     settings = get_settings()
     selected_model = payload.model or settings.default_model
+    thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
     if payload.userInput is not None:
         agent_request = await build_agent_request(
             session=session,
@@ -546,12 +605,16 @@ async def request_chat_reply(
                 model=selected_model,
                 session=session,
                 session_id=chat_session.id,
+                thinking=thinking_payload,
+                reasoning_effort=reasoning_effort,
             )
         else:
             content, usage = await request_deepseek_reply_with_usage(
                 deepseek_client=deepseek_client,
                 messages=request_messages,
                 model=selected_model,
+                thinking=thinking_payload,
+                reasoning_effort=reasoning_effort,
             )
             parsed_reply = parse_ai_response(content)
             assistant_text = parsed_reply["text"]
@@ -612,12 +675,15 @@ async def submit_background_chat_task(
             model_config={"model": selected_model},
         )
         request_messages = agent_request.messages
+    thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
     worker = get_background_worker()
     record = await worker.submit(
         session_id=session_id,
         messages=request_messages,
         user_content=user_content,
         model=payload.model,
+        thinking=thinking_payload,
+        reasoning_effort=reasoning_effort,
     )
     return ChatBackgroundSubmitResponseSchema(task_id=record.task_id)
 

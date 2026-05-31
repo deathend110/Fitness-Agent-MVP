@@ -218,6 +218,72 @@ async def test_request_chat_raises_empty_content_when_non_stream_choices_are_emp
 
 
 @pytest.mark.asyncio
+async def test_request_chat_allows_tool_calls_without_displayable_content():
+    tool_call = {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "get_weekly_plan", "arguments": "{}"},
+    }
+    factory, _ = build_client_factory(
+        post_responses=[
+            FakeResponse(
+                json_data={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "",
+                                "reasoning_content": "需要先读取计划。",
+                                "tool_calls": [tool_call],
+                            }
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    client = DeepSeekClient(api_key="test-key", client_factory=factory)
+
+    result = await client.request_chat_with_usage(
+        messages=[{"role": "user", "content": "读计划"}],
+        model="deepseek-v4-pro",
+    )
+
+    assert result.content == ""
+    assert result.reasoning_content == "需要先读取计划。"
+    assert result.tool_calls == [tool_call]
+
+
+@pytest.mark.asyncio
+async def test_request_chat_forwards_thinking_payload_and_reasoning_effort():
+    factory, requests = build_client_factory(
+        post_responses=[
+            FakeResponse(
+                json_data={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "已完成深入分析。",
+                            }
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    client = DeepSeekClient(api_key="test-key", client_factory=factory)
+
+    await client.request_chat_with_usage(
+        messages=[{"role": "user", "content": "深入分析"}],
+        model="deepseek-v4-pro",
+        thinking={"type": "enabled"},
+        reasoning_effort="max",
+    )
+
+    assert requests[0]["json"]["thinking"] == {"type": "enabled"}
+    assert requests[0]["json"]["reasoning_effort"] == "max"
+
+
+@pytest.mark.asyncio
 async def test_request_chat_maps_invalid_json_to_response_parse_error():
     factory, _ = build_client_factory(
         post_responses=[

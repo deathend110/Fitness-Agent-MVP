@@ -27,7 +27,7 @@ pytestmark = [
 class FakeDeepSeekClient:
     def __init__(self, replies: dict[str, Any]) -> None:
         self.replies = replies
-        self.calls: list[list[dict[str, Any]]] = []
+        self.calls: list[dict[str, Any]] = []
 
     async def request_chat(
         self,
@@ -35,9 +35,17 @@ class FakeDeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
+        **_: Any,
     ) -> Any:
-        del model, stream
-        self.calls.append(messages)
+        del stream
+        self.calls.append(
+            {
+                "messages": messages,
+                "model": model,
+                "thinking": _.get("thinking"),
+                "reasoning_effort": _.get("reasoning_effort"),
+            }
+        )
         user_content = next(
             (
                 message.get("content")
@@ -192,6 +200,31 @@ async def test_unknown_background_task_returns_explicit_status(
         "result": None,
         "message": "未找到对应的后台思考任务。",
     }
+
+
+@pytest.mark.asyncio
+async def test_background_task_forwards_thinking_config(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+):
+    client, fake_client = api_client
+    session_id = (await client.post("/api/chat/sessions", json={"title": "thinking"})).json()["id"]
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={
+            "userInput": "第一条问题",
+            "model": "deepseek-v4-pro",
+            "thinking": {"enabled": True, "budget": "max"},
+        },
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+    assert fake_client.calls[-1]["model"] == "deepseek-v4-pro"
+    assert fake_client.calls[-1]["thinking"] == {"type": "enabled"}
+    assert fake_client.calls[-1]["reasoning_effort"] == "max"
 
 
 @pytest.mark.asyncio

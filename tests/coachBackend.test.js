@@ -64,7 +64,7 @@ test('streamBackendCoachReply 会解析后端 SSE 事件并返回文本和 sugge
 
 test('streamBackendCoachReply 支持 Agent 请求契约并解析 proposal/tool_status 事件', async () => {
   const reply = await streamBackendCoachReply(
-    { sessionId: 8, userInput: '读取计划再建议', model: 'deepseek-chat', thinking: { enabled: true }, fileIds: [2, 5] },
+    { sessionId: 8, userInput: '读取计划再建议', model: 'deepseek-chat', thinking: { enabled: true, budget: 'max' }, fileIds: [2, 5] },
     {
       baseUrl: 'http://backend.test/api',
       fetchImpl: async (url, options) => {
@@ -74,6 +74,7 @@ test('streamBackendCoachReply 支持 Agent 请求契约并解析 proposal/tool_s
         assert.equal(requestUrl.searchParams.get('userInput'), '读取计划再建议')
         assert.equal(requestUrl.searchParams.get('model'), 'deepseek-chat')
         assert.equal(requestUrl.searchParams.get('fileIds'), '2,5')
+        assert.deepEqual(JSON.parse(requestUrl.searchParams.get('thinking')), { enabled: true, budget: 'max' })
 
         return {
           ok: true,
@@ -150,7 +151,7 @@ test('requestBackendCoachReply 使用后端非流式代理返回解析后的回�
 
 test('requestBackendCoachReply 支持 Agent 非流式请求体', async () => {
   const reply = await requestBackendCoachReply(
-    { sessionId: 3, userInput: '给我建议', model: 'deepseek-chat', fileIds: [11] },
+    { sessionId: 3, userInput: '给我建议', model: 'deepseek-chat', thinking: { enabled: true, budget: 'auto' }, fileIds: [11] },
     {
       baseUrl: 'http://backend.test/api',
       fetchImpl: async (_url, options) => {
@@ -158,6 +159,7 @@ test('requestBackendCoachReply 支持 Agent 非流式请求体', async () => {
           sessionId: 3,
           userInput: '给我建议',
           model: 'deepseek-chat',
+          thinking: { enabled: true, budget: 'auto' },
           fileIds: [11],
         })
         return {
@@ -205,12 +207,17 @@ test('submitBackendCoachBackgroundTask 会提交后台任务并在缺省会话�
 
 test('submitBackendCoachBackgroundTask 支持 Agent 后台请求契约', async () => {
   const result = await submitBackendCoachBackgroundTask(
-    { sessionId: 12, userInput: '离页后继续想', fileIds: [3] },
+    { sessionId: 12, userInput: '离页后继续想', thinking: { enabled: true, budget: 'max' }, fileIds: [3] },
     {
       baseUrl: 'http://backend.test/api',
       fetchImpl: async (url, options = {}) => {
         assert.equal(url, 'http://backend.test/api/chat/12/background')
-        assert.deepEqual(JSON.parse(options.body), { userInput: '离页后继续想', sessionId: 12, fileIds: [3] })
+        assert.deepEqual(JSON.parse(options.body), {
+          userInput: '离页后继续想',
+          sessionId: 12,
+          thinking: { enabled: true, budget: 'max' },
+          fileIds: [3],
+        })
         return { ok: true, json: async () => ({ task_id: 'task-2' }) }
       },
     },

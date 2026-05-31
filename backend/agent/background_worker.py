@@ -44,6 +44,8 @@ class BackgroundWorker:
         messages: list[dict[str, Any]],
         user_content: str,
         model: str | None = None,
+        thinking: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> BackgroundTaskRecord:
         task_id = uuid4().hex
         record = BackgroundTaskRecord(task_id=task_id, session_id=session_id)
@@ -54,6 +56,8 @@ class BackgroundWorker:
                 messages=messages,
                 user_content=user_content,
                 model=model or self.default_model,
+                thinking=thinking,
+                reasoning_effort=reasoning_effort,
             )
         )
         return record
@@ -78,12 +82,24 @@ class BackgroundWorker:
         messages: list[dict[str, Any]],
         user_content: str,
         model: str,
+        thinking: dict[str, Any] | None,
+        reasoning_effort: str | None,
     ) -> None:
         record.status = "running"
 
         try:
             client = self.client_factory()
-            content = await client.request_chat(messages=messages, model=model, stream=False)
+            thinking_kwargs: dict[str, Any] = {}
+            if thinking is not None:
+                thinking_kwargs["thinking"] = thinking
+            if reasoning_effort is not None:
+                thinking_kwargs["reasoning_effort"] = reasoning_effort
+            content = await client.request_chat(
+                messages=messages,
+                model=model,
+                stream=False,
+                **thinking_kwargs,
+            )
             if not isinstance(content, str):
                 raise DeepSeekClientError(
                     "DeepSeek 非流式响应格式异常，请稍后重试。",

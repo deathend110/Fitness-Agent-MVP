@@ -264,6 +264,7 @@ export async function streamBackendCoachReply(messages, options = {}) {
           model: messages?.model || model,
           session_id: messages?.sessionId ?? sessionId,
           fileIds: normalizeFileIds(messages).join(','),
+          thinking: messages?.thinking ? JSON.stringify(messages.thinking) : undefined,
         }
     const response = await fetchImpl(
       createRequestUrl(baseUrl, '/chat/stream', query),

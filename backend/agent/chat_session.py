@@ -90,6 +90,8 @@ async def run_tool_calling_chat(
     model: str,
     deepseek_client: Any,
     registry: ToolRegistry,
+    thinking: dict[str, Any] | None = None,
+    reasoning_effort: str | None = None,
     max_tool_rounds: int = 4,
     slimmer: ToolResultSlimmer | None = None,
 ) -> ToolLoopResult:
@@ -97,14 +99,20 @@ async def run_tool_calling_chat(
     active_slimmer = slimmer or ToolResultSlimmer()
     proposals: list[dict[str, Any]] = []
     tools = registry.to_deepseek_tools()
+    thinking_kwargs: dict[str, Any] = {}
+    if thinking is not None:
+        thinking_kwargs["thinking"] = thinking
+    if reasoning_effort is not None:
+        thinking_kwargs["reasoning_effort"] = reasoning_effort
 
     for round_index in range(max_tool_rounds + 1):
         result: DeepSeekChatResult = await deepseek_client.request_chat_with_usage(
             messages=active_messages,
             model=model,
             tools=tools,
-            tool_choice="auto",
+            tool_choice=None if thinking and thinking.get("type") == "enabled" else "auto",
             stream=False,
+            **thinking_kwargs,
         )
         if not result.tool_calls:
             return ToolLoopResult(
@@ -122,13 +130,15 @@ async def run_tool_calling_chat(
                 proposals=proposals,
             )
 
-        active_messages.append(
-            {
-                "role": "assistant",
-                "content": result.content,
-                "tool_calls": result.tool_calls,
-            }
-        )
+        assistant_message = {
+            "role": "assistant",
+            "content": result.content,
+            "tool_calls": result.tool_calls,
+        }
+        if result.reasoning_content:
+            # DeepSeek 思考模式要求工具后续轮次带回 reasoning_content，避免推理链断裂。
+            assistant_message["reasoning_content"] = result.reasoning_content
+        active_messages.append(assistant_message)
         for tool_call in result.tool_calls:
             tool_name, tool_arguments = _read_tool_call(tool_call)
             tool_call_id = str(tool_call.get("id") or tool_name)
