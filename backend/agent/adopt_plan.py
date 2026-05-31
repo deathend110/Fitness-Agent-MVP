@@ -10,6 +10,7 @@ RPE_MIN = 0
 RPE_MAX = 10
 DEFAULT_SET_TYPE = "straight"
 SUCCESS_MESSAGE = "已采纳 AI 建议，训练计划已更新。"
+NUMERIC_FIELDS = {"pct", "kg", "sets", "reps", "rpe"}
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,22 @@ def _read_number_value(*values: Any) -> int | float | None:
     return None
 
 
+def _coerce_number(value: Any) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed_value = float(value.strip())
+        except ValueError:
+            return None
+        if parsed_value.is_integer():
+            return int(parsed_value)
+        return parsed_value
+    return None
+
+
 def _normalize_rpe(rpe: int | float | None) -> int | float | None:
     if rpe is None:
         return None
@@ -71,8 +88,12 @@ def _normalize_planned_exercise(exercise: dict[str, Any], fallback_id: Any = Non
     pct = _read_number_value(exercise.get("pct"), instance.get("pct"))
     kg = _read_number_value(exercise.get("kg"), instance.get("kg"))
     rpe = _normalize_rpe(_read_number_value(exercise.get("rpe"), instance.get("rpe")))
-    reps_text = _read_string_value(template.get("repsText")) or (
-        str(reps) if reps is not None else ""
+    reps_text = (
+        str(reps)
+        if "reps" in exercise and reps is not None
+        else _read_string_value(template.get("repsText")) or (
+            str(reps) if reps is not None else ""
+        )
     )
     load_mode = (
         "percentage"
@@ -119,16 +140,32 @@ def _find_exercise_index(exercises: list[dict[str, Any]], exercise_name: str) ->
     return -1
 
 
-def _validate_change_value(change: dict[str, Any], exercise_name: str) -> str:
+def _normalize_change_value(
+    change: dict[str, Any],
+    exercise_name: str,
+) -> tuple[bool, Any, str]:
     field = _read_string_value(change.get("field"))
     new_value = change.get("newValue")
 
-    if field == "rpe":
-        rpe = _read_number_value(new_value)
-        if rpe is None or rpe < RPE_MIN or rpe > RPE_MAX:
-            return f"动作“{exercise_name}”的 RPE 必须在 0-10 之间，无法采纳该建议。"
+    if field in NUMERIC_FIELDS:
+        number_value = _coerce_number(new_value)
+        if number_value is None:
+            return (
+                False,
+                None,
+                f"动作“{exercise_name}”的字段“{field}”必须是有效数字，无法采纳该建议。",
+            )
+        new_value = number_value
 
-    return ""
+    if field == "rpe":
+        if new_value < RPE_MIN or new_value > RPE_MAX:
+            return (
+                False,
+                None,
+                f"动作“{exercise_name}”的 RPE 必须在 0-10 之间，无法采纳该建议。",
+            )
+
+    return True, new_value, ""
 
 
 def adopt_plan_change(
@@ -154,11 +191,11 @@ def adopt_plan_change(
 
     for change in changes:
         safe_change = change if _is_plain_object(change) else {}
-        action = safe_change.get("action")
-        if action and action != "update":
+        action = _read_string_value(safe_change.get("action"))
+        if action != "update":
             return _build_failure_result(
                 safe_plan,
-                f"当前仅支持更新现有动作，暂不支持“{action}”建议。",
+                f"当前仅支持 action 为 update 的现有动作更新建议，暂不支持“{action or '缺失动作'}”。",
             )
 
         exercise_name = _read_string_value(safe_change.get("exerciseName"))
@@ -180,13 +217,16 @@ def adopt_plan_change(
                 f"未找到动作“{exercise_name}”的字段“{field or '未知字段'}”，无法采纳该建议。",
             )
 
-        validation_message = _validate_change_value(safe_change, exercise_name)
-        if validation_message:
+        is_valid_value, normalized_value, validation_message = _normalize_change_value(
+            safe_change,
+            exercise_name,
+        )
+        if not is_valid_value:
             return _build_failure_result(safe_plan, validation_message)
 
         changed_exercise = {
             **next_exercises[target_index],
-            field: safe_change.get("newValue"),
+            field: normalized_value,
         }
         next_exercises[target_index] = _normalize_planned_exercise(
             changed_exercise,

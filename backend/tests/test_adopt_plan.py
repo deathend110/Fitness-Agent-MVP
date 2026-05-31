@@ -169,13 +169,35 @@ async def test_adopt_update_writes_back_and_preserves_flat_exercise_fields(api_c
 async def test_adopt_rejects_invalid_action_without_dirty_write(api_client: AsyncClient):
     original_plan = await seed_weekly_plan(api_client)
 
-    response = await api_client.post(
+    for action in ["add", "", None]:
+        response = await api_client.post(
+            "/api/weekly-plan/adopt",
+            json={
+                "day": "Monday",
+                "changes": [
+                    {
+                        "action": action,
+                        "exerciseName": "深蹲",
+                        "field": "pct",
+                        "newValue": 0.7,
+                    }
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["ok"] is False
+        assert "仅支持" in response.json()["message"]
+
+        persisted_response = await api_client.get("/api/weekly-plan")
+        assert persisted_response.json() == original_plan
+
+    missing_action_response = await api_client.post(
         "/api/weekly-plan/adopt",
         json={
             "day": "Monday",
             "changes": [
                 {
-                    "action": "add",
                     "exerciseName": "深蹲",
                     "field": "pct",
                     "newValue": 0.7,
@@ -184,12 +206,10 @@ async def test_adopt_rejects_invalid_action_without_dirty_write(api_client: Asyn
         },
     )
 
-    assert response.status_code == 200
-    assert response.json()["ok"] is False
-    assert "暂不支持" in response.json()["message"]
-
-    persisted_response = await api_client.get("/api/weekly-plan")
-    assert persisted_response.json() == original_plan
+    assert missing_action_response.status_code == 200
+    assert missing_action_response.json()["ok"] is False
+    assert "仅支持" in missing_action_response.json()["message"]
+    assert (await api_client.get("/api/weekly-plan")).json() == original_plan
 
 
 @pytest.mark.asyncio
@@ -263,6 +283,94 @@ async def test_adopt_applies_multiple_changes_as_one_batch(api_client: AsyncClie
     assert body["plan"]["Monday"]["exercises"][1]["instance"]["kg"] == 110
     assert body["plan"]["Monday"]["exercises"][1]["note"] == "降重保动作"
     assert body["plan"]["Monday"]["exercises"][1]["instance"]["note"] == "降重保动作"
+
+
+@pytest.mark.asyncio
+async def test_adopt_coerces_numeric_string_value_before_writing(api_client: AsyncClient):
+    await seed_weekly_plan(api_client)
+
+    response = await api_client.post(
+        "/api/weekly-plan/adopt",
+        json={
+            "day": "Monday",
+            "changes": [
+                {
+                    "action": "update",
+                    "exerciseName": "深蹲",
+                    "field": "pct",
+                    "newValue": "0.7",
+                },
+                {
+                    "action": "update",
+                    "exerciseName": "腿举",
+                    "field": "kg",
+                    "newValue": "110",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["ok"] is True
+    assert body["plan"]["Monday"]["exercises"][0]["pct"] == 0.7
+    assert body["plan"]["Monday"]["exercises"][0]["instance"]["pct"] == 0.7
+    assert body["plan"]["Monday"]["exercises"][1]["kg"] == 110
+    assert body["plan"]["Monday"]["exercises"][1]["instance"]["kg"] == 110
+
+
+@pytest.mark.asyncio
+async def test_adopt_rejects_invalid_numeric_string_without_dirty_write(api_client: AsyncClient):
+    original_plan = await seed_weekly_plan(api_client)
+
+    response = await api_client.post(
+        "/api/weekly-plan/adopt",
+        json={
+            "day": "Monday",
+            "changes": [
+                {
+                    "action": "update",
+                    "exerciseName": "深蹲",
+                    "field": "pct",
+                    "newValue": "heavy",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert response.json()["plan"] == original_plan
+    assert "pct" in response.json()["message"]
+    assert (await api_client.get("/api/weekly-plan")).json() == original_plan
+
+
+@pytest.mark.asyncio
+async def test_adopt_reps_update_keeps_template_reps_text_in_sync(api_client: AsyncClient):
+    await seed_weekly_plan(api_client)
+
+    response = await api_client.post(
+        "/api/weekly-plan/adopt",
+        json={
+            "day": "Monday",
+            "changes": [
+                {
+                    "action": "update",
+                    "exerciseName": "深蹲",
+                    "field": "reps",
+                    "newValue": "3",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    exercise = response.json()["plan"]["Monday"]["exercises"][0]
+
+    assert response.json()["ok"] is True
+    assert exercise["reps"] == 3
+    assert exercise["template"]["repsText"] == "3"
 
 
 @pytest.mark.asyncio
