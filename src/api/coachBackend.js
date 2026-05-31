@@ -97,6 +97,7 @@ function normalizeReplyPayload(data) {
   return {
     text: typeof data?.text === 'string' ? data.text : '',
     suggestion: data?.suggestion ?? null,
+    proposal: data?.proposal ?? null,
   }
 }
 
@@ -164,6 +165,16 @@ function consumeCoachEvent(state, parsedEvent, onDelta) {
     return false
   }
 
+  if (event === 'proposal') {
+    state.proposal = data?.proposal ?? null
+    return false
+  }
+
+  if (event === 'tool_status') {
+    state.toolStatus = data ?? null
+    return false
+  }
+
   if (event === 'done') {
     state.done = true
     state.finalText = typeof data?.text === 'string' ? data.text : state.fullText
@@ -193,7 +204,7 @@ export async function requestBackendCoachReply(messages, options = {}) {
   try {
     const body = {
       ...(sessionId === undefined || sessionId === null ? {} : { sessionId }),
-      messages,
+      ...(Array.isArray(messages) ? { messages } : normalizeAgentRequestBody(messages)),
       ...(model ? { model } : {}),
     }
     const response = await fetchImpl(createRequestUrl(baseUrl, '/chat/reply'), {
@@ -232,12 +243,15 @@ export async function streamBackendCoachReply(messages, options = {}) {
   assertFetchAvailable(fetchImpl)
 
   try {
+    const query = Array.isArray(messages)
+      ? { messages: JSON.stringify(messages), model, session_id: sessionId }
+      : {
+          userInput: messages?.userInput,
+          model: messages?.model || model,
+          session_id: messages?.sessionId ?? sessionId,
+        }
     const response = await fetchImpl(
-      createRequestUrl(baseUrl, '/chat/stream', {
-        messages: JSON.stringify(messages),
-        model,
-        session_id: sessionId,
-      }),
+      createRequestUrl(baseUrl, '/chat/stream', query),
       {
         method: 'GET',
         signal,
@@ -259,6 +273,8 @@ export async function streamBackendCoachReply(messages, options = {}) {
       finalText: '',
       fullText: '',
       suggestion: null,
+      proposal: null,
+      toolStatus: null,
     }
     let buffer = ''
 
@@ -289,6 +305,7 @@ export async function streamBackendCoachReply(messages, options = {}) {
     return {
       text: state.finalText || state.fullText,
       suggestion: state.suggestion,
+      proposal: state.proposal,
     }
   } catch (error) {
     if (error instanceof BackendCoachApiError) {
@@ -329,10 +346,11 @@ export async function submitBackendCoachBackgroundTask(messages, options = {}) {
   assertFetchAvailable(fetchImpl)
 
   try {
+    const payloadSessionId = Array.isArray(messages) ? null : messages?.sessionId
     const resolvedSessionId = await resolveBackgroundSessionId({
       baseUrl,
       fetchImpl,
-      sessionId,
+      sessionId: sessionId ?? payloadSessionId,
       signal,
     })
 
@@ -350,7 +368,7 @@ export async function submitBackendCoachBackgroundTask(messages, options = {}) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages,
+          ...(Array.isArray(messages) ? { messages } : normalizeAgentRequestBody(messages)),
           ...(model ? { model } : {}),
         }),
         keepalive: true,
@@ -373,6 +391,20 @@ export async function submitBackendCoachBackgroundTask(messages, options = {}) {
       code: 'network_error',
       cause: error,
     })
+  }
+}
+
+export async function requestAgentReplyStream(payload, options = {}) {
+  return streamBackendCoachReply(payload, options)
+}
+
+function normalizeAgentRequestBody(payload = {}) {
+  return {
+    ...(payload.sessionId === undefined || payload.sessionId === null ? {} : { sessionId: payload.sessionId }),
+    userInput: payload.userInput || '',
+    ...(payload.model ? { model: payload.model } : {}),
+    ...(payload.thinking ? { thinking: payload.thinking } : {}),
+    ...(payload.files ? { files: payload.files } : {}),
   }
 }
 

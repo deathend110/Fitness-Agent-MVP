@@ -380,10 +380,12 @@ function CoachTab({
   async function handleAdoptSuggestion(targetSuggestion) {
     try {
       const client = createBackendClient()
-      const adoptResult = await client.adoptWeeklyPlanChange({
-        day: targetSuggestion?.day,
-        changes: targetSuggestion?.changes,
-      })
+      const adoptResult = targetSuggestion?.proposalId
+        ? await client.commitPlanChange({ proposalId: targetSuggestion.proposalId })
+        : await client.adoptWeeklyPlanChange({
+            day: targetSuggestion?.day,
+            changes: targetSuggestion?.changes,
+          })
 
       if (!adoptResult.ok) {
         setErrorMessage(adoptResult.message)
@@ -469,7 +471,7 @@ function CoachTab({
         nextMeta[assistantIndex] = {
           ...nextMeta[assistantIndex],
           isDismissed: false,
-          suggestion: reply.suggestion,
+          suggestion: reply.proposal || reply.suggestion,
         }
 
         return nextMeta

@@ -46,7 +46,9 @@ class ChatReplyResponseSchema(BaseModel):
 
 
 class ChatBackgroundRequestSchema(BaseModel):
-    messages: list[dict[str, Any]]
+    sessionId: int | None = None
+    userInput: str | None = None
+    messages: list[dict[str, Any]] | None = None
     model: str | None = None
 
 
@@ -496,12 +498,27 @@ async def submit_background_chat_task(
     payload: ChatBackgroundRequestSchema,
     session: AsyncSession = Depends(get_db_session),
 ) -> ChatBackgroundSubmitResponseSchema:
-    user_content = read_last_user_message(payload.messages)
-    await resolve_chat_session(session_id, session)
+    user_content = read_user_input(payload.userInput)
+    chat_session = await resolve_chat_session(session_id, session)
+    if user_content is None:
+        if payload.messages is None:
+            raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
+        user_content = read_last_user_message(payload.messages)
+        request_messages = payload.messages
+    else:
+        settings = get_settings()
+        selected_model = payload.model or settings.default_model
+        agent_request = await build_agent_request(
+            session=session,
+            session_id=chat_session.id,
+            user_input=user_content,
+            model_config={"model": selected_model},
+        )
+        request_messages = agent_request.messages
     worker = get_background_worker()
     record = await worker.submit(
         session_id=session_id,
-        messages=payload.messages,
+        messages=request_messages,
         user_content=user_content,
         model=payload.model,
     )
