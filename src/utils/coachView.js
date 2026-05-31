@@ -34,12 +34,14 @@ export function getVisibleStreamText(fullText = '') {
 export function buildCoachHistoryView(chatHistory = [], options = {}) {
   const activeSessionId = options.activeSessionId || null
   const sessions = chatHistory
-    .filter((message) => message?.role === 'user')
+    .map((message, originalIndex) => ({ message, originalIndex }))
+    .filter(({ message }) => message?.role === 'user')
     .slice(-6)
     .reverse()
-    .map((message, index) => {
+    .map(({ message, originalIndex }, index) => {
       const title = normalizeText(message.content, '新的对话')
-      const id = `session-${index}-${title}`
+      // 使用原始 chatHistory 位置生成临时会话 id，新增消息时旧历史项不会因展示排序漂移。
+      const id = `session-message-${originalIndex}`
 
       return {
         id,

@@ -24,6 +24,11 @@ function AssistantActions({ onCopy, onRetry }) {
 function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggestion }) {
   const isUser = message.role === 'user'
   const senderLabel = message.senderLabel || (isUser ? '我' : 'RepMind')
+  const rawSuggestion = message.suggestion || null
+  const handleAdopt = rawSuggestion ? () => onAdopt?.(rawSuggestion) : undefined
+  const handleDismissSuggestion = rawSuggestion
+    ? () => onDismissSuggestion?.(rawSuggestion)
+    : undefined
 
   return (
     <article className={`group flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -70,8 +75,8 @@ function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggest
           <div className="mt-3 w-full max-w-[600px]">
             <AdoptCard
               card={message.suggestionCard}
-              onAdopt={() => onAdopt?.(message.suggestionCard)}
-              onDismiss={() => onDismissSuggestion?.(message.suggestionCard)}
+              onAdopt={handleAdopt}
+              onDismiss={handleDismissSuggestion}
             />
           </div>
         ) : null}

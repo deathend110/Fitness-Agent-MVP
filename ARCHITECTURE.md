@@ -331,6 +331,12 @@ Task 6 的复杂指标不单独持久化，而是运行时根据 `profile + week
 
 结构化建议卡片不落盘，仅存在于当前页面状态中。
 
+AI 教练页的消息展示补充约束：
+
+- `message.suggestion`：原始领域建议对象，供 `adoptPlanChange()` 等业务链路消费
+- `message.suggestionCard`：由 `buildAdoptCardModel()` 派生的展示模型，只负责渲染采纳卡片
+- 采纳 / 忽略回调必须继续传递 `message.suggestion`，不能把 `suggestionCard` 冒充为领域 suggestion
+
 ### `fitloop_storageVersion`
 
 用于标记默认数据迁移版本，避免旧演示数据反复覆盖真实数据。
@@ -352,6 +358,7 @@ CoachTab
 - 每次发送前都重新读取最新上下文
 - AI 回复解析与训练计划写回分离，保留用户最终确认权
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
+- AI 教练页历史侧栏若使用 `buildCoachHistoryView()`，其展示 id 需基于原始 `chatHistory` 下标生成，例如 `session-message-12`，保证新增消息后既有历史项 id 稳定可命中
 
 ## Task 4 已完成升级说明
 

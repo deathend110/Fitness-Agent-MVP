@@ -31,8 +31,47 @@ test('buildCoachHistoryView 会从用户消息生成轻量历史展示模型', (
   assert.equal(view.groups[0].label, '最近对话')
   assert.equal(view.groups[0].items.length, 2)
   assert.equal(view.groups[0].items[0].title, '帮我看看本周蛋白质摄入。')
+  assert.equal(view.groups[0].items[0].id, 'session-message-3')
   assert.equal(view.groups[0].items[0].isActive, true)
   assert.equal(view.groups[0].items[1].title, '今天深蹲做多少重量合适？')
+  assert.equal(view.groups[0].items[1].id, 'session-message-1')
+})
+
+test('buildCoachHistoryView 会用 activeSessionId 稳定命中指定历史项', () => {
+  const view = buildCoachHistoryView(
+    [
+      { role: 'assistant', content: '欢迎回来' },
+      { role: 'user', content: '今天深蹲做多少重量合适？' },
+      { role: 'assistant', content: '建议从 70% 1RM 开始。' },
+      { role: 'user', content: '帮我看看本周蛋白质摄入。' },
+    ],
+    { activeSessionId: 'session-message-1' },
+  )
+
+  assert.equal(view.groups[0].items[0].id, 'session-message-3')
+  assert.equal(view.groups[0].items[0].isActive, false)
+  assert.equal(view.groups[0].items[1].id, 'session-message-1')
+  assert.equal(view.groups[0].items[1].isActive, true)
+})
+
+test('buildCoachHistoryView 新增消息后已有历史 id 不漂移', () => {
+  const baseHistory = [
+    { role: 'assistant', content: '欢迎回来' },
+    { role: 'user', content: '今天深蹲做多少重量合适？' },
+    { role: 'assistant', content: '建议从 70% 1RM 开始。' },
+    { role: 'user', content: '帮我看看本周蛋白质摄入。' },
+  ]
+  const beforeView = buildCoachHistoryView(baseHistory)
+  const afterView = buildCoachHistoryView([
+    ...baseHistory,
+    { role: 'assistant', content: '蛋白质建议已整理。' },
+    { role: 'user', content: '再帮我看一下睡眠恢复。' },
+  ])
+
+  const beforeOlderIds = beforeView.groups[0].items.map((item) => item.id)
+  const afterOlderIds = afterView.groups[0].items.slice(1).map((item) => item.id)
+
+  assert.deepEqual(beforeOlderIds, afterOlderIds)
 })
 
 test('buildCoachHistoryView 在没有用户消息时返回空状态占位记录', () => {
