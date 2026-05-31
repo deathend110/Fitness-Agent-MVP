@@ -147,6 +147,12 @@ export function createBackendClient(options = {}) {
     adoptWeeklyPlanChange(payload, { signal } = {}) {
       return request('/weekly-plan/adopt', { method: 'POST', body: payload, signal })
     },
+    proposePlanChange(payload, { signal } = {}) {
+      return request('/tools/plan/propose', { method: 'POST', body: payload, signal })
+    },
+    commitPlanChange(payload, { signal } = {}) {
+      return request('/tools/plan/commit', { method: 'POST', body: payload, signal })
+    },
     getDailyLog(query = {}, { signal } = {}) {
       return request('/daily-log', { query, signal })
     },

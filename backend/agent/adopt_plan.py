@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 import math
 from typing import Any
+from uuid import uuid4
 
 from backend.db.models import WEEKDAY_ORDER
 
@@ -19,6 +20,89 @@ class AdoptPlanResult:
     ok: bool
     message: str
     next_plan: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class PlanChangeProposal:
+    proposal_id: str
+    session_id: int | None
+    day: str
+    changes: list[dict[str, Any]]
+    card: dict[str, Any]
+    validation: AdoptPlanResult
+    status: str = "pending"
+
+
+_proposal_store: dict[str, PlanChangeProposal] = {}
+
+
+def clear_plan_change_proposals() -> None:
+    _proposal_store.clear()
+
+
+def validate_plan_changes(
+    weekly_plan: dict[str, Any] | None,
+    day: str | None,
+    changes: list[dict[str, Any]] | None,
+) -> AdoptPlanResult:
+    return adopt_plan_change(weekly_plan, day, changes)
+
+
+def build_plan_change_proposal(
+    *,
+    current_plan: dict[str, Any],
+    session_id: int | None,
+    day: str,
+    changes: list[dict[str, Any]],
+    summary: str = "",
+) -> PlanChangeProposal:
+    validation = validate_plan_changes(current_plan, day, changes)
+    proposal_id = uuid4().hex
+    proposal = PlanChangeProposal(
+        proposal_id=proposal_id,
+        session_id=session_id,
+        day=day,
+        changes=deepcopy(changes),
+        card={
+            "proposalId": proposal_id,
+            "day": day,
+            "summary": summary,
+            "changes": deepcopy(changes),
+            "status": "pending" if validation.ok else "invalid",
+        },
+        validation=validation,
+        status="pending" if validation.ok else "invalid",
+    )
+    _proposal_store[proposal_id] = proposal
+    return proposal
+
+
+def commit_validated_plan_change(
+    current_plan: dict[str, Any],
+    proposal_id: str,
+    *,
+    confirmed_by_user: bool,
+) -> AdoptPlanResult:
+    proposal = _proposal_store.get(proposal_id)
+    if proposal is None:
+        return _build_failure_result(current_plan, "未找到计划修改提议，无法写回。")
+    if proposal.status != "pending":
+        return _build_failure_result(current_plan, "该计划修改提议已处理，不能重复提交。")
+    if not confirmed_by_user:
+        return _build_failure_result(current_plan, "计划写回必须来自用户确认。")
+
+    result = adopt_plan_change(current_plan, proposal.day, proposal.changes)
+    next_status = "committed" if result.ok else "failed"
+    _proposal_store[proposal_id] = PlanChangeProposal(
+        proposal_id=proposal.proposal_id,
+        session_id=proposal.session_id,
+        day=proposal.day,
+        changes=proposal.changes,
+        card={**proposal.card, "status": next_status},
+        validation=proposal.validation,
+        status=next_status,
+    )
+    return result
 
 
 def _build_failure_result(weekly_plan: dict[str, Any], message: str) -> AdoptPlanResult:
