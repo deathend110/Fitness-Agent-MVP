@@ -22,13 +22,17 @@
 - Phase 3 memory：长期记忆候选提取、检索、确认和忽略接口
 - Phase 3 Tool Calls：只读工具、工具循环、工具结果瘦身、工具审计日志
 - Phase 3 计划修改安全闸门：`propose` 只生成建议卡，`commit` 必须来自用户确认路径
+- Phase 4 文件上传解析：Markdown/TXT、DOCX、Excel 和图片保存到本地缓存，摘要进入 `UploadedFile / KnowledgeItem`
+- Phase 4 模型配置：`GET /api/models` 优先读取 DeepSeek `/models`，失败时回退本地白名单
+- Phase 4 Coach 草稿：会话级保存输入草稿、模型、thinking 和附件 id
+- Phase 4 指标服务：`GET /api/metrics/daily-summary` 返回 Python 版每日复杂指标摘要
 
 后续阶段仍未落地的内容：
 
 - AI 教练页真实多会话 UI
-- 文件上传解析、模型选择、前端 Markdown 渲染、后端草稿持久化、完整知识库、周期计划与预制计划库
+- 向量知识库、远端文件存储、完整 OCR/视觉理解、周期计划与预制计划库
 
-V2.3 Phase 2 已完成密钥后移、SSE 流式代理、离页后台思考和计划采纳后端化；Phase 3 已把 prompt、上下文管理、memory、usage 观测和工具调用迁入后端 Agent Orchestrator。
+V2.3 Phase 2 已完成密钥后移、SSE 流式代理、离页后台思考和计划采纳后端化；Phase 3 已把 prompt、上下文管理、memory、usage 观测和工具调用迁入后端 Agent Orchestrator；Phase 4 已补齐文件体验、模型配置、草稿与指标服务 MVP。
 
 ## 技术栈
 
@@ -64,9 +68,15 @@ Copy-Item backend\.env.example backend\.env
 - `DATABASE_URL`
 - `CORS_ORIGINS`
 - `DATA_DIR`
+- `UPLOADS_DIR`
+- `MAX_UPLOAD_MB`
+- `ALLOWED_UPLOAD_EXTENSIONS`
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_BASE_URL`
 - `DEFAULT_MODEL`
+- `MODEL_ALLOWLIST`
+- `DEFAULT_THINKING_ENABLED`
+- `DEFAULT_THINKING_BUDGET`
 - `DEEPSEEK_TIMEOUT_SECONDS`
 
 说明：
@@ -164,6 +174,14 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `POST /api/memory/candidates/{id}/ignore`
 - `POST /api/tools/plan/propose`
 - `POST /api/tools/plan/commit`
+- `POST /api/files/upload`
+- `GET /api/files`
+- `GET /api/files/{id}`
+- `DELETE /api/files/{id}`
+- `GET /api/models`
+- `GET /api/chat/sessions/{id}/draft`
+- `PUT /api/chat/sessions/{id}/draft`
+- `GET /api/metrics/daily-summary?date=YYYY-MM-DD`
 
 说明：
 
@@ -185,6 +203,22 @@ uv run alembic -c backend\alembic.ini upgrade head
 - 后台任务失败或返回空内容时只记录 `failed` 状态和友好 message，不写入脏 assistant
 - 后台任务表当前存放在后端进程内存中，服务重启后旧 task_id 会返回 `not_found`
 - `/context/debug` 当前返回会话 usage 汇总和 token budget；`prompt_cache_hit_tokens / prompt_cache_miss_tokens` 直接来自 DeepSeek `usage`，不会伪造流式缺失字段
+
+### Phase 4 文件上传
+
+- `POST /api/files/upload` 使用 multipart 字段 `file`，可选 `sessionId`。
+- 默认缓存目录为 `backend/data/uploads`；`UploadedFile.storage_path` 保存相对路径，避免把用户机器绝对路径写入数据库。
+- 默认限制为 `MAX_UPLOAD_MB=15`；支持 `.png/.jpg/.jpeg/.webp/.xlsx/.xlsm/.docx/.md/.txt`。
+- 摘要结构统一为 `{kind,title,summary,preview,text}`；图片只记录尺寸、格式等 metadata，不内嵌完整大图 base64。
+- `parser_status` 可能为 `parsed / empty / failed`。解析失败会保留记录和 `parser_error`，普通聊天仍可继续。
+- 可解析文本会写入 `KnowledgeItem(kind="uploaded_file", source_file_id=...)`，Agent 请求携带 `fileIds` 时只注入裁剪摘要。
+
+### Phase 4 模型、草稿与指标
+
+- `GET /api/models` 成功时返回 DeepSeek `/models` 与本地 allowlist 的交集；缺 Key 或上游失败时仍返回 200 fallback，并带 `source="fallback"` 与 `warning`。
+- 默认推荐模型为 `deepseek-v4-flash`，`deepseek-v4-pro` 也在默认白名单内；legacy 名称只作为兼容，不作为默认推荐。
+- `GET/PUT /api/chat/sessions/{id}/draft` 按会话保存草稿文本、模型、thinking 和附件 id。未知附件 id 会返回 422，避免 UI 误以为附件已恢复。
+- `GET /api/metrics/daily-summary` 读取 SQLite 中的 profile / weeklyPlan / dailyLog，返回 snake_case 指标字段；当前规则与前端固定样本对齐。
 
 ### Phase 3 memory
 
@@ -310,4 +344,11 @@ Phase 3 全量后端验证：
 
 ```powershell
 uv run pytest backend\tests
+```
+
+Phase 4 定向验证：
+
+```powershell
+uv run pytest backend\tests\test_phase4_models.py backend\tests\test_file_parsers.py backend\tests\test_file_upload.py
+uv run pytest backend\tests\test_chat_files_context.py backend\tests\test_models_api.py backend\tests\test_drafts_api.py backend\tests\test_metrics_api.py
 ```

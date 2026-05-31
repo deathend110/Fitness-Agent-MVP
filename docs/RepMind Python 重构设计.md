@@ -165,36 +165,42 @@
 - **V2.3 Phase 3 已落地取舍**：
   - 已实现 `PromptAssembler / SummaryCompressor / StateReinjector / UsageLedger / MemoryRetriever / ToolRegistry`，前端 AI 教练发送链路已切为 `sessionId + userInput + model/thinking + files`。
   - memory 先采用规则与关键词检索，低置信度候选通过确认接口晋升；向量检索与完整知识库留 Phase 5。
-  - `read_uploaded_file_summary` 作为工具占位，真实上传文件解析和全文读取留 Phase 4。
-  - `calculate_metrics` 先覆盖当前已落库数据的轻量指标，完整 Python 指标服务迁移留后续版本。
+  - `read_uploaded_file_summary` 已在 Phase 4 升级为读取真实 `UploadedFile.summary`，聊天请求通过 `fileIds` 注入裁剪摘要。
+  - `calculate_metrics` 的轻量工具继续可用；Phase 4 已补充 `/api/metrics/daily-summary` Python 指标服务 MVP，后续再扩展 AI 修正与周期计划指标。
   - 计划修改使用 propose/commit 两段式：模型只能生成建议卡，真正写回必须来自用户确认路径。
 
-### 🟠 P1 — 文件上传与解析
+### ✅ P1 — 文件上传与解析（V2.3 Phase 4 已完成 MVP）
 
-- **当前状态**：完全未实现。
+- **当前状态**：已完成本地缓存与摘要解析 MVP。
 - **需求**：图片（喂视觉）、Excel（训练表格）、DOCX、MD；文件存**软件所在目录**的缓存文件夹（不写 C 盘）。
-- **Python 目标**：
+- **已落地**：
   ```
   backend/files/
     uploader.py            # 接收 multipart，存 backend/data/uploads/
     parsers/
-      image_parser.py      # Pillow + base64，准备喂 DeepSeek vision
-      excel_parser.py      # pandas + openpyxl → 结构化 JSON
+      image_parser.py      # Pillow 读取尺寸/格式/mime，不内嵌完整大图
+      excel_parser.py      # openpyxl → sheet/表头/前 N 行摘要
       docx_parser.py       # python-docx → markdown 文本
       md_parser.py         # 透传 / markdown 解析
   ```
+  - `POST /api/files/upload` 写入 `UploadedFile`；可解析文本额外写入 `KnowledgeItem(kind="uploaded_file")`。
+  - `build_agent_request(file_ids=...)` 把文件摘要注入 `recentFilesSummary`，debug 标记 `selected_files / missing_files / trimmed_file_summaries`。
+  - `read_uploaded_file_summary` 工具读取真实摘要；空文件、不支持格式、超大文件和解析失败都有可解释状态。
+  - 保留边界：OCR、视觉模型读取原图、远端文件存储和向量知识库留 Phase 5+。
 
-### 🟠 P1 — 模型选择与调用配置
+### ✅ P1 — 模型选择与调用配置（V2.3 Phase 4 已完成 MVP）
 
-- **当前文件**：`src/api/deepseek.js`（`DEFAULT_MODEL` 硬编码）。
+- **当前文件**：`backend/api/models.py`、`backend/agent/deepseek_client.py`、`src/components/coach/ModelSelector.jsx`。
 - **需求（V2.5）**：从接入的 API 列出可用模型，输入框旁可展开选择（参考 Gemini）；并支持思考模式/强度透传。
-- **Python 目标**：`backend/api/models.py`（`GET /api/models` 返回白名单/可用模型）+ `backend/config.py`（读 `.env`，管理 Key、base URL、模型白名单、思考参数）。前端只渲染下拉，不再硬编码。
+- **已落地**：`GET /api/models` 优先请求 DeepSeek `/models` 并按 `MODEL_ALLOWLIST` 过滤；缺 Key 或上游失败返回本地 fallback、`source` 与 `warning`。前端只渲染后端声明的 `models/defaultModel/thinking`，发送请求携带 `model/thinking`。
+- **保留边界**：更细的模型成本展示、模型退役提醒和按任务自动选型留后续 UX 迭代。
 
-### 🟡 P2 — 复杂指标计算服务
+### ✅ P2 — 复杂指标计算服务（V2.3 Phase 4 Python MVP 已完成）
 
 - **当前文件**：`src/utils/dailyMetrics.js`、`src/utils/dailyMetricsPanel.js`、`src/utils/promptMetricsSection.js`、`src/utils/calcBase.js`
 - **现状评估**：当前纯前端计算可用，但：①AI 动态修正 TDEE/体脂率（V1 意见）无法持久化；②周期计划引入后复杂度上升，JS 难维护。
-- **Python 目标**（`backend/metrics/`）：`bmr.py` / `tdee.py`（含 AI 修正持久化）/ `body_composition.py` / `prompt_metrics.py`（生成 `structured_metrics`）。**保持 `buildDailyMetricsSummary()` 的单一口径语义**，后端展示与 prompt 注入共用同一函数。
+- **已落地**：`backend/metrics/daily_metrics.py` 与 `GET /api/metrics/daily-summary` 已提供 Python 版每日指标摘要，固定样本与前端 `buildDailyMetricsSummary()` 对齐。热量规则为 `delta > 100 => surplus`、`delta < -100 => deficit`、其余 `balanced`；蛋白质规则为 `>= 1.6g/kg => met`。
+- **保留边界**：AI 修正 TDEE/体脂率持久化、周期计划相关训练负荷指标和完全替换前端计算留 Phase 5/V3。
 
 ### 🟡 P2 — 周期计划引擎 + 预制计划库（V3，预留接口）
 
@@ -308,7 +314,8 @@ backend/
 | `knowledge_item` | 新增（跨对话知识库建模） | id、source_session_id、kind、content/embedding、created_at |
 | `memory_item` | 新增（长期用户记忆） | id、kind、content、confidence、source_message_id、last_used_at、created_at |
 | `tool_call_log` | 新增（工具调用审计） | id、session_id、tool_name、arguments_json、result_summary、status、created_at |
-| `uploaded_file` | 新增（文件上传） | id、session_id、path、mime、parsed_text、created_at |
+| `uploaded_file` | Phase 4 已新增（文件上传本地缓存） | id、session_id、original_name、stored_name、mime_type、extension、size_bytes、sha256、storage_path、summary、parser_status、parser_error、created_at |
+| `coach_draft` | Phase 4 已新增（AI 教练草稿） | id、session_id、content、model、thinking、attached_file_ids、updated_at |
 | `metrics_correction` | 新增（AI 修正 TDEE/体脂持久化） | id、date、field、value、reason、created_at |
 
 **关键迁移细节 — exercise 的 `template + instance + 扁平兼容字段`**：
@@ -391,7 +398,7 @@ POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
 - V2.3 实施状态：
   - 已完成 Task 13-21：数据模型、上下文拼装、usage/cache 观测、长对话摘要、memory、DeepSeek Tool Calls、计划 propose/commit、前端 Agent 请求契约、文档与验收记录。
   - 已保留兼容路径：Phase 2 旧 `messages[]` 请求仍可用于测试和回退；新前端默认走后端 Agent Orchestrator。
-  - 已明确 MVP 边界：上传文件摘要工具、完整指标服务、真实多会话 UI、向量知识库与周期计划引擎继续留 Phase 4/5。
+  - 已明确 MVP 边界：真实多会话 UI、向量知识库与周期计划引擎继续留 Phase 5；上传文件摘要工具和 Python 指标 MVP 已在 Phase 4 补齐。
 - 实施顺序：
   1. 先做无工具的上下文拼装与 usage 记录，验证 DeepSeek Context Caching 命中稳定前缀。
   2. 再做摘要压缩，把旧消息压成 `chat_session_summary`，但保留全量 `chat_message`。
@@ -421,9 +428,15 @@ POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
   - 边界 3：模型请求不存在的动作名/日期/字段时，工具返回可解释错误，计划不变。
   - 失败场景：DeepSeek 工具调用参数不合法或上游超时时，不写脏数据，前端显示可重试提示；`chat_message` 不保存半截 assistant。
 
-### Phase 4 — 文件上传解析 + 模型选择 + 前端 MD 渲染 + 草稿持久化
-- 交付：`files/*`、`/api/models` + 前端下拉、前端 MD 渲染器、草稿后端持久化、对话滚动定位到最新。
-- 验收：成功——上传 excel/docx/图片可解析喂模型、切模型生效、回复 MD 渲染、切页回来草稿与最新消息都在；边界——超大/不支持格式、空文件；失败——解析失败给提示且不影响主对话。
+### Phase 4 — 文件上传解析 + 模型选择 + 前端 MD 渲染 + 草稿持久化（V2.3 已完成）
+- 交付：
+  - 文件上传：`backend/files/*`、`/api/files/*`、`UploadedFile`、`KnowledgeItem(source_file_id)`，支持图片、Excel、DOCX、MD/TXT 的轻量摘要。
+  - 文件上下文：聊天请求携带 `fileIds`，后端在 `PromptAssembler` 中注入裁剪摘要，`read_uploaded_file_summary` 读取真实摘要。
+  - 模型选择：`/api/models` + `ModelSelector`，支持 DeepSeek `/models` allowlist 过滤与 fallback。
+  - 体验：安全 Markdown 渲染、对话滚动定位到最新、`CoachDraft` 后端草稿持久化、文件附件 UI。
+  - 指标：`backend/metrics/daily_metrics.py` + `/api/metrics/daily-summary`，与前端固定样本口径校准。
+- 验收：自动化覆盖模型/文件/草稿/指标 API、文件上下文、Markdown parser、Coach 请求契约和全量前端测试；手动 Demo 路径记录在 `task/V2.3/V2.3 Phase 4 验收记录.md`。
+- 保留边界：真实多会话 UI、向量知识库、完整 OCR/视觉理解、远端文件存储、周期计划引擎和预制计划库进入 Phase 5/V3。
 
 ### Phase 5 — 多会话 + 知识库 + 周期计划引擎/预制库（V3）
 - 交付：真实多会话（取代假多会话）、`knowledge_item` 跨对话记忆注入、`cycle_engine` + `preset_library`。
