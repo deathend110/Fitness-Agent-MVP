@@ -10,6 +10,8 @@ dist/
 backend/.env
 backend/data/
 backend/__pycache__/
+backend/files/__pycache__/
+backend/files/parsers/__pycache__/
 backend/api/__pycache__/
 backend/schemas/__pycache__/
 backend/tests/__pycache__/
