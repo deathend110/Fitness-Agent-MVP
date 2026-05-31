@@ -196,7 +196,8 @@ docs/
   - 负责 AI 教练页状态协调
   - 继续管理 `draft / errorMessage / isSending / streamingText`
   - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
-  - 页面隐藏或离开时中止前台请求并提交后台思考兜底；页面恢复可见时查询 task 并把成功结果补进当前消息列表
+  - 页面隐藏或离开时中止前台请求并提交后台思考兜底；只有后台任务成功拿到 `task_id` 后才抑制前台错误
+  - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
   - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()`、`appendChatMessages()` 与 `adoptPlanChange()`
 
 - `src/components/coach/CoachLayout.jsx`
@@ -514,11 +515,13 @@ AI 教练页的消息展示补充约束：
 ```json
 {
   "taskId": "uuid-like-task-id",
-  "sessionId": 1
+  "sessionId": 1,
+  "userContent": "离页前发送的用户问题",
+  "createdAt": "2026-05-31T00:00:00.000Z"
 }
 ```
 
-页面恢复可见时会调用 `GET /api/chat/background/{task_id}` 查询；成功后把 assistant 文本补进 `fitloop_chatHistory` 对应展示状态并清理该 key。
+页面恢复可见时会调用 `GET /api/chat/background/{task_id}` 查询；成功后先校验 `userContent` 是否仍存在于当前 `fitloop_chatHistory`，匹配时补 assistant 文本并清理该 key，不匹配时提示用户当前对话已变化并清理该 key。
 
 ### 后端 `chat_session / chat_message`
 

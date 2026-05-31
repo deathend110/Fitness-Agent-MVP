@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  buildBackgroundCoachTaskRecord,
   getBackgroundCoachTask,
+  mergeBackgroundCoachReply,
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
@@ -242,6 +244,50 @@ test('startBackgroundCoachReply 会复用上下文构建逻辑提交后台任务
   )
 
   assert.deepEqual(result, { taskId: 'task-1', sessionId: 9 })
+})
+
+test('buildBackgroundCoachTaskRecord 会保存 taskId 和源用户消息用于回页校验', () => {
+  const record = buildBackgroundCoachTaskRecord(
+    { taskId: 'task-1', sessionId: 9 },
+    { userInput: '离页后继续分析' },
+  )
+
+  assert.equal(record.taskId, 'task-1')
+  assert.equal(record.sessionId, 9)
+  assert.equal(record.userContent, '离页后继续分析')
+  assert.equal(typeof record.createdAt, 'string')
+})
+
+test('buildBackgroundCoachTaskRecord 缺少 taskId 时返回 null', () => {
+  assert.equal(buildBackgroundCoachTaskRecord({}, { userInput: '离页后继续分析' }), null)
+})
+
+test('mergeBackgroundCoachReply 只在当前历史仍包含源用户消息时追加 assistant', () => {
+  const currentHistory = [{ role: 'user', content: '离页后继续分析' }]
+  const mergeResult = mergeBackgroundCoachReply({
+    currentHistory,
+    reply: { text: '后台分析完成', suggestion: { day: 'Friday' } },
+    storedTask: { taskId: 'task-1', userContent: '离页后继续分析' },
+  })
+
+  assert.equal(mergeResult.status, 'merged')
+  assert.deepEqual(mergeResult.nextHistory, [
+    { role: 'user', content: '离页后继续分析' },
+    { role: 'assistant', content: '后台分析完成' },
+  ])
+  assert.equal(mergeResult.assistantIndex, 1)
+  assert.deepEqual(mergeResult.suggestion, { day: 'Friday' })
+})
+
+test('mergeBackgroundCoachReply 在用户已清空当前聊天时不污染当前对话', () => {
+  const mergeResult = mergeBackgroundCoachReply({
+    currentHistory: [],
+    reply: { text: '后台分析完成', suggestion: null },
+    storedTask: { taskId: 'task-1', userContent: '离页后继续分析' },
+  })
+
+  assert.equal(mergeResult.status, 'source_user_missing')
+  assert.deepEqual(mergeResult.nextHistory, [])
 })
 
 test('getBackgroundCoachTask 会转交后台任务查询实现', async () => {

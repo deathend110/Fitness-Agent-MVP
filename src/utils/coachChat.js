@@ -75,6 +75,65 @@ export async function startBackgroundCoachReply(
   return submitImpl(messages, { sessionId })
 }
 
+export function buildBackgroundCoachTaskRecord(task, { userInput = '' } = {}) {
+  if (!task?.taskId) {
+    return null
+  }
+
+  return {
+    taskId: task.taskId,
+    sessionId: Number.isInteger(task.sessionId) ? task.sessionId : null,
+    userContent: userInput.trim(),
+    createdAt: new Date().toISOString(),
+  }
+}
+
+export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTask } = {}) {
+  const assistantText = typeof reply?.text === 'string' ? reply.text.trim() : ''
+  const userContent = typeof storedTask?.userContent === 'string' ? storedTask.userContent.trim() : ''
+
+  if (!assistantText) {
+    return {
+      nextHistory: currentHistory,
+      status: 'empty_reply',
+    }
+  }
+
+  const alreadyExists = currentHistory.some(
+    (message) => message.role === 'assistant' && message.content === assistantText,
+  )
+
+  if (alreadyExists) {
+    return {
+      nextHistory: currentHistory,
+      status: 'duplicate',
+    }
+  }
+
+  const hasSourceUser = currentHistory.some(
+    (message) => message.role === 'user' && message.content === userContent,
+  )
+
+  if (!hasSourceUser) {
+    return {
+      nextHistory: currentHistory,
+      status: 'source_user_missing',
+    }
+  }
+
+  const nextHistory = [
+    ...currentHistory,
+    { role: 'assistant', content: assistantText },
+  ]
+
+  return {
+    assistantIndex: nextHistory.length - 1,
+    nextHistory,
+    status: 'merged',
+    suggestion: reply?.suggestion ?? null,
+  }
+}
+
 export async function getBackgroundCoachTask(
   taskId,
   { getTaskImpl = getBackendCoachBackgroundTask } = {},

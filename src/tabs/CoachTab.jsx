@@ -8,10 +8,12 @@ import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import { adoptPlanChange } from '../utils/adoptPlan.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
 import {
+  buildBackgroundCoachTaskRecord,
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
   getBackgroundCoachTask,
+  mergeBackgroundCoachReply,
   startBackgroundCoachReply,
 } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
@@ -100,6 +102,7 @@ function CoachTab({
   const [streamingText, setStreamingText] = useState('')
   const activeRequestAbortRef = useRef(null)
   const backgroundFallbackTriggeredRef = useRef(false)
+  const backgroundSubmitPromiseRef = useRef(null)
   const backgroundTaskStartedRef = useRef(false)
   const chatHistoryRef = useRef(chatHistory)
   const pendingRequestRef = useRef(null)
@@ -186,39 +189,34 @@ function CoachTab({
       }
     }
 
-    function appendBackgroundReply(reply) {
-      const assistantText = reply?.text || ''
+    function appendBackgroundReply(reply, storedTask) {
+      const mergeResult = mergeBackgroundCoachReply({
+        currentHistory: chatHistoryRef.current,
+        reply,
+        storedTask,
+      })
 
-      if (!assistantText) {
+      if (mergeResult.status === 'source_user_missing') {
+        setErrorMessage('后台回复已完成，但当前对话已变化。请回到原问题后重新发送。')
         return
       }
 
-      const currentHistory = chatHistoryRef.current
-      const alreadyExists = currentHistory.some(
-        (message) => message.role === 'assistant' && message.content === assistantText,
-      )
-
-      if (alreadyExists) {
+      if (mergeResult.status !== 'merged') {
         return
       }
-
-      const finalHistory = appendChatMessages(currentHistory, [
-        { role: 'assistant', content: assistantText },
-      ])
 
       setMessageMeta((currentMeta) => {
-        const nextMeta = mergeMessageMeta(finalHistory, currentMeta)
-        const assistantIndex = finalHistory.length - 1
+        const nextMeta = mergeMessageMeta(mergeResult.nextHistory, currentMeta)
 
-        nextMeta[assistantIndex] = {
-          ...nextMeta[assistantIndex],
+        nextMeta[mergeResult.assistantIndex] = {
+          ...nextMeta[mergeResult.assistantIndex],
           isDismissed: false,
-          suggestion: reply.suggestion ?? null,
+          suggestion: mergeResult.suggestion,
         }
 
         return nextMeta
       })
-      onChatHistoryChange(finalHistory)
+      onChatHistoryChange(mergeResult.nextHistory)
     }
 
     async function pollStoredTask() {
@@ -232,7 +230,7 @@ function CoachTab({
         const task = await getBackgroundCoachTask(storedTask.taskId)
 
         if (task.status === 'succeeded') {
-          appendBackgroundReply(task.result)
+          appendBackgroundReply(task.result, storedTask)
           clearStoredTask()
           return
         }
@@ -258,17 +256,32 @@ function CoachTab({
       }
 
       backgroundTaskStartedRef.current = true
-      backgroundFallbackTriggeredRef.current = true
       activeRequestAbortRef.current?.abort()
       setStreamingText('')
 
-      try {
+      backgroundSubmitPromiseRef.current = (async () => {
         const task = await startBackgroundCoachReply(payload)
-        if (task?.taskId && typeof window !== 'undefined') {
-          window.localStorage.setItem(BACKGROUND_TASK_STORAGE_KEY, JSON.stringify(task))
+        const taskRecord = buildBackgroundCoachTaskRecord(task, {
+          userInput: payload.userInput,
+        })
+
+        if (!taskRecord) {
+          throw new Error('后台思考任务提交失败，请重新发送。')
         }
-      } catch {
-        // 离页兜底不能阻塞用户关闭页面；失败会保留原有前台发送错误处理。
+
+        if (taskRecord && typeof window !== 'undefined') {
+          backgroundFallbackTriggeredRef.current = true
+          window.localStorage.setItem(BACKGROUND_TASK_STORAGE_KEY, JSON.stringify(taskRecord))
+        }
+
+        return taskRecord
+      })()
+
+      try {
+        await backgroundSubmitPromiseRef.current
+      } catch (error) {
+        backgroundTaskStartedRef.current = false
+        setErrorMessage(error?.message || '后台思考任务提交失败，请重新发送。')
       }
     }
 
@@ -459,6 +472,10 @@ function CoachTab({
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
     } catch (error) {
+      if (backgroundSubmitPromiseRef.current) {
+        await backgroundSubmitPromiseRef.current.catch(() => null)
+      }
+
       if (backgroundFallbackTriggeredRef.current) {
         return
       }
@@ -466,6 +483,7 @@ function CoachTab({
     } finally {
       setIsSending(false)
       activeRequestAbortRef.current = null
+      backgroundSubmitPromiseRef.current = null
       pendingRequestRef.current = null
       setStreamingText('')
     }

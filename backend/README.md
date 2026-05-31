@@ -140,7 +140,7 @@ uv run python -m alembic upgrade head
 - `suggestion` 为可空 JSON，用于后续保存 AI 结构化建议
 - `POST /api/chat/{session_id}/background` 接收 `{messages, model?}`，返回 `{task_id}`，用于前端离页时提交后台思考兜底
 - `GET /api/chat/background/{task_id}` 返回 `pending / running / succeeded / failed / not_found`；成功时 `result` 包含 `{text, suggestion}`，且本轮 user + assistant 已写入 `chat_message`
-- 前端触发后台思考前会中止当前前台 SSE / 普通请求，避免后台任务和前台请求双写同一轮对话
+- 前端触发后台思考前会中止当前前台 SSE / 普通请求，且只有后台任务成功拿到 `task_id` 后才抑制前台错误，避免后台任务和前台请求双写同一轮对话
 - 后台任务失败或返回空内容时只记录 `failed` 状态和友好 message，不写入脏 assistant
 - 后台任务表当前存放在后端进程内存中，服务重启后旧 task_id 会返回 `not_found`
 

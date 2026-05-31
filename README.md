@@ -274,7 +274,7 @@ V2.3 Phase 1 验收记录见 [task/V2.3/V2.3 Phase 1 验收记录.md](/g:/VSCODE
 - `POST /api/chat/{session_id}/background`：提交离页后台思考任务，返回 `{task_id}`
 - `GET /api/chat/background/{task_id}`：查询后台任务状态，成功时返回 `{text, suggestion}` 并已落库
 
-说明：聊天代理仍由前端构建 system prompt 并传入 `messages[]`；后端负责藏密钥、流式转发、解析 `suggestion` 并在完整成功后落库 user + assistant。离页后台思考会先中止当前前台请求，避免前台请求和后台任务同时写入本轮消息。后台思考使用进程内任务表，服务重启后旧 task_id 不再可查；计划采纳后端化仍留给后续任务。
+说明：聊天代理仍由前端构建 system prompt 并传入 `messages[]`；后端负责藏密钥、流式转发、解析 `suggestion` 并在完整成功后落库 user + assistant。离页后台思考会先中止当前前台请求，只有成功拿到 `task_id` 后才抑制前台错误；回页补结果时会校验源 user 消息仍在当前聊天内，避免污染已清空的新对话。后台思考使用进程内任务表，服务重启后旧 task_id 不再可查；计划采纳后端化仍留给后续任务。
 
 ## localStorage 键说明
 
