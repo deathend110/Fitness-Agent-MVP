@@ -7,6 +7,8 @@ dist/
 .env
 .env.*
 !.env.example
+.venv/
+.venv-qa/
 
 npm-debug.log*
 yarn-debug.log*

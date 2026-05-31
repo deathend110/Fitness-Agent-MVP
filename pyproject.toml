@@ -1,0 +1,15 @@
+[project]
+name = "fitloop-mvp"
+version = "0.1.0"
+description = "FitLoop MVP 的本地 Python 依赖管理配置"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "greenlet==3.5.1",
+    "playwright==1.60.0",
+    "pyee==13.0.1",
+    "typing_extensions==4.15.0",
+]
+
+[tool.uv]
+package = false
