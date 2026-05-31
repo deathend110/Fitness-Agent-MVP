@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.context_manager import AgentContext, PromptAssembler, SummaryCompressor
+from backend.agent.memory import MemoryRetriever
 from backend.db.models import (
     ChatMessage,
     ChatSessionSummary,
@@ -107,15 +108,6 @@ async def _load_recent_daily_logs(session: AsyncSession, limit: int = 7) -> dict
 
 
 async def _load_memories(session: AsyncSession, limit: int = 12) -> list[dict[str, Any]]:
-    result = await session.execute(
-        select(MemoryItem)
-        .order_by(
-            (MemoryItem.kind == "safety").desc(),
-            MemoryItem.last_used_at.desc().nullslast(),
-            MemoryItem.id.desc(),
-        )
-        .limit(limit)
-    )
     return [
         {
             "id": item.id,
@@ -123,7 +115,7 @@ async def _load_memories(session: AsyncSession, limit: int = 12) -> list[dict[st
             "content": item.content,
             "confidence": item.confidence,
         }
-        for item in result.scalars().all()
+        for item in await MemoryRetriever().retrieve(session, limit=limit)
     ]
 
 
