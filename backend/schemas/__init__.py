@@ -54,6 +54,30 @@ class WeeklyPlanSchema(BaseModel):
     Sunday: WeeklyPlanDaySchema
 
 
+class AdoptPlanChangeSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    action: str | None = None
+    exerciseName: str | None = None
+    field: str | None = None
+    newValue: Any = None
+
+
+class AdoptPlanRequestSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    day: str
+    changes: list[AdoptPlanChangeSchema]
+
+
+class AdoptPlanResponseSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    ok: bool
+    message: str
+    plan: WeeklyPlanSchema
+
+
 class DailyLogEntrySchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

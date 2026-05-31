@@ -14,10 +14,10 @@
 - DeepSeek 客户端与 `---JSON---` 响应解析基础模块
 - DeepSeek 后端代理、SSE 流式事件和非流式回退接口
 - 离页后台思考任务提交、查询和成功回复落库
+- 计划采纳后端校验与写回接口
 
 当前仍未落地到后端的内容：
 
-- 计划采纳后端化
 - AI 教练页真实多会话 UI
 
 这些内容属于 V2.3 Phase 2。
@@ -110,6 +110,25 @@ uv run python -m alembic upgrade head
 
 - `GET /api/weekly-plan`
 - `PUT /api/weekly-plan`
+- `POST /api/weekly-plan/adopt`
+
+`POST /api/weekly-plan/adopt` 请求体：
+
+```json
+{
+  "day": "Monday",
+  "changes": [
+    {
+      "action": "update",
+      "exerciseName": "深蹲",
+      "field": "pct",
+      "newValue": 0.7
+    }
+  ]
+}
+```
+
+响应体为 `{ok, message, plan}`。当前只支持更新已有动作字段；目标 day、动作名、字段名、action 或 RPE 边界不合法时返回 `ok: false` 并保留原计划，不写入脏数据。
 
 ### 今日日志
 
@@ -215,4 +234,10 @@ uv run pytest backend\tests\test_chat_stream.py
 
 ```powershell
 uv run pytest backend\tests\test_background_worker.py
+```
+
+计划采纳定向测试：
+
+```powershell
+uv run pytest backend\tests\test_adopt_plan.py
 ```

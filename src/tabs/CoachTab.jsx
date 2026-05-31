@@ -4,8 +4,8 @@ import ChatSidebar from '../components/coach/ChatSidebar.jsx'
 import ChatTopbar from '../components/coach/ChatTopbar.jsx'
 import Composer from '../components/coach/Composer.jsx'
 import MessageList from '../components/coach/MessageList.jsx'
+import { createBackendClient } from '../api/backendClient.js'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
-import { adoptPlanChange } from '../utils/adoptPlan.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
 import {
   buildBackgroundCoachTaskRecord,
@@ -376,21 +376,25 @@ function CoachTab({
     )
   }
 
-  function handleAdoptSuggestion(targetSuggestion) {
-    const adoptResult = adoptPlanChange(
-      weeklyPlan,
-      targetSuggestion?.day,
-      targetSuggestion?.changes,
-    )
+  async function handleAdoptSuggestion(targetSuggestion) {
+    try {
+      const client = createBackendClient()
+      const adoptResult = await client.adoptWeeklyPlanChange({
+        day: targetSuggestion?.day,
+        changes: targetSuggestion?.changes,
+      })
 
-    if (!adoptResult.ok) {
-      setErrorMessage(adoptResult.message)
-      return
+      if (!adoptResult.ok) {
+        setErrorMessage(adoptResult.message)
+        return
+      }
+
+      onWeeklyPlanChange(adoptResult.plan)
+      setErrorMessage('')
+      handleDismissSuggestion(targetSuggestion)
+    } catch (error) {
+      setErrorMessage(error?.message || '采纳建议失败，请确认本地后端服务已启动。')
     }
-
-    onWeeklyPlanChange(adoptResult.nextPlan)
-    setErrorMessage('')
-    handleDismissSuggestion(targetSuggestion)
   }
 
   function handleExportConversation() {

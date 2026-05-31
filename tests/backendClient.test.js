@@ -30,6 +30,10 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
 
   await client.getProfile()
   await client.updateProfile({ name: 'Ada', oneRm: { squat: 120 } })
+  await client.adoptWeeklyPlanChange({
+    day: 'Monday',
+    changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.7 }],
+  })
   await client.updateDailyLogEntry('2026-05-31', { tdeeManual: 2600 })
 
   assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/profile')
@@ -41,9 +45,15 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
     name: 'Ada',
     oneRm: { squat: 120 },
   })
-  assert.equal(requests[2].url, 'http://127.0.0.1:8000/api/daily-log/2026-05-31')
-  assert.equal(requests[2].options.method, 'PUT')
-  assert.deepEqual(JSON.parse(requests[2].options.body), { tdeeManual: 2600 })
+  assert.equal(requests[2].url, 'http://127.0.0.1:8000/api/weekly-plan/adopt')
+  assert.equal(requests[2].options.method, 'POST')
+  assert.deepEqual(JSON.parse(requests[2].options.body), {
+    day: 'Monday',
+    changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.7 }],
+  })
+  assert.equal(requests[3].url, 'http://127.0.0.1:8000/api/daily-log/2026-05-31')
+  assert.equal(requests[3].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(requests[3].options.body), { tdeeManual: 2600 })
 })
 
 test('createBackendClient 会把 HTTP 错误归一成可展示异常', async () => {
