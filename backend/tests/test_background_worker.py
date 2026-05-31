@@ -25,7 +25,7 @@ pytestmark = [
 
 
 class FakeDeepSeekClient:
-    def __init__(self, replies: dict[str, str]) -> None:
+    def __init__(self, replies: dict[str, Any]) -> None:
         self.replies = replies
         self.calls: list[list[dict[str, Any]]] = []
 
@@ -35,7 +35,7 @@ class FakeDeepSeekClient:
         messages: list[dict[str, Any]],
         model: str,
         stream: bool = False,
-    ) -> str:
+    ) -> Any:
         del model, stream
         self.calls.append(messages)
         user_content = next(
@@ -46,7 +46,10 @@ class FakeDeepSeekClient:
             ),
             "",
         )
-        return self.replies.get(user_content, "默认后台回复")
+        reply = self.replies.get(user_content, "默认后台回复")
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
 
 
 @pytest_asyncio.fixture
@@ -58,6 +61,7 @@ async def api_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, FakeDee
             "今天腿很累，周三怎么调？": '建议周三降低容量。\n---JSON---\n{"day":"Wednesday","summary":"降容量"}',
             "第一条问题": "第一条后台回复",
             "第二条问题": "第二条后台回复",
+            "返回空回复": "",
         }
     )
 
@@ -188,3 +192,27 @@ async def test_unknown_background_task_returns_explicit_status(
         "result": None,
         "message": "未找到对应的后台思考任务。",
     }
+
+
+@pytest.mark.asyncio
+async def test_background_task_failed_status_does_not_persist_dirty_assistant(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+):
+    client, _fake_client = api_client
+    session_id = (await client.post("/api/chat/sessions", json={"title": "失败任务"})).json()["id"]
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={"messages": build_messages("返回空回复")},
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "failed"
+    assert result["result"] is None
+    assert "没有可展示的消息内容" in result["message"]
+
+    messages_response = await client.get(f"/api/chat/sessions/{session_id}/messages")
+    assert messages_response.status_code == 200
+    assert messages_response.json() == []

@@ -170,6 +170,51 @@ test('requestCoachReplyStream 会把流式文本拼成最终回复并保留 sugg
 test('shouldFallbackCoachStream 只允许在尚未收到流式文本时回退普通请求', () => {
   assert.equal(shouldFallbackCoachStream({ hasReceivedText: false }), true)
   assert.equal(shouldFallbackCoachStream({ hasReceivedText: true }), false)
+  assert.equal(shouldFallbackCoachStream({ hasReceivedText: false, isBackgroundFallback: true }), false)
+})
+
+test('requestCoachReply 和 requestCoachReplyStream 会把 AbortSignal 传给底层请求', async () => {
+  const controller = new AbortController()
+
+  await requestCoachReply(
+    {
+      chatHistory: [],
+      userInput: '测试 signal',
+      profile: {},
+      weeklyPlan: {},
+      dailyLog: {},
+      sessionId: 5,
+    },
+    {
+      buildPromptImpl: () => 'SYSTEM_PROMPT',
+      requestImpl: async (_messages, options) => {
+        assert.equal(options.sessionId, 5)
+        assert.equal(options.signal, controller.signal)
+        return { text: '普通回复', suggestion: null }
+      },
+      signal: controller.signal,
+    },
+  )
+
+  await requestCoachReplyStream(
+    {
+      chatHistory: [],
+      userInput: '测试 stream signal',
+      profile: {},
+      weeklyPlan: {},
+      dailyLog: {},
+      sessionId: 6,
+    },
+    {
+      buildPromptImpl: () => 'SYSTEM_PROMPT',
+      streamImpl: async (_messages, options) => {
+        assert.equal(options.sessionId, 6)
+        assert.equal(options.signal, controller.signal)
+        return { text: '流式回复', suggestion: null }
+      },
+      signal: controller.signal,
+    },
+  )
 })
 
 test('startBackgroundCoachReply 会复用上下文构建逻辑提交后台任务', async () => {

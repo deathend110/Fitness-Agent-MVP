@@ -196,7 +196,7 @@ docs/
   - 负责 AI 教练页状态协调
   - 继续管理 `draft / errorMessage / isSending / streamingText`
   - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
-  - 页面隐藏或离开时提交后台思考兜底；页面恢复可见时查询 task 并把成功结果补进当前消息列表
+  - 页面隐藏或离开时中止前台请求并提交后台思考兜底；页面恢复可见时查询 task 并把成功结果补进当前消息列表
   - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()`、`appendChatMessages()` 与 `adoptPlanChange()`
 
 - `src/components/coach/CoachLayout.jsx`
@@ -424,7 +424,7 @@ CoachTab
 ```
 
 错误边界：SSE 中任意 DeepSeek 密钥缺失、上游错误或断流都会转成 `event: error`；后端不会写入半截 assistant。前端收到流式错误后会尝试 `/api/chat/reply` 非流式回退。
-后台任务失败时返回 `failed` 与友好 message，不写入 assistant；进程重启后内存任务表清空，旧 task_id 会返回 `not_found`。
+后台任务失败或返回空内容时返回 `failed` 与友好 message，不写入 assistant；进程重启后内存任务表清空，旧 task_id 会返回 `not_found`。
 
 ## localStorage 数据结构
 

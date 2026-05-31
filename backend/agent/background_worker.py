@@ -89,6 +89,11 @@ class BackgroundWorker:
                     "DeepSeek 非流式响应格式异常，请稍后重试。",
                     code="invalid_response",
                 )
+            if not content.strip():
+                raise DeepSeekClientError(
+                    "DeepSeek 已返回成功响应，但没有可展示的消息内容。",
+                    code="empty_content",
+                )
 
             parsed_reply = parse_ai_response(content)
             await self._persist_successful_chat_turn(

@@ -16,21 +16,25 @@ function buildCoachMessages({ chatHistory = [], dailyLog = {}, profile = {}, use
   ]
 }
 
-export function shouldFallbackCoachStream({ hasReceivedText = false } = {}) {
+export function shouldFallbackCoachStream({ hasReceivedText = false, isBackgroundFallback = false } = {}) {
+  if (isBackgroundFallback) {
+    return false
+  }
+
   // 已经收到流式文本时，后端可能已经完成或即将完成本轮落库；此时自动重试普通请求会制造重复消息。
   return !hasReceivedText
 }
 
 export async function requestCoachReply(
   { chatHistory = [], dailyLog = {}, profile = {}, sessionId = null, userInput = '', weeklyPlan = {} },
-  { buildPromptImpl = buildSystemPrompt, requestImpl = requestBackendCoachReply } = {},
+  { buildPromptImpl = buildSystemPrompt, requestImpl = requestBackendCoachReply, signal } = {},
 ) {
   const messages = buildCoachMessages(
     { chatHistory, dailyLog, profile, userInput, weeklyPlan },
     buildPromptImpl,
   )
 
-  return requestImpl(messages, { sessionId })
+  return requestImpl(messages, { sessionId, signal })
 }
 
 // 后端已完成 DeepSeek 调用、SSE 转译和 JSON 建议解析；前端只负责构建上下文并展示增量文本。
@@ -39,6 +43,7 @@ export async function requestCoachReplyStream(
   {
     buildPromptImpl = buildSystemPrompt,
     onText,
+    signal,
     streamImpl = streamBackendCoachReply,
   } = {},
 ) {
@@ -48,6 +53,7 @@ export async function requestCoachReplyStream(
   )
   return streamImpl(messages, {
     sessionId,
+    signal,
     onDelta: (_delta, fullText) => {
       onText?.(fullText)
     },

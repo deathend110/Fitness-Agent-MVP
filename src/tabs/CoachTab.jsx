@@ -98,6 +98,8 @@ function CoachTab({
   const [isSending, setIsSending] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
   const [streamingText, setStreamingText] = useState('')
+  const activeRequestAbortRef = useRef(null)
+  const backgroundFallbackTriggeredRef = useRef(false)
   const backgroundTaskStartedRef = useRef(false)
   const chatHistoryRef = useRef(chatHistory)
   const pendingRequestRef = useRef(null)
@@ -256,6 +258,9 @@ function CoachTab({
       }
 
       backgroundTaskStartedRef.current = true
+      backgroundFallbackTriggeredRef.current = true
+      activeRequestAbortRef.current?.abort()
+      setStreamingText('')
 
       try {
         const task = await startBackgroundCoachReply(payload)
@@ -303,7 +308,7 @@ function CoachTab({
     }
   }, [activeSessionId, chatHistory.length, historyView])
 
-  async function requestReplyWithFallback(payload) {
+  async function requestReplyWithFallback(payload, { signal } = {}) {
     let hasReceivedStreamText = false
 
     try {
@@ -312,13 +317,19 @@ function CoachTab({
           hasReceivedStreamText = true
           setStreamingText(getVisibleStreamText(fullText))
         },
+        signal,
       })
     } catch (error) {
       setStreamingText('')
-      if (!shouldFallbackCoachStream({ hasReceivedText: hasReceivedStreamText })) {
+      if (
+        !shouldFallbackCoachStream({
+          hasReceivedText: hasReceivedStreamText,
+          isBackgroundFallback: backgroundFallbackTriggeredRef.current,
+        })
+      ) {
         throw error
       }
-      return requestCoachReply(payload)
+      return requestCoachReply(payload, { signal })
     }
   }
 
@@ -411,6 +422,9 @@ function CoachTab({
 
     setErrorMessage('')
     setIsSending(true)
+    activeRequestAbortRef.current =
+      typeof AbortController === 'function' ? new AbortController() : null
+    backgroundFallbackTriggeredRef.current = false
     backgroundTaskStartedRef.current = false
     pendingRequestRef.current = requestPayload
     setStreamingText('')
@@ -419,7 +433,9 @@ function CoachTab({
     onChatHistoryChange(nextHistory)
 
     try {
-      const reply = await requestReplyWithFallback(requestPayload)
+      const reply = await requestReplyWithFallback(requestPayload, {
+        signal: activeRequestAbortRef.current?.signal,
+      })
       const assistantMessage = {
         content: reply.text,
         role: 'assistant',
@@ -443,9 +459,13 @@ function CoachTab({
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
     } catch (error) {
+      if (backgroundFallbackTriggeredRef.current) {
+        return
+      }
       setErrorMessage(error?.message || 'AI 教练暂时不可用，请稍后重试。')
     } finally {
       setIsSending(false)
+      activeRequestAbortRef.current = null
       pendingRequestRef.current = null
       setStreamingText('')
     }
