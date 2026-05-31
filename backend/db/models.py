@@ -91,3 +91,101 @@ class ChatMessage(Base):
     # suggestion 保存 AI 回复中的结构化采纳建议；为空时表示普通聊天消息，避免前端被迫补空对象。
     suggestion: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
+class ChatSessionSummary(Base):
+    __tablename__ = "chat_session_summary"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    covered_from_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    covered_to_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    token_estimate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
+class MemoryItem(Base):
+    __tablename__ = "memory_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # memory 是用户长期事实或稳定偏好；不要把一次性日志、AI 自己的建议直接晋升到这里。
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    source_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
+class KnowledgeItem(Base):
+    __tablename__ = "knowledge_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    # knowledge 是外部资料、上传文件或训练模板片段，和用户长期记忆分开，避免资料污染用户画像。
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_file_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
+class ToolCallLog(Base):
+    __tablename__ = "tool_call_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    tool_name: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    arguments_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    result_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+
+
+class UsageRecord(Base):
+    __tablename__ = "usage_record"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_cache_hit_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_cache_miss_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
