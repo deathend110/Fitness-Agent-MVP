@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.chat import router as chat_router
 from backend.api.daily_log import router as daily_log_router
 from backend.api.migrate import router as migrate_router
 from backend.api.profile import router as profile_router
@@ -28,4 +29,5 @@ async def get_health() -> dict[str, str]:
 app.include_router(profile_router)
 app.include_router(weekly_plan_router)
 app.include_router(daily_log_router)
+app.include_router(chat_router)
 app.include_router(migrate_router)

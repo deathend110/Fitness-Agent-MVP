@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
@@ -69,3 +70,33 @@ class DailyLogEntrySchema(BaseModel):
 
 class DailyLogMapSchema(RootModel[dict[str, DailyLogEntrySchema]]):
     pass
+
+
+class ChatSessionCreateSchema(BaseModel):
+    title: str | None = None
+
+
+class ChatSessionSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    title: str
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class ChatMessageCreateSchema(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+    suggestion: dict[str, Any] | None = None
+
+
+class ChatMessageSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    sessionId: int
+    role: Literal["user", "assistant", "system"]
+    content: str
+    suggestion: dict[str, Any] | None = None
+    createdAt: datetime
