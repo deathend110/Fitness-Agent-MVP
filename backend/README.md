@@ -66,6 +66,7 @@ Copy-Item backend\.env.example backend\.env
 说明：
 
 - 数据库存放在 `backend/data/`
+- `DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db` 会按 `backend/` 目录解析，仓库根目录启动也不会写到根目录 `data/`
 - `backend/.env` 不应提交到仓库
 - 后端 Agent 模块只从 `backend/.env` 读取 DeepSeek API Key；前端不再读取或打包 DeepSeek Key
 
@@ -91,10 +92,12 @@ GET http://127.0.0.1:8000/api/health
 
 ## 数据库迁移
 
-在 `backend/` 目录执行：
+开发启动时会自动创建本地 SQLite 表并写入空白档案与一周休息日默认计划，首次演示不需要手动迁移。
+
+如需显式执行 Alembic 迁移，在仓库根目录执行：
 
 ```powershell
-uv run python -m alembic upgrade head
+uv run alembic -c backend\alembic.ini upgrade head
 ```
 
 ## 接口速查

@@ -10,6 +10,7 @@
 - 本地 FastAPI 后端负责 `profile / weeklyPlan / dailyLog` 的持久化
 - 本地 FastAPI 后端已提供 `chat_session / chat_message` 的存储接口、`/api/chat/stream` SSE 代理、离页后台思考任务和计划采纳校验接口
 - SQLite 作为本地结构化存储
+- 后端配置固定从 `backend/.env` 读取；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据
 - AI 教练页发送消息走后端聊天代理，页面显示状态暂时仍复用 `fitloop_chatHistory`
 
 ### 当前数据源分工

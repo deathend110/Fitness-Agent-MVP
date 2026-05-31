@@ -144,6 +144,8 @@ npm run preview
 npm run dev:all
 ```
 
+后端首次启动会自动在 `backend/data/repmind.db` 创建 SQLite 表，并写入空白档案与一周休息日默认计划。
+
 只启动后端：
 
 ```powershell
@@ -154,6 +156,7 @@ npm run dev:backend
 
 - 后端 Agent 模块从 `backend/.env` 读取 `DEEPSEEK_API_KEY`
 - 前端不再读取 `VITE_DEEPSEEK_API_KEY`，也不再直连 DeepSeek；浏览器只请求本地后端代理
+- `DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db` 会按 `backend/` 目录解析，默认数据文件位于 `backend/data/repmind.db`
 
 前端 `.env` 示例：
 

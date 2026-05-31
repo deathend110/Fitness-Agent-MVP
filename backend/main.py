@@ -10,13 +10,16 @@ from backend.api.migrate import router as migrate_router
 from backend.api.profile import router as profile_router
 from backend.api.weekly_plan import router as weekly_plan_router
 from backend.config import get_settings
-from backend.db.database import session_factory
+from backend.db.database import create_all_tables, session_factory
+from backend.db.seed import seed_if_empty
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await create_all_tables()
+    await seed_if_empty(session_factory)
     initialize_background_worker(
         session_factory=session_factory,
         default_model=settings.default_model,
