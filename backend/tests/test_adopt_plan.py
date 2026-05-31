@@ -347,6 +347,34 @@ async def test_adopt_rejects_invalid_numeric_string_without_dirty_write(api_clie
 
 
 @pytest.mark.asyncio
+async def test_adopt_rejects_non_finite_numeric_string_without_dirty_write(
+    api_client: AsyncClient,
+):
+    original_plan = await seed_weekly_plan(api_client)
+
+    response = await api_client.post(
+        "/api/weekly-plan/adopt",
+        json={
+            "day": "Monday",
+            "changes": [
+                {
+                    "action": "update",
+                    "exerciseName": "深蹲",
+                    "field": "pct",
+                    "newValue": "NaN",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert response.json()["plan"] == original_plan
+    assert "pct" in response.json()["message"]
+    assert (await api_client.get("/api/weekly-plan")).json() == original_plan
+
+
+@pytest.mark.asyncio
 async def test_adopt_reps_update_keeps_template_reps_text_in_sync(api_client: AsyncClient):
     await seed_weekly_plan(api_client)
 

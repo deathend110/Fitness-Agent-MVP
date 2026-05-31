@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from backend.db.models import WEEKDAY_ORDER
@@ -48,11 +49,13 @@ def _coerce_number(value: Any) -> int | float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return value
+        return value if math.isfinite(value) else None
     if isinstance(value, str) and value.strip():
         try:
             parsed_value = float(value.strip())
         except ValueError:
+            return None
+        if not math.isfinite(parsed_value):
             return None
         if parsed_value.is_integer():
             return int(parsed_value)
