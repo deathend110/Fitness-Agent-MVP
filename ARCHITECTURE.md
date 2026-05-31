@@ -10,10 +10,6 @@ src/
     deepseek.js
   components/
     AdoptCard.jsx
-    CoachConversationPanel.jsx
-    CoachComposer.jsx
-    CoachMessageBubble.jsx
-    CoachSidebar.jsx
     DataTransferPanel.jsx
     ExerciseEditor.jsx
     PlanDayCard.jsx
@@ -24,6 +20,14 @@ src/
     PlanExerciseItem.jsx
     PromptPreviewPanel.jsx
     WeightChart.jsx
+    coach/
+      ChatSidebar.jsx
+      ChatTopbar.jsx
+      CoachLayout.jsx
+      Composer.jsx
+      EmptyState.jsx
+      MessageBubble.jsx
+      MessageList.jsx
     plan-grid/
       PlanWeekGrid.jsx
       PlanWeekGridColumn.jsx
@@ -44,6 +48,7 @@ src/
     chatHistory.js
     coachChat.js
     coachGuard.js
+    coachView.js
     dailyLog.js
     dailyMetrics.js
     dataTransfer.js
@@ -77,28 +82,41 @@ docs/
   - 负责应用级标题区、导航切换和页面外壳视觉节奏
 
 - `src/tabs/CoachTab.jsx`
-  - 负责 AI 教练页页面组织
-  - 将页面收敛为左侧辅助栏 + 中央聊天区的单页对话结构
-  - 协调空状态、已对话状态、流式回复和错误提示
-  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`
+  - 负责 AI 教练页状态协调
+  - 继续管理 `draft / errorMessage / isSending / streamingText`
+  - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
+  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()`、`appendChatMessages()` 与 `adoptPlanChange()`
 
-- `src/components/CoachConversationPanel.jsx`
-  - 负责消息流渲染与输入区编排
-  - 在空状态和已对话状态之间切换
-  - 空状态使用居中欢迎文案与英雄式输入框
-  - 已对话状态使用消息流 + 底部固定输入区
+- `src/components/coach/CoachLayout.jsx`
+  - 负责历史侧栏 + 主聊天区的两列布局
+  - 保证消息区是主区域唯一纵向滚动容器
 
-- `src/components/CoachSidebar.jsx`
-  - 负责 AI 教练页内部左侧辅助栏
-  - 展示最近聊天记录与辅助状态
+- `src/components/coach/ChatSidebar.jsx`
+  - 负责渲染“新建对话”和历史侧栏列表
+  - 当前只消费 `buildCoachHistoryView()` 生成的假多会话展示模型
 
-- `src/components/CoachComposer.jsx`
-  - 负责 AI 教练页输入框、发送按钮与错误提示
-  - 复用空状态和已对话状态的统一输入样式
+- `src/components/coach/ChatTopbar.jsx`
+  - 负责渲染当前对话标题、模型 badge、清空和导出操作
+  - 顶部不再承载“上下文”切换
 
-- `src/components/CoachMessageBubble.jsx`
-  - 负责渲染用户消息、AI 消息和流式回复气泡
-  - 保持聊天消息的基础层级和可读性
+- `src/components/coach/MessageList.jsx`
+  - 负责空状态和消息流切换
+  - 承担自动滚动与流式回复追底逻辑
+
+- `src/components/coach/MessageBubble.jsx`
+  - 负责渲染用户消息、AI 消息、流式回复和建议卡挂载位
+  - 采纳 / 忽略继续把原始 suggestion 往上回传
+
+- `src/components/coach/Composer.jsx`
+  - 负责底部输入框、自适应高度、Enter 发送、Shift+Enter 换行和错误提示
+
+- `src/components/coach/EmptyState.jsx`
+  - 负责欢迎页和四个建议问题入口
+  - 点击建议问题后直接把文案写回 `CoachTab` 草稿态
+
+- `src/utils/coachView.js`
+  - 负责 AI 教练页视图层纯函数
+  - 提供流式文本剥离、假多会话历史模型和空状态建议问题模型
 
 - `src/tabs/PlanTab.jsx`
   - 负责周计划页面组织
@@ -251,11 +269,12 @@ CoachTab
 
 ```text
 CoachTab
-  -> 生成侧栏最近对话记录
-  -> 渲染 CoachSidebar + CoachConversationPanel
-  -> 空状态展示欢迎文案与居中输入框
-  -> 已对话状态展示消息流
+  -> buildCoachHistoryView(chatHistory)
+  -> 渲染 ChatSidebar + CoachLayout + MessageList + Composer
+  -> 空状态展示欢迎文案、建议问题和底部输入区
+  -> 已对话状态展示消息流、建议卡片和底部固定输入区
   -> 发送时优先流式输出，失败回退普通请求
+  -> 将结构化 suggestion 只保存在页面级易失状态
   -> 将消息追加到 chatHistory
 ```
 
@@ -336,6 +355,7 @@ AI 教练页的消息展示补充约束：
 - `message.suggestion`：原始领域建议对象，供 `adoptPlanChange()` 等业务链路消费
 - `message.suggestionCard`：由 `buildAdoptCardModel()` 派生的展示模型，只负责渲染采纳卡片
 - 采纳 / 忽略回调必须继续传递 `message.suggestion`，不能把 `suggestionCard` 冒充为领域 suggestion
+- 结构化建议不会写回 `fitloop_chatHistory`，避免 localStorage 中混入展示态和易失业务态
 
 ### `fitloop_storageVersion`
 
@@ -479,6 +499,7 @@ src/
   - 负责整体“侧栏 + 主内容区 + 底部状态区”的编排。
   - 使用 `min-w-0` 与独立内容滚动区约束宽度和 overflow，避免默认制造整页横向滚动。
   - 只消费 `appShellLayout.js` 输出的壳层布局契约，减少 JSX 内部散落的 coach 特判。
+  - `coach` 模式会移除默认 padding，并将 `fitloop-shell__content` 切到 `overflow-hidden`，把滚动权交给 AI 教练页内部。
 
 - `src/components/app-shell/appShellLayout.js`
   - 负责定义壳层布局模式契约。
@@ -604,7 +625,8 @@ tests/
 ## V2 收口说明
 
 - AI 教练页已重构为更接近主流聊天产品的布局。
-- 页面内部改为左侧辅助栏 + 中央主聊天区，不再保留旧版三栏工具面板。
-- 空状态与已对话状态分别使用欢迎页式输入与消息流式输入区。
+- 页面内部改为左侧历史侧栏 + 中央主聊天区，不再保留旧版三栏工具面板。
+- 空状态与已对话状态分别使用欢迎页建议问题与消息流式输入区。
+- 顶部已移除“上下文”按钮，新建对话只清空当前 `chatHistory`，不扩展真实多会话存储。
 - 本轮仅重排 UI，不改变 DeepSeek 接口、上下文注入和采纳链路。
 - 版本总结见 `task/V2/V2 开发完成总结.md`。
