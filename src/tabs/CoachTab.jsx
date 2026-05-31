@@ -1,13 +1,21 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import CoachLayout from '../components/coach/CoachLayout.jsx'
 import ChatSidebar from '../components/coach/ChatSidebar.jsx'
 import ChatTopbar from '../components/coach/ChatTopbar.jsx'
 import Composer from '../components/coach/Composer.jsx'
 import MessageList from '../components/coach/MessageList.jsx'
+import { createBackendClient } from '../api/backendClient.js'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
-import { adoptPlanChange } from '../utils/adoptPlan.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
-import { requestCoachReply, requestCoachReplyStream } from '../utils/coachChat.js'
+import {
+  buildBackgroundCoachTaskRecord,
+  requestCoachReply,
+  requestCoachReplyStream,
+  shouldFallbackCoachStream,
+  getBackgroundCoachTask,
+  mergeBackgroundCoachReply,
+  startBackgroundCoachReply,
+} from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import {
   buildCoachHistoryView,
@@ -71,6 +79,13 @@ function buildConversationExportText(messages = []) {
     .join('\n\n')
 }
 
+function getBackendSessionId(sessionId) {
+  // 当前侧栏仍是本地历史生成的临时 id；只有后续接入真实会话列表后才把数字 sessionId 传给后端。
+  return Number.isInteger(sessionId) ? sessionId : null
+}
+
+const BACKGROUND_TASK_STORAGE_KEY = 'fitloop:coach-background-task'
+
 function CoachTab({
   chatHistory,
   dailyLog,
@@ -85,6 +100,12 @@ function CoachTab({
   const [isSending, setIsSending] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
   const [streamingText, setStreamingText] = useState('')
+  const activeRequestAbortRef = useRef(null)
+  const backgroundFallbackTriggeredRef = useRef(false)
+  const backgroundSubmitPromiseRef = useRef(null)
+  const backgroundTaskStartedRef = useRef(false)
+  const chatHistoryRef = useRef(chatHistory)
+  const pendingRequestRef = useRef(null)
 
   const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
   const emptyQuestions = useMemo(() => getCoachEmptyQuestionView(), [])
@@ -143,7 +164,151 @@ function CoachTab({
 
   useEffect(() => {
     setMessageMeta((currentMeta) => mergeMessageMeta(chatHistory, currentMeta))
+    chatHistoryRef.current = chatHistory
   }, [chatHistory])
+
+  useEffect(() => {
+    let pollTimer = null
+
+    function readStoredTask() {
+      if (typeof window === 'undefined') {
+        return null
+      }
+
+      try {
+        return JSON.parse(window.localStorage.getItem(BACKGROUND_TASK_STORAGE_KEY) || 'null')
+      } catch {
+        window.localStorage.removeItem(BACKGROUND_TASK_STORAGE_KEY)
+        return null
+      }
+    }
+
+    function clearStoredTask() {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(BACKGROUND_TASK_STORAGE_KEY)
+      }
+    }
+
+    function appendBackgroundReply(reply, storedTask) {
+      const mergeResult = mergeBackgroundCoachReply({
+        currentHistory: chatHistoryRef.current,
+        reply,
+        storedTask,
+      })
+
+      if (mergeResult.status === 'source_user_missing') {
+        setErrorMessage('后台回复已完成，但当前对话已变化。请回到原问题后重新发送。')
+        return
+      }
+
+      if (mergeResult.status !== 'merged') {
+        return
+      }
+
+      setMessageMeta((currentMeta) => {
+        const nextMeta = mergeMessageMeta(mergeResult.nextHistory, currentMeta)
+
+        nextMeta[mergeResult.assistantIndex] = {
+          ...nextMeta[mergeResult.assistantIndex],
+          isDismissed: false,
+          suggestion: mergeResult.suggestion,
+        }
+
+        return nextMeta
+      })
+      onChatHistoryChange(mergeResult.nextHistory)
+    }
+
+    async function pollStoredTask() {
+      const storedTask = readStoredTask()
+
+      if (!storedTask?.taskId) {
+        return
+      }
+
+      try {
+        const task = await getBackgroundCoachTask(storedTask.taskId)
+
+        if (task.status === 'succeeded') {
+          appendBackgroundReply(task.result, storedTask)
+          clearStoredTask()
+          return
+        }
+
+        if (task.status === 'failed' || task.status === 'not_found') {
+          setErrorMessage(task.message || '后台 AI 教练任务未完成，请重新发送。')
+          clearStoredTask()
+        }
+
+        if (task.status === 'pending' || task.status === 'running') {
+          pollTimer = window.setTimeout(pollStoredTask, 1500)
+        }
+      } catch (error) {
+        setErrorMessage(error?.message || '后台 AI 教练任务查询失败，请稍后重试。')
+      }
+    }
+
+    async function submitBackgroundTask() {
+      const payload = pendingRequestRef.current
+
+      if (!payload || backgroundTaskStartedRef.current) {
+        return
+      }
+
+      backgroundTaskStartedRef.current = true
+      activeRequestAbortRef.current?.abort()
+      setStreamingText('')
+
+      backgroundSubmitPromiseRef.current = (async () => {
+        const task = await startBackgroundCoachReply(payload)
+        const taskRecord = buildBackgroundCoachTaskRecord(task, {
+          sourceUserIndex: payload.sourceUserIndex,
+          userInput: payload.userInput,
+        })
+
+        if (!taskRecord) {
+          throw new Error('后台思考任务提交失败，请重新发送。')
+        }
+
+        if (taskRecord && typeof window !== 'undefined') {
+          backgroundFallbackTriggeredRef.current = true
+          window.localStorage.setItem(BACKGROUND_TASK_STORAGE_KEY, JSON.stringify(taskRecord))
+        }
+
+        return taskRecord
+      })()
+
+      try {
+        await backgroundSubmitPromiseRef.current
+      } catch (error) {
+        backgroundTaskStartedRef.current = false
+        setErrorMessage(error?.message || '后台思考任务提交失败，请重新发送。')
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        submitBackgroundTask()
+        return
+      }
+
+      if (document.visibilityState === 'visible') {
+        pollStoredTask()
+      }
+    }
+
+    pollStoredTask()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', submitBackgroundTask)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', submitBackgroundTask)
+      if (pollTimer) {
+        window.clearTimeout(pollTimer)
+      }
+    }
+  }, [onChatHistoryChange])
 
   useEffect(() => {
     if (!chatHistory.length) {
@@ -157,16 +322,28 @@ function CoachTab({
     }
   }, [activeSessionId, chatHistory.length, historyView])
 
-  async function requestReplyWithFallback(payload) {
+  async function requestReplyWithFallback(payload, { signal } = {}) {
+    let hasReceivedStreamText = false
+
     try {
       return await requestCoachReplyStream(payload, {
         onText: (fullText) => {
+          hasReceivedStreamText = true
           setStreamingText(getVisibleStreamText(fullText))
         },
+        signal,
       })
-    } catch {
+    } catch (error) {
       setStreamingText('')
-      return requestCoachReply(payload)
+      if (
+        !shouldFallbackCoachStream({
+          hasReceivedText: hasReceivedStreamText,
+          isBackgroundFallback: backgroundFallbackTriggeredRef.current,
+        })
+      ) {
+        throw error
+      }
+      return requestCoachReply(payload, { signal })
     }
   }
 
@@ -200,21 +377,25 @@ function CoachTab({
     )
   }
 
-  function handleAdoptSuggestion(targetSuggestion) {
-    const adoptResult = adoptPlanChange(
-      weeklyPlan,
-      targetSuggestion?.day,
-      targetSuggestion?.changes,
-    )
+  async function handleAdoptSuggestion(targetSuggestion) {
+    try {
+      const client = createBackendClient()
+      const adoptResult = await client.adoptWeeklyPlanChange({
+        day: targetSuggestion?.day,
+        changes: targetSuggestion?.changes,
+      })
 
-    if (!adoptResult.ok) {
-      setErrorMessage(adoptResult.message)
-      return
+      if (!adoptResult.ok) {
+        setErrorMessage(adoptResult.message)
+        return
+      }
+
+      onWeeklyPlanChange(adoptResult.plan)
+      setErrorMessage('')
+      handleDismissSuggestion(targetSuggestion)
+    } catch (error) {
+      setErrorMessage(error?.message || '采纳建议失败，请确认本地后端服务已启动。')
     }
-
-    onWeeklyPlanChange(adoptResult.nextPlan)
-    setErrorMessage('')
-    handleDismissSuggestion(targetSuggestion)
   }
 
   function handleExportConversation() {
@@ -252,19 +433,28 @@ function CoachTab({
       chatHistory,
       dailyLog,
       profile,
+      sessionId: getBackendSessionId(activeSessionId),
+      sourceUserIndex: nextHistory.length - 1,
       userInput,
       weeklyPlan,
     }
 
     setErrorMessage('')
     setIsSending(true)
+    activeRequestAbortRef.current =
+      typeof AbortController === 'function' ? new AbortController() : null
+    backgroundFallbackTriggeredRef.current = false
+    backgroundTaskStartedRef.current = false
+    pendingRequestRef.current = requestPayload
     setStreamingText('')
     setDraft('')
     setMessageMeta((currentMeta) => mergeMessageMeta(nextHistory, currentMeta))
     onChatHistoryChange(nextHistory)
 
     try {
-      const reply = await requestReplyWithFallback(requestPayload)
+      const reply = await requestReplyWithFallback(requestPayload, {
+        signal: activeRequestAbortRef.current?.signal,
+      })
       const assistantMessage = {
         content: reply.text,
         role: 'assistant',
@@ -288,9 +478,19 @@ function CoachTab({
         appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
       )
     } catch (error) {
+      if (backgroundSubmitPromiseRef.current) {
+        await backgroundSubmitPromiseRef.current.catch(() => null)
+      }
+
+      if (backgroundFallbackTriggeredRef.current) {
+        return
+      }
       setErrorMessage(error?.message || 'AI 教练暂时不可用，请稍后重试。')
     } finally {
       setIsSending(false)
+      activeRequestAbortRef.current = null
+      backgroundSubmitPromiseRef.current = null
+      pendingRequestRef.current = null
       setStreamingText('')
     }
   }

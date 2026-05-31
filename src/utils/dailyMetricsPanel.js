@@ -115,7 +115,7 @@ export function buildDailyMetricsPanelModel(
       },
       steps: {
         label: '步数',
-        value: formatMetricValue(summary.steps, ' 步', 0),
+        value: formatMetricValue(summary.activity.steps, ' 步', 0),
       },
       tdee: {
         label: summary.tdeeSource === 'manual' ? 'TDEE（手填）' : 'TDEE（估算）',

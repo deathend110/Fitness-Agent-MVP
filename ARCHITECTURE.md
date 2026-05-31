@@ -1,6 +1,97 @@
 ﻿# FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 聊天代理与后台思考、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+
+## V2.3 后端化总览
+
+当前项目已经从“纯前端 + localStorage”演进为“前端 + 本地 Python 后端”的双层结构：
+
+- 前端继续负责 UI、交互、页面状态组织
+- 本地 FastAPI 后端负责 `profile / weeklyPlan / dailyLog` 的持久化
+- 本地 FastAPI 后端已提供 `chat_session / chat_message` 的存储接口、`/api/chat/stream` SSE 代理、离页后台思考任务和计划采纳校验接口
+- SQLite 作为本地结构化存储
+- AI 教练页发送消息走后端聊天代理，页面显示状态暂时仍复用 `fitloop_chatHistory`
+
+### 当前数据源分工
+
+- `profile / weeklyPlan / dailyLog`
+  - 主数据源：后端 SQLite
+  - 本地缓存：浏览器 localStorage
+- `chatHistory`
+  - 后端能力：`chat_session / chat_message` 已支持默认会话、全量消息读取、`suggestion` JSON 存储和 SSE 代理落库
+  - 前端现状：发送请求走后端代理，聊天展示仍使用浏览器 `localStorage`；离页时记录后台 task_id，回页查询成功结果并补齐 assistant 消息
+  - 后续计划：真实多会话 UI 和消息拉取恢复继续拆任务推进
+
+### 当前新增目录
+
+```text
+backend/
+  __init__.py
+  api/
+    chat.py
+    daily_log.py
+    migrate.py
+    profile.py
+    weekly_plan.py
+  agent/
+    adopt_plan.py
+    background_worker.py
+    deepseek_client.py
+    response_parser.py
+  db/
+    database.py
+    models.py
+    seed.py
+    migrations/
+  tests/
+    test_health.py
+    test_models.py
+    test_crud_api.py
+    test_chat_store.py
+    test_chat_stream.py
+    test_adopt_plan.py
+    test_background_worker.py
+    test_migrate.py
+  config.py
+  main.py
+  requirements.txt
+```
+
+### 测试导入约定
+
+- `backend/` 现在作为常规 Python 包参与导入，避免测试收集阶段依赖临时 `sys.path` 补丁。
+- `pyproject.toml` 中的 `tool.pytest.ini_options.pythonpath = ["."]` 让 `uv run pytest ...` 与 `uv run python -m pytest ...` 的导入根路径保持一致。
+- 后端测试文件直接使用 `from backend...` 导入，不再在测试体内手动插入项目根目录。
+
+### 当前新增前端接口层
+
+```text
+src/
+  api/
+    coachBackend.js
+    appData.js
+    backendClient.js
+  utils/
+    localMigration.js
+```
+
+### 当前阶段边界
+
+当前已覆盖：
+
+- 非 AI 主数据 CRUD
+- localStorage 到 SQLite 的一次性迁移
+- 后端不可用时的降级提示
+- DeepSeek 客户端与 AI 响应解析的后端基础模块
+- 聊天会话与消息的后端全量存储 CRUD
+- 后端 DeepSeek SSE 代理、非流式回退接口与进程内后台思考任务
+- 后端计划采纳校验与写回接口
+- 前端 `coachChat` 经 `coachBackend` 调用后端聊天接口
+
+当前不覆盖，留给 V2.5 / Phase 3+：
+
+- AI 教练页真实多会话 UI 和刷新后从后端拉取消息补齐
+- 后端上下文压缩、工具调用编排、模型选择、文件上传解析、知识库和周期计划引擎
 
 ## 当前项目结构
 
@@ -80,12 +171,41 @@ docs/
   - 负责加载和持久化顶层状态
   - 统一管理 `profile / weeklyPlan / dailyLog / chatHistory`
   - 负责应用级标题区、导航切换和页面外壳视觉节奏
+  - 当前 `profile / weeklyPlan / dailyLog` 已后端优先；`chatHistory` 前端切源留给 Task 9
+
+- `backend/api/chat.py`
+  - 负责聊天会话与消息的后端 CRUD、SSE 流式代理、非流式回退代理和后台思考任务 API
+  - 提供会话列表、创建会话、获取或创建默认会话、追加消息、全量读取消息
+  - `/api/chat/stream` 将 DeepSeek 流式文本映射为 `delta / suggestion / done / error` 事件
+  - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
+
+- `backend/agent/adopt_plan.py`
+  - 负责 AI 计划建议的后端采纳校验、动作字段更新和动作结构归一化
+  - 只支持 `action: "update"`，目标日期、动作名、字段名或 RPE 边界非法时返回失败结果，不写入数据库
+  - 更新后保留 `template / instance` 与扁平兼容字段，确保后续 AI 建议仍能按字段定位
+
+- `backend/agent/background_worker.py`
+  - 负责离页后台思考的进程内任务表和 `asyncio.create_task` 调度
+  - 后台任务使用独立 SQLAlchemy session factory 写库，不复用请求生命周期内的 DB session
+  - 成功任务解析 `suggestion` 后写入本轮 user + assistant；失败任务只记录友好状态，不写脏 assistant
+
+- `backend/db/models.py`
+  - 定义 `Profile / WeeklyPlanDay / DailyLog / ChatSession / ChatMessage`
+  - `WeeklyPlanDay.exercises` 以 JSON 保存动作数组，计划采纳成功后只更新目标日动作列表
+  - `ChatMessage.suggestion` 以 JSON 可空列保存结构化建议，供前端渲染采纳卡片
+
+- `src/api/coachBackend.js`
+  - 负责调用 `/api/chat/stream`、`/api/chat/reply` 和后台任务提交 / 查询接口
+  - 解析后端 SSE 帧并把 delta 文本逐段回调给页面
+  - 将后端 `error` 事件、HTTP 错误和断流统一成可展示异常
 
 - `src/tabs/CoachTab.jsx`
   - 负责 AI 教练页状态协调
   - 继续管理 `draft / errorMessage / isSending / streamingText`
   - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
-  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()`、`appendChatMessages()` 与 `adoptPlanChange()`
+  - 页面隐藏或离开时中止前台请求并提交后台思考兜底；只有后台任务成功拿到 `task_id` 后才抑制前台错误
+  - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
+  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`；采纳按钮通过后端 `/api/weekly-plan/adopt` 写回计划
 
 - `src/components/coach/CoachLayout.jsx`
   - 负责历史侧栏 + 主聊天区的两列布局
@@ -260,8 +380,9 @@ CoachTab
       -> parseAiResponse()
   -> 渲染文本回复与 AdoptCard
   -> 用户点击采纳
-  -> adoptPlanChange()
-  -> App 更新 weeklyPlan
+  -> POST /api/weekly-plan/adopt {day, changes[]}
+  -> 后端校验并写回 WeeklyPlanDay.exercises
+  -> App 使用响应 plan 刷新 weeklyPlan
   -> 写回 fitloop_weeklyPlan
 ```
 
@@ -277,6 +398,50 @@ CoachTab
   -> 将结构化 suggestion 只保存在页面级易失状态
   -> 将消息追加到 chatHistory
 ```
+
+### 6. 后端聊天与 SSE 流
+
+```text
+后端聊天存储能力
+  -> GET /api/chat/sessions/default
+      -> 获取或创建“默认对话”
+  -> POST /api/chat/sessions/{id}/messages
+      -> 追加 user / assistant / system 消息
+      -> 可选保存 suggestion JSON
+      -> 同步刷新 ChatSession.updated_at
+  -> GET /api/chat/sessions/{id}/messages
+      -> 按 created_at / id 正序全量返回，不做 20 条裁剪
+
+后端 AI 代理能力
+  -> GET /api/chat/stream?messages=<JSON>&session_id=<optional>
+      -> DeepSeek stream_chat()
+      -> event: delta
+      -> parse_ai_response(full_content)
+      -> event: suggestion
+      -> 成功后写入 user + assistant
+      -> event: done
+  -> POST /api/chat/reply
+      -> DeepSeek request_chat()
+      -> parse_ai_response(content)
+      -> 成功后写入 user + assistant
+  -> POST /api/chat/{session_id}/background
+      -> BackgroundWorker.submit()
+      -> asyncio.create_task()
+      -> 独立 DB session 写入 user + assistant
+  -> GET /api/chat/background/{task_id}
+      -> 返回 pending / running / succeeded / failed / not_found
+
+后端计划采纳能力
+  -> POST /api/weekly-plan/adopt
+      -> 读取当前 weekly_plan_day
+      -> adopt_plan_change() 集中校验 day / changes / action / exerciseName / field / 数值字段 / RPE
+      -> 成功时仅写回目标 day
+      -> 失败时返回原 plan，数据库不变
+```
+
+错误边界：SSE 中任意 DeepSeek 密钥缺失、上游错误或断流都会转成 `event: error`；后端不会写入半截 assistant。前端收到流式错误后会尝试 `/api/chat/reply` 非流式回退。
+后台任务失败或返回空内容时返回 `failed` 与友好 message，不写入 assistant；进程重启后内存任务表清空，旧 task_id 会返回 `not_found`。
+计划采纳仅支持显式 `action: "update"`；`pct / kg / sets / reps / rpe` 会做安全数字转换并拒绝 `NaN / Infinity` 等非有限数值，避免“采纳成功但计划未变”或脏值写入。
 
 ## localStorage 数据结构
 
@@ -343,6 +508,8 @@ Task 6 的复杂指标不单独持久化，而是运行时根据 `profile + week
 
 ### `fitloop_chatHistory`
 
+当前 AI 教练页仍使用该 key 保存页面展示状态；V2.3 Phase 2 Task 9 已将发送请求切到后端 chat/SSE，成功回复会同步写入后端 chat 表。
+
 只持久化：
 
 - `role`
@@ -352,10 +519,52 @@ Task 6 的复杂指标不单独持久化，而是运行时根据 `profile + week
 
 AI 教练页的消息展示补充约束：
 
-- `message.suggestion`：原始领域建议对象，供 `adoptPlanChange()` 等业务链路消费
+- `message.suggestion`：原始领域建议对象，供后端 `/api/weekly-plan/adopt` 等业务链路消费
 - `message.suggestionCard`：由 `buildAdoptCardModel()` 派生的展示模型，只负责渲染采纳卡片
 - 采纳 / 忽略回调必须继续传递 `message.suggestion`，不能把 `suggestionCard` 冒充为领域 suggestion
 - 结构化建议不会写回 `fitloop_chatHistory`，避免 localStorage 中混入展示态和易失业务态
+
+### `fitloop:coach-background-task`
+
+保存离页后台思考任务的最小查询信息：
+
+```json
+{
+  "taskId": "uuid-like-task-id",
+  "sessionId": 1,
+  "sourceUserIndex": 3,
+  "userContent": "离页前发送的用户问题",
+  "createdAt": "2026-05-31T00:00:00.000Z"
+}
+```
+
+页面恢复可见时会调用 `GET /api/chat/background/{task_id}` 查询；成功后优先校验 `sourceUserIndex` 指向的当前消息是否仍是同一条 user 内容，匹配时补 assistant 文本并清理该 key，不匹配时提示用户当前对话已变化并清理该 key。旧格式记录缺少 `sourceUserIndex` 时仍按 `userContent` 存在性兜底。
+
+### 后端 `chat_session / chat_message`
+
+Task 8 新增、Task 9 接入 AI 代理落库的后端聊天表：
+
+- `chat_session`
+  - `id`
+  - `title`
+  - `created_at`
+  - `updated_at`
+- `chat_message`
+  - `id`
+  - `session_id`
+  - `role`
+  - `content`
+  - `suggestion`
+  - `created_at`
+
+设计约束：
+
+- 默认会话标题为“默认对话”，用于承接旧版单条 `chatHistory`
+- 普通创建会话未传标题时使用“新对话”，避免和默认会话语义混淆
+- 消息读取必须全量返回，不沿用前端上下文窗口的 20 条裁剪
+- `suggestion` 允许为空；非空时保存 AI 结构化建议原始 JSON
+- 新增消息时刷新会话 `updated_at`，供后续真实会话列表按最近对话排序
+- 流式回复只在完整成功后落库，避免 delta 阶段写入半截脏消息
 
 ### `fitloop_storageVersion`
 
@@ -366,17 +575,25 @@ AI 教练页的消息展示补充约束：
 ```text
 CoachTab
   -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
-  -> streamDeepSeekChat(messages)
-  -> fallback: requestDeepSeekChat(messages)
-  -> parseAiResponse(content)
+  -> requestCoachReplyStream(messages)
+  -> src/api/coachBackend.js
+  -> GET /api/chat/stream
+  -> DeepSeekClient.stream_chat()
+  -> parse_ai_response(content)
+  -> 保存 ChatMessage(user + assistant)
+  -> 页面离开时可补交 POST /api/chat/{session_id}/background
+  -> 回页 GET /api/chat/background/{task_id}
+  -> fallback: POST /api/chat/reply
   -> buildAdoptCardModel()
-  -> adoptPlanChange()
+  -> 用户确认后 POST /api/weekly-plan/adopt
 ```
 
 关键设计点：
 
 - 每次发送前都重新读取最新上下文
-- AI 回复解析与训练计划写回分离，保留用户最终确认权
+- DeepSeek API Key 只在后端 `.env` 中读取，前端 bundle 不再包含 `VITE_DEEPSEEK_API_KEY` 或 Authorization 直连逻辑
+- AI 回复解析与训练计划写回分离，保留用户最终确认权；只有点击采纳卡片才调用后端写回接口
+- 采纳接口失败时返回原始 plan 并不提交事务；成功时返回完整 plan，前端用该响应刷新页面状态
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 - AI 教练页历史侧栏若使用 `buildCoachHistoryView()`，其展示 id 需基于原始 `chatHistory` 下标生成，例如 `session-message-12`，保证新增消息后既有历史项 id 稳定可命中
 
@@ -627,6 +844,6 @@ tests/
 - AI 教练页已重构为更接近主流聊天产品的布局。
 - 页面内部改为左侧历史侧栏 + 中央主聊天区，不再保留旧版三栏工具面板。
 - 空状态与已对话状态分别使用欢迎页建议问题与消息流式输入区。
-- 顶部已移除“上下文”按钮，新建对话只清空当前 `chatHistory`，不扩展真实多会话存储。
+- 顶部已移除“上下文”按钮；前端新建对话当前仍只清空 `chatHistory`，后端真实会话存储已在 V2.3 Phase 2 Task 8 落地，前端接入留给 Task 9 之后。
 - 本轮仅重排 UI，不改变 DeepSeek 接口、上下文注入和采纳链路。
 - 版本总结见 `task/V2/V2 开发完成总结.md`。

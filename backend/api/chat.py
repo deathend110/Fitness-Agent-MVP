@@ -1,0 +1,456 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+import json
+from json import JSONDecodeError
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWorker
+from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
+from backend.agent.response_parser import parse_ai_response
+from backend.config import get_settings
+from backend.db.database import get_db_session, session_factory
+from backend.db.models import ChatMessage, ChatSession, utc_now
+from backend.schemas import (
+    ChatMessageCreateSchema,
+    ChatMessageSchema,
+    ChatSessionCreateSchema,
+    ChatSessionSchema,
+)
+
+router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+DEFAULT_SESSION_TITLE = "默认对话"
+UNTITLED_SESSION_TITLE = "新对话"
+
+
+class ChatReplyRequestSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    session_id: int | None = Field(default=None, alias="sessionId")
+    messages: list[dict[str, Any]]
+    model: str | None = None
+
+
+class ChatReplyResponseSchema(BaseModel):
+    text: str
+    suggestion: dict[str, Any] | None = None
+
+
+class ChatBackgroundRequestSchema(BaseModel):
+    messages: list[dict[str, Any]]
+    model: str | None = None
+
+
+class ChatBackgroundSubmitResponseSchema(BaseModel):
+    task_id: str
+
+
+class ChatBackgroundTaskResponseSchema(BaseModel):
+    task_id: str
+    status: str
+    result: dict[str, Any] | None = None
+    message: str = ""
+
+
+background_worker: BackgroundWorker | None = None
+
+
+def get_deepseek_client() -> DeepSeekClient:
+    settings = get_settings()
+    return DeepSeekClient(
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+        timeout=settings.deepseek_timeout_seconds,
+    )
+
+
+def initialize_background_worker(
+    worker: BackgroundWorker | None = None,
+    *,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    client_factory: Any = get_deepseek_client,
+    default_model: str | None = None,
+) -> None:
+    global background_worker
+
+    if worker is not None or session_factory is None:
+        background_worker = worker
+        return
+
+    settings = get_settings()
+    background_worker = BackgroundWorker(
+        session_factory=session_factory,
+        client_factory=client_factory,
+        default_model=default_model or settings.default_model,
+    )
+
+
+def get_background_worker() -> BackgroundWorker:
+    global background_worker
+
+    if background_worker is None:
+        settings = get_settings()
+        background_worker = BackgroundWorker(
+            session_factory=session_factory,
+            client_factory=get_deepseek_client,
+            default_model=settings.default_model,
+        )
+
+    return background_worker
+
+
+def build_session_response(session: ChatSession) -> ChatSessionSchema:
+    return ChatSessionSchema(
+        id=session.id,
+        title=session.title,
+        createdAt=session.created_at,
+        updatedAt=session.updated_at,
+    )
+
+
+def build_message_response(message: ChatMessage) -> ChatMessageSchema:
+    return ChatMessageSchema(
+        id=message.id,
+        sessionId=message.session_id,
+        role=message.role,
+        content=message.content,
+        suggestion=message.suggestion,
+        createdAt=message.created_at,
+    )
+
+
+async def find_default_session(session: AsyncSession) -> ChatSession | None:
+    result = await session.execute(
+        select(ChatSession)
+        .where(ChatSession.title == DEFAULT_SESSION_TITLE)
+        .order_by(ChatSession.id)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_or_create_default_chat_session(session: AsyncSession) -> ChatSession:
+    chat_session = await find_default_session(session)
+    if chat_session is not None:
+        return chat_session
+
+    now = utc_now()
+    chat_session = ChatSession(
+        title=DEFAULT_SESSION_TITLE,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(chat_session)
+    await session.flush()
+    return chat_session
+
+
+async def resolve_chat_session(session_id: int | None, session: AsyncSession) -> ChatSession:
+    if session_id is None:
+        return await get_or_create_default_chat_session(session)
+
+    chat_session = await session.get(ChatSession, session_id)
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    return chat_session
+
+
+def read_last_user_message(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+
+    raise HTTPException(status_code=422, detail="messages 中必须包含非空 user 消息")
+
+
+def parse_messages_query(raw_messages: str) -> list[dict[str, Any]]:
+    try:
+        messages = json.loads(raw_messages)
+    except JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="messages 必须是 JSON 字符串") from exc
+
+    if not isinstance(messages, list):
+        raise HTTPException(status_code=422, detail="messages 必须是数组")
+
+    for message in messages:
+        if not isinstance(message, dict):
+            raise HTTPException(status_code=422, detail="messages 中每一项都必须是对象")
+
+    return messages
+
+
+def build_sse_frame(event: str, payload: dict[str, Any]) -> str:
+    # SSE 的 data 始终写 JSON，前端只需要按 event 名称分派，不解析 DeepSeek 原始协议。
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def build_error_payload(error: Exception) -> dict[str, Any]:
+    if isinstance(error, DeepSeekClientError):
+        return {
+            "code": error.code,
+            "message": str(error),
+        }
+
+    if isinstance(error, HTTPException):
+        return {
+            "code": "invalid_request",
+            "message": str(error.detail),
+        }
+
+    return {
+        "code": "chat_stream_error",
+        "message": "AI 教练暂时不可用，请稍后重试。",
+    }
+
+
+async def persist_successful_chat_turn(
+    *,
+    chat_session: ChatSession,
+    session: AsyncSession,
+    user_content: str,
+    assistant_text: str,
+    suggestion: dict[str, Any] | None,
+) -> None:
+    now = utc_now()
+    # 流式阶段不写半截 assistant；只有拿到完整回复并解析成功后，才把本轮 user + assistant 一起落库。
+    session.add_all(
+        [
+            ChatMessage(
+                session_id=chat_session.id,
+                role="user",
+                content=user_content,
+                suggestion=None,
+                created_at=now,
+            ),
+            ChatMessage(
+                session_id=chat_session.id,
+                role="assistant",
+                content=assistant_text,
+                suggestion=suggestion,
+                created_at=now,
+            ),
+        ]
+    )
+    chat_session.updated_at = now
+    await session.commit()
+
+
+@router.get("/sessions", response_model=list[ChatSessionSchema], response_model_by_alias=True)
+async def list_chat_sessions(session: AsyncSession = Depends(get_db_session)) -> list[ChatSessionSchema]:
+    result = await session.execute(select(ChatSession).order_by(ChatSession.updated_at.desc(), ChatSession.id.desc()))
+    return [build_session_response(item) for item in result.scalars().all()]
+
+
+@router.post("/sessions", response_model=ChatSessionSchema, response_model_by_alias=True)
+async def create_chat_session(
+    payload: ChatSessionCreateSchema,
+    session: AsyncSession = Depends(get_db_session),
+) -> ChatSessionSchema:
+    now = utc_now()
+    chat_session = ChatSession(
+        title=payload.title or UNTITLED_SESSION_TITLE,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(chat_session)
+    await session.commit()
+    await session.refresh(chat_session)
+    return build_session_response(chat_session)
+
+
+@router.get("/sessions/default", response_model=ChatSessionSchema, response_model_by_alias=True)
+async def get_or_create_default_session(session: AsyncSession = Depends(get_db_session)) -> ChatSessionSchema:
+    # 默认会话承接旧版单条 chatHistory；真实多会话选择留给后续 UI 版本。
+    chat_session = await get_or_create_default_chat_session(session)
+    await session.commit()
+    await session.refresh(chat_session)
+    return build_session_response(chat_session)
+
+
+@router.get("/stream")
+async def stream_chat_reply(
+    messages: str,
+    session_id: int | None = None,
+    model: str | None = None,
+    deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
+    session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    parsed_messages = parse_messages_query(messages)
+    user_content = read_last_user_message(parsed_messages)
+    chat_session = await resolve_chat_session(session_id, session)
+    settings = get_settings()
+    selected_model = model or settings.default_model
+
+    async def event_stream() -> AsyncIterator[str]:
+        chunks: list[str] = []
+
+        try:
+            async for chunk in deepseek_client.stream_chat(
+                messages=parsed_messages,
+                model=selected_model,
+            ):
+                chunks.append(chunk)
+                yield build_sse_frame("delta", {"text": chunk})
+
+            parsed_reply = parse_ai_response("".join(chunks))
+            assistant_text = parsed_reply["text"]
+            suggestion = parsed_reply["suggestion"]
+            await persist_successful_chat_turn(
+                chat_session=chat_session,
+                session=session,
+                user_content=user_content,
+                assistant_text=assistant_text,
+                suggestion=suggestion,
+            )
+
+            yield build_sse_frame("suggestion", {"suggestion": suggestion})
+            yield build_sse_frame("done", {"text": assistant_text})
+        except Exception as exc:
+            await session.rollback()
+            yield build_sse_frame("error", build_error_payload(exc))
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post(
+    "/reply",
+    response_model=ChatReplyResponseSchema,
+    response_model_by_alias=True,
+)
+async def request_chat_reply(
+    payload: ChatReplyRequestSchema,
+    deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
+    session: AsyncSession = Depends(get_db_session),
+) -> ChatReplyResponseSchema:
+    user_content = read_last_user_message(payload.messages)
+    chat_session = await resolve_chat_session(payload.session_id, session)
+    settings = get_settings()
+    selected_model = payload.model or settings.default_model
+
+    try:
+        content = await deepseek_client.request_chat(
+            messages=payload.messages,
+            model=selected_model,
+            stream=False,
+        )
+        if not isinstance(content, str):
+            raise DeepSeekClientError(
+                "DeepSeek 非流式响应格式异常，请稍后重试。",
+                code="invalid_response",
+            )
+
+        parsed_reply = parse_ai_response(content)
+        await persist_successful_chat_turn(
+            chat_session=chat_session,
+            session=session,
+            user_content=user_content,
+            assistant_text=parsed_reply["text"],
+            suggestion=parsed_reply["suggestion"],
+        )
+        return ChatReplyResponseSchema(
+            text=parsed_reply["text"],
+            suggestion=parsed_reply["suggestion"],
+        )
+    except DeepSeekClientError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def build_background_task_response(record: BackgroundTaskRecord) -> ChatBackgroundTaskResponseSchema:
+    return ChatBackgroundTaskResponseSchema(
+        task_id=record.task_id,
+        status=record.status,
+        result=record.result,
+        message=record.message,
+    )
+
+
+@router.post(
+    "/{session_id}/background",
+    response_model=ChatBackgroundSubmitResponseSchema,
+)
+async def submit_background_chat_task(
+    session_id: int,
+    payload: ChatBackgroundRequestSchema,
+    session: AsyncSession = Depends(get_db_session),
+) -> ChatBackgroundSubmitResponseSchema:
+    user_content = read_last_user_message(payload.messages)
+    await resolve_chat_session(session_id, session)
+    worker = get_background_worker()
+    record = await worker.submit(
+        session_id=session_id,
+        messages=payload.messages,
+        user_content=user_content,
+        model=payload.model,
+    )
+    return ChatBackgroundSubmitResponseSchema(task_id=record.task_id)
+
+
+@router.get(
+    "/background/{task_id}",
+    response_model=ChatBackgroundTaskResponseSchema,
+)
+async def get_background_chat_task(task_id: str) -> ChatBackgroundTaskResponseSchema:
+    return build_background_task_response(get_background_worker().get(task_id))
+
+
+@router.get(
+    "/sessions/{session_id}/messages",
+    response_model=list[ChatMessageSchema],
+    response_model_by_alias=True,
+)
+async def list_chat_messages(
+    session_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ChatMessageSchema]:
+    chat_session = await session.get(ChatSession, session_id)
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    result = await session.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at, ChatMessage.id)
+    )
+    # 历史消息必须全量返回，不能沿用前端上下文窗口的 20 条裁剪策略。
+    return [build_message_response(item) for item in result.scalars().all()]
+
+
+@router.post(
+    "/sessions/{session_id}/messages",
+    response_model=ChatMessageSchema,
+    response_model_by_alias=True,
+)
+async def append_chat_message(
+    payload: ChatMessageCreateSchema,
+    session_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> ChatMessageSchema:
+    chat_session = await session.get(ChatSession, session_id)
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    now = utc_now()
+    message = ChatMessage(
+        session_id=session_id,
+        role=payload.role,
+        content=payload.content,
+        suggestion=payload.suggestion,
+        created_at=now,
+    )
+    session.add(message)
+    # 新消息写入时同步触碰会话更新时间，列表页才能按最近对话排序。
+    chat_session.updated_at = now
+    await session.commit()
+    await session.refresh(message)
+    return build_message_response(message)

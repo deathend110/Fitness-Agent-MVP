@@ -8,7 +8,16 @@ import {
   sexOptions,
 } from '../utils/profileForm.js'
 
-function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
+function ProfileTab({
+  appState,
+  backendStatus,
+  migrationPrompt,
+  onDismissMigrationPrompt,
+  onImportData,
+  onImportToBackend,
+  onProfileChange,
+  profile,
+}) {
   const [draft, setDraft] = useState(() => profileToDraft(profile))
 
   useEffect(() => {
@@ -140,7 +149,14 @@ function ProfileTab({ appState, onImportData, onProfileChange, profile }) {
           </div>
         </form>
 
-        <DataTransferPanel appState={appState} onImportData={onImportData} />
+        <DataTransferPanel
+          appState={appState}
+          backendStatus={backendStatus}
+          migrationPrompt={migrationPrompt}
+          onDismissMigrationPrompt={onDismissMigrationPrompt}
+          onImportData={onImportData}
+          onImportToBackend={onImportToBackend}
+        />
       </div>
     </section>
   )
