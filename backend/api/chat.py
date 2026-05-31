@@ -5,13 +5,14 @@ import json
 from json import JSONDecodeError
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWorker
+from backend.agent.chat_session import build_agent_request
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
 from backend.config import get_settings
@@ -31,10 +32,9 @@ UNTITLED_SESSION_TITLE = "新对话"
 
 
 class ChatReplyRequestSchema(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    session_id: int | None = Field(default=None, alias="sessionId")
-    messages: list[dict[str, Any]]
+    sessionId: int | None = None
+    userInput: str | None = None
+    messages: list[dict[str, Any]] | None = None
     model: str | None = None
 
 
@@ -173,6 +173,27 @@ def read_last_user_message(messages: list[dict[str, Any]]) -> str:
     raise HTTPException(status_code=422, detail="messages 中必须包含非空 user 消息")
 
 
+def read_user_input(user_input: str | None) -> str | None:
+    if user_input is None:
+        return None
+
+    stripped = user_input.strip()
+    if not stripped:
+        raise HTTPException(status_code=422, detail="userInput 不能为空")
+    return stripped
+
+
+def read_payload_user_content(payload: ChatReplyRequestSchema) -> str:
+    direct_user_input = read_user_input(payload.userInput)
+    if direct_user_input is not None:
+        return direct_user_input
+
+    if payload.messages is None:
+        raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
+
+    return read_last_user_message(payload.messages)
+
+
 def parse_messages_query(raw_messages: str) -> list[dict[str, Any]]:
     try:
         messages = json.loads(raw_messages)
@@ -279,24 +300,39 @@ async def get_or_create_default_session(session: AsyncSession = Depends(get_db_s
 
 @router.get("/stream")
 async def stream_chat_reply(
-    messages: str,
+    messages: str | None = None,
+    user_input: str | None = Query(default=None, alias="userInput"),
     session_id: int | None = None,
     model: str | None = None,
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
-    parsed_messages = parse_messages_query(messages)
-    user_content = read_last_user_message(parsed_messages)
     chat_session = await resolve_chat_session(session_id, session)
     settings = get_settings()
     selected_model = model or settings.default_model
+    direct_user_input = read_user_input(user_input)
+
+    if direct_user_input is not None:
+        user_content = direct_user_input
+        agent_request = await build_agent_request(
+            session=session,
+            session_id=chat_session.id,
+            user_input=user_content,
+            model_config={"model": selected_model},
+        )
+        request_messages = agent_request.messages
+    else:
+        if messages is None:
+            raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
+        request_messages = parse_messages_query(messages)
+        user_content = read_last_user_message(request_messages)
 
     async def event_stream() -> AsyncIterator[str]:
         chunks: list[str] = []
 
         try:
             async for chunk in deepseek_client.stream_chat(
-                messages=parsed_messages,
+                messages=request_messages,
                 model=selected_model,
             ):
                 chunks.append(chunk)
@@ -332,14 +368,26 @@ async def request_chat_reply(
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> ChatReplyResponseSchema:
-    user_content = read_last_user_message(payload.messages)
-    chat_session = await resolve_chat_session(payload.session_id, session)
+    user_content = read_payload_user_content(payload)
+    chat_session = await resolve_chat_session(payload.sessionId, session)
     settings = get_settings()
     selected_model = payload.model or settings.default_model
+    if payload.userInput is not None:
+        agent_request = await build_agent_request(
+            session=session,
+            session_id=chat_session.id,
+            user_input=user_content,
+            model_config={"model": selected_model},
+        )
+        request_messages = agent_request.messages
+    else:
+        if payload.messages is None:
+            raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
+        request_messages = payload.messages
 
     try:
         content = await deepseek_client.request_chat(
-            messages=payload.messages,
+            messages=request_messages,
             model=selected_model,
             stream=False,
         )

@@ -1,6 +1,6 @@
 ﻿# FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 聊天代理与后台思考、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 聊天代理与后台思考、Phase 3 后端 Agent 上下文编排、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
 
 ## V2.3 后端化总览
 
@@ -9,6 +9,7 @@
 - 前端继续负责 UI、交互、页面状态组织
 - 本地 FastAPI 后端负责 `profile / weeklyPlan / dailyLog` 的持久化
 - 本地 FastAPI 后端已提供 `chat_session / chat_message` 的存储接口、`/api/chat/stream` SSE 代理、离页后台思考任务和计划采纳校验接口
+- Phase 3 已开始引入 Agent Orchestrator：后端可在只收到 `userInput` 时读取 SQLite 状态并统一拼装 DeepSeek messages
 - SQLite 作为本地结构化存储
 - 后端配置固定从 `backend/.env` 读取；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据
 - AI 教练页发送消息走后端聊天代理，页面显示状态暂时仍复用 `fitloop_chatHistory`
@@ -21,7 +22,7 @@
 - `chatHistory`
   - 后端能力：`chat_session / chat_message` 已支持默认会话、全量消息读取、`suggestion` JSON 存储和 SSE 代理落库
   - 前端现状：发送请求走后端代理，聊天展示仍使用浏览器 `localStorage`；离页时记录后台 task_id，回页查询成功结果并补齐 assistant 消息
-  - 后续计划：真实多会话 UI 和消息拉取恢复继续拆任务推进
+  - 后续计划：真实多会话 UI、消息拉取恢复和前端正式切到 `userInput/sessionId` 请求契约继续拆任务推进
 
 ### 当前新增目录
 
@@ -37,7 +38,10 @@ backend/
   agent/
     adopt_plan.py
     background_worker.py
+    chat_session.py
+    context_manager.py
     deepseek_client.py
+    prompt_templates.py
     response_parser.py
   db/
     database.py
@@ -92,7 +96,7 @@ src/
 当前不覆盖，留给 V2.5 / Phase 3+：
 
 - AI 教练页真实多会话 UI 和刷新后从后端拉取消息补齐
-- 后端上下文压缩、工具调用编排、模型选择、文件上传解析、知识库和周期计划引擎
+- 长对话摘要压缩、memory 提取确认、usage/cache 记录、工具调用编排、模型选择、文件上传解析、知识库和周期计划引擎
 
 ## 当前项目结构
 
@@ -177,8 +181,23 @@ docs/
 - `backend/api/chat.py`
   - 负责聊天会话与消息的后端 CRUD、SSE 流式代理、非流式回退代理和后台思考任务 API
   - 提供会话列表、创建会话、获取或创建默认会话、追加消息、全量读取消息
+  - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
   - `/api/chat/stream` 将 DeepSeek 流式文本映射为 `delta / suggestion / done / error` 事件
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
+
+- `backend/agent/prompt_templates.py`
+  - 定义稳定 system prompt，包含健身教练身份、安全边界、非医疗诊断声明和计划写回必须用户确认的约束
+  - 稳定前缀不包含时间戳、随机 id 或实时状态，便于后续 DeepSeek Context Caching 命中
+
+- `backend/agent/context_manager.py`
+  - 定义 `PromptAssembler` 与 `TokenBudgetConfig`
+  - 按稳定 system prompt、当前用户状态、安全记忆、相关记忆、知识、会话摘要、最近消息、当前输入的顺序组装上下文
+  - 使用保守 token 估算和回复预留预算，超预算时优先裁剪低优先级历史，并输出 debug metadata
+
+- `backend/agent/chat_session.py`
+  - 定义 `build_agent_request()` 后端编排入口
+  - 从 SQLite 读取 `profile / weekly_plan / daily_log / memory / knowledge / summary / recent_messages`
+  - 返回 DeepSeek messages、模型配置和上下文调试信息，供 Chat API 与后续后台/工具循环复用
 
 - `backend/agent/adopt_plan.py`
   - 负责 AI 计划建议的后端采纳校验、动作字段更新和动作结构归一化
@@ -192,6 +211,7 @@ docs/
 
 - `backend/db/models.py`
   - 定义 `Profile / WeeklyPlanDay / DailyLog / ChatSession / ChatMessage`
+  - Phase 3 新增 `ChatSessionSummary / MemoryItem / KnowledgeItem / ToolCallLog / UsageRecord`
   - `WeeklyPlanDay.exercises` 以 JSON 保存动作数组，计划采纳成功后只更新目标日动作列表
   - `ChatMessage.suggestion` 以 JSON 可空列保存结构化建议，供前端渲染采纳卡片
 
@@ -422,6 +442,8 @@ CoachTab
       -> 成功后写入 user + assistant
       -> event: done
   -> POST /api/chat/reply
+      -> 若请求为 userInput，先 build_agent_request()
+      -> 若请求为 messages[]，走 Phase 2 兼容路径
       -> DeepSeek request_chat()
       -> parse_ai_response(content)
       -> 成功后写入 user + assistant
@@ -567,6 +589,16 @@ Task 8 新增、Task 9 接入 AI 代理落库的后端聊天表：
 - 新增消息时刷新会话 `updated_at`，供后续真实会话列表按最近对话排序
 - 流式回复只在完整成功后落库，避免 delta 阶段写入半截脏消息
 
+### Phase 3 Agent 编排表
+
+Phase 3 Task 13 新增以下表，为后续上下文压缩、长期记忆、工具调用和成本观测打底：
+
+- `chat_session_summary`：保存长对话摘要、覆盖消息范围和 token 估算
+- `memory_item`：保存用户长期事实、偏好、目标、约束、器械条件和安全限制
+- `knowledge_item`：保存外部资料、上传文件或训练知识片段，与用户 memory 分离
+- `tool_call_log`：记录工具名、参数、瘦身结果、状态和错误信息
+- `usage_record`：记录 DeepSeek token 用量和 prompt cache hit/miss 字段
+
 ### `fitloop_storageVersion`
 
 用于标记默认数据迁移版本，避免旧演示数据反复覆盖真实数据。
@@ -575,10 +607,13 @@ Task 8 新增、Task 9 接入 AI 代理落库的后端聊天表：
 
 ```text
 CoachTab
-  -> buildSystemPrompt(profile, weeklyPlan, dailyLog)
-  -> requestCoachReplyStream(messages)
+  -> 当前前端仍可 buildSystemPrompt(profile, weeklyPlan, dailyLog) 并传 messages[] 兼容 Phase 2
+  -> Phase 3 新契约可只传 sessionId + userInput
   -> src/api/coachBackend.js
-  -> GET /api/chat/stream
+  -> GET /api/chat/stream 或 POST /api/chat/reply
+  -> build_agent_request()
+      -> PromptAssembler
+      -> 读取 profile / weeklyPlan / dailyLog / memory / summary / recent messages
   -> DeepSeekClient.stream_chat()
   -> parse_ai_response(content)
   -> 保存 ChatMessage(user + assistant)

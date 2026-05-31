@@ -15,14 +15,16 @@
 - DeepSeek 后端代理、SSE 流式事件和非流式回退接口
 - 离页后台思考任务提交、查询和成功回复落库
 - 计划采纳后端校验与写回接口
+- Phase 3 数据模型：会话摘要、长期记忆、知识条目、工具调用日志和 usage 记录
+- Phase 3 后端上下文拼装：`userInput/sessionId` 可由后端读取 SQLite 状态并构建 DeepSeek messages
 
 后续阶段仍未落地的内容：
 
 - AI 教练页真实多会话 UI
-- 后端上下文管理、token 压缩与工具调用编排
+- 长对话摘要压缩、memory 提取确认、usage/cache 统计写入与工具调用编排
 - 文件上传解析、模型选择、知识库、周期计划与预制计划库
 
-V2.3 Phase 2 已完成密钥后移、SSE 流式代理、离页后台思考和计划采纳后端化；以上内容留给 V2.5 / Phase 3+。
+V2.3 Phase 2 已完成密钥后移、SSE 流式代理、离页后台思考和计划采纳后端化；Phase 3 已开始把 prompt 与上下文管理迁入后端 Agent Orchestrator。
 
 ## 技术栈
 
@@ -158,8 +160,10 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `POST /api/chat/sessions` 未传标题时会创建“新对话”，不会占用默认会话语义
 - 消息读取全量返回，不做 20 条裁剪
 - `GET /api/chat/stream` 接收 `messages=<JSON>`、可选 `session_id / model`，返回 `text/event-stream`
+- `GET /api/chat/stream` 也可接收 `userInput + session_id + model`，由后端统一拼装上下文
 - SSE 事件格式为 `event: delta / suggestion / done / error`，`data` 始终是 JSON
-- `POST /api/chat/reply` 接收 `{sessionId?, messages, model?}`，用于前端流式失败后的非流式回退
+- `POST /api/chat/reply` 接收 `{sessionId?, messages, model?}` 或 Phase 3 新契约 `{sessionId?, userInput, model?}`，用于前端流式失败后的非流式回退
+- 新契约会调用 `backend.agent.chat_session.build_agent_request()`，按稳定 system prompt、当前用户状态、安全记忆、相关记忆、会话摘要、最近消息和当前输入构建 DeepSeek messages
 - 流式和非流式请求都只在完整成功后一起写入本轮 user + assistant，错误时不写半截 assistant
 - `suggestion` 为可空 JSON，用于后续保存 AI 结构化建议
 - `POST /api/chat/{session_id}/background` 接收 `{messages, model?}`，返回 `{task_id}`，用于前端离页时提交后台思考兜底
@@ -246,4 +250,10 @@ uv run pytest backend\tests\test_background_worker.py
 
 ```powershell
 uv run pytest backend\tests\test_adopt_plan.py
+```
+
+Phase 3 数据模型与上下文拼装定向测试：
+
+```powershell
+uv run pytest backend\tests\test_phase3_models.py backend\tests\test_context_manager.py backend\tests\test_chat_session_context.py
 ```
