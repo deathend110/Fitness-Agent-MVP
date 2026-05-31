@@ -30,10 +30,16 @@
 
 ## 安装依赖
 
+在仓库根目录执行：
+
 ```powershell
-python -m venv .venv-v2.3
-.\.venv-v2.3\Scripts\python.exe -m pip install -r backend\requirements.txt
+uv sync
 ```
+
+说明：
+
+- `backend/requirements.txt` 是兼容导出文件，不是主依赖入口
+- 如需刷新该文件，可执行 `uv export --format requirements-txt -o backend\requirements.txt`
 
 ## 环境变量
 
@@ -77,9 +83,10 @@ GET http://127.0.0.1:8000/api/health
 
 ## 数据库迁移
 
+在 `backend/` 目录执行：
+
 ```powershell
-cd backend
-..\.\venv-v2.3\Scripts\python.exe -m alembic upgrade head
+uv run python -m alembic upgrade head
 ```
 
 ## 接口速查
@@ -141,17 +148,19 @@ backend/data/
 
 ## 测试命令
 
+以下命令默认在仓库根目录执行：
+
 定向测试：
 
 ```powershell
-.\.venv-v2.3\Scripts\python.exe -m pytest backend\tests\test_health.py
-.\.venv-v2.3\Scripts\python.exe -m pytest backend\tests\test_models.py
-.\.venv-v2.3\Scripts\python.exe -m pytest backend\tests\test_crud_api.py
-.\.venv-v2.3\Scripts\python.exe -m pytest backend\tests\test_migrate.py
+uv run python -m pytest backend\tests\test_health.py
+uv run python -m pytest backend\tests\test_models.py
+uv run python -m pytest backend\tests\test_crud_api.py
+uv run python -m pytest backend\tests\test_migrate.py
 ```
 
 Phase 1 汇总测试：
 
 ```powershell
-.\.venv-v2.3\Scripts\python.exe -m pytest backend\tests\test_health.py backend\tests\test_models.py backend\tests\test_crud_api.py backend\tests\test_migrate.py
+uv run python -m pytest backend\tests\test_health.py backend\tests\test_models.py backend\tests\test_crud_api.py backend\tests\test_migrate.py
 ```

@@ -17,6 +17,7 @@ backend/db/__pycache__/
 backend/db/migrations/__pycache__/
 backend/db/migrations/versions/__pycache__/
 .venv/
+.venv-v2.3/
 
 npm-debug.log*
 yarn-debug.log*

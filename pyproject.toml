@@ -1,0 +1,24 @@
+[project]
+name = "fitloop-mvp"
+version = "0.1.0"
+description = "FitLoop MVP V2.3 worktree 的统一 Python 依赖管理配置"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "greenlet==3.5.1",
+    "playwright==1.60.0",
+    "pyee==13.0.1",
+    "typing_extensions==4.15.0",
+    "fastapi==0.116.1",
+    "uvicorn[standard]==0.35.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite==0.21.0",
+    "alembic==1.16.5",
+    "pydantic-settings==2.11.0",
+    "httpx==0.28.1",
+    "pytest==8.4.2",
+    "pytest-asyncio==1.1.0",
+]
+
+[tool.uv]
+package = false
