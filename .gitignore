@@ -19,6 +19,7 @@ backend/db/__pycache__/
 backend/agent/__pycache__/
 backend/db/migrations/__pycache__/
 backend/db/migrations/versions/__pycache__/
+backend/metrics/__pycache__/
 .venv/
 .venv-qa/
 .venv-v2.3/
