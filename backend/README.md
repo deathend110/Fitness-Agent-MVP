@@ -13,10 +13,10 @@
 - `chat` 会话与消息后端 CRUD
 - DeepSeek 客户端与 `---JSON---` 响应解析基础模块
 - DeepSeek 后端代理、SSE 流式事件和非流式回退接口
+- 离页后台思考任务提交、查询和成功回复落库
 
 当前仍未落地到后端的内容：
 
-- 后台思考
 - 计划采纳后端化
 - AI 教练页真实多会话 UI
 
@@ -125,6 +125,8 @@ uv run python -m alembic upgrade head
 - `POST /api/chat/sessions/{id}/messages`
 - `GET /api/chat/stream`
 - `POST /api/chat/reply`
+- `POST /api/chat/{session_id}/background`
+- `GET /api/chat/background/{task_id}`
 
 说明：
 
@@ -136,6 +138,9 @@ uv run python -m alembic upgrade head
 - `POST /api/chat/reply` 接收 `{sessionId?, messages, model?}`，用于前端流式失败后的非流式回退
 - 流式和非流式请求都只在完整成功后一起写入本轮 user + assistant，错误时不写半截 assistant
 - `suggestion` 为可空 JSON，用于后续保存 AI 结构化建议
+- `POST /api/chat/{session_id}/background` 接收 `{messages, model?}`，返回 `{task_id}`，用于前端离页时提交后台思考兜底
+- `GET /api/chat/background/{task_id}` 返回 `pending / running / succeeded / failed / not_found`；成功时 `result` 包含 `{text, suggestion}`，且本轮 user + assistant 已写入 `chat_message`
+- 后台任务表当前存放在后端进程内存中，服务重启后旧 task_id 会返回 `not_found`
 
 ### localStorage 迁移
 
@@ -202,4 +207,10 @@ uv run pytest backend\tests\test_chat_store.py
 
 ```powershell
 uv run pytest backend\tests\test_chat_stream.py
+```
+
+后台思考定向测试：
+
+```powershell
+uv run pytest backend\tests\test_background_worker.py
 ```

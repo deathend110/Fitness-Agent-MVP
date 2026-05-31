@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import CoachLayout from '../components/coach/CoachLayout.jsx'
 import ChatSidebar from '../components/coach/ChatSidebar.jsx'
 import ChatTopbar from '../components/coach/ChatTopbar.jsx'
@@ -11,6 +11,8 @@ import {
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
+  getBackgroundCoachTask,
+  startBackgroundCoachReply,
 } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import {
@@ -80,6 +82,8 @@ function getBackendSessionId(sessionId) {
   return Number.isInteger(sessionId) ? sessionId : null
 }
 
+const BACKGROUND_TASK_STORAGE_KEY = 'fitloop:coach-background-task'
+
 function CoachTab({
   chatHistory,
   dailyLog,
@@ -94,6 +98,9 @@ function CoachTab({
   const [isSending, setIsSending] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
   const [streamingText, setStreamingText] = useState('')
+  const backgroundTaskStartedRef = useRef(false)
+  const chatHistoryRef = useRef(chatHistory)
+  const pendingRequestRef = useRef(null)
 
   const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
   const emptyQuestions = useMemo(() => getCoachEmptyQuestionView(), [])
@@ -152,7 +159,137 @@ function CoachTab({
 
   useEffect(() => {
     setMessageMeta((currentMeta) => mergeMessageMeta(chatHistory, currentMeta))
+    chatHistoryRef.current = chatHistory
   }, [chatHistory])
+
+  useEffect(() => {
+    let pollTimer = null
+
+    function readStoredTask() {
+      if (typeof window === 'undefined') {
+        return null
+      }
+
+      try {
+        return JSON.parse(window.localStorage.getItem(BACKGROUND_TASK_STORAGE_KEY) || 'null')
+      } catch {
+        window.localStorage.removeItem(BACKGROUND_TASK_STORAGE_KEY)
+        return null
+      }
+    }
+
+    function clearStoredTask() {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(BACKGROUND_TASK_STORAGE_KEY)
+      }
+    }
+
+    function appendBackgroundReply(reply) {
+      const assistantText = reply?.text || ''
+
+      if (!assistantText) {
+        return
+      }
+
+      const currentHistory = chatHistoryRef.current
+      const alreadyExists = currentHistory.some(
+        (message) => message.role === 'assistant' && message.content === assistantText,
+      )
+
+      if (alreadyExists) {
+        return
+      }
+
+      const finalHistory = appendChatMessages(currentHistory, [
+        { role: 'assistant', content: assistantText },
+      ])
+
+      setMessageMeta((currentMeta) => {
+        const nextMeta = mergeMessageMeta(finalHistory, currentMeta)
+        const assistantIndex = finalHistory.length - 1
+
+        nextMeta[assistantIndex] = {
+          ...nextMeta[assistantIndex],
+          isDismissed: false,
+          suggestion: reply.suggestion ?? null,
+        }
+
+        return nextMeta
+      })
+      onChatHistoryChange(finalHistory)
+    }
+
+    async function pollStoredTask() {
+      const storedTask = readStoredTask()
+
+      if (!storedTask?.taskId) {
+        return
+      }
+
+      try {
+        const task = await getBackgroundCoachTask(storedTask.taskId)
+
+        if (task.status === 'succeeded') {
+          appendBackgroundReply(task.result)
+          clearStoredTask()
+          return
+        }
+
+        if (task.status === 'failed' || task.status === 'not_found') {
+          setErrorMessage(task.message || '后台 AI 教练任务未完成，请重新发送。')
+          clearStoredTask()
+        }
+
+        if (task.status === 'pending' || task.status === 'running') {
+          pollTimer = window.setTimeout(pollStoredTask, 1500)
+        }
+      } catch (error) {
+        setErrorMessage(error?.message || '后台 AI 教练任务查询失败，请稍后重试。')
+      }
+    }
+
+    async function submitBackgroundTask() {
+      const payload = pendingRequestRef.current
+
+      if (!payload || backgroundTaskStartedRef.current) {
+        return
+      }
+
+      backgroundTaskStartedRef.current = true
+
+      try {
+        const task = await startBackgroundCoachReply(payload)
+        if (task?.taskId && typeof window !== 'undefined') {
+          window.localStorage.setItem(BACKGROUND_TASK_STORAGE_KEY, JSON.stringify(task))
+        }
+      } catch {
+        // 离页兜底不能阻塞用户关闭页面；失败会保留原有前台发送错误处理。
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        submitBackgroundTask()
+        return
+      }
+
+      if (document.visibilityState === 'visible') {
+        pollStoredTask()
+      }
+    }
+
+    pollStoredTask()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', submitBackgroundTask)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', submitBackgroundTask)
+      if (pollTimer) {
+        window.clearTimeout(pollTimer)
+      }
+    }
+  }, [onChatHistoryChange])
 
   useEffect(() => {
     if (!chatHistory.length) {
@@ -274,6 +411,8 @@ function CoachTab({
 
     setErrorMessage('')
     setIsSending(true)
+    backgroundTaskStartedRef.current = false
+    pendingRequestRef.current = requestPayload
     setStreamingText('')
     setDraft('')
     setMessageMeta((currentMeta) => mergeMessageMeta(nextHistory, currentMeta))
@@ -307,6 +446,7 @@ function CoachTab({
       setErrorMessage(error?.message || 'AI 教练暂时不可用，请稍后重试。')
     } finally {
       setIsSending(false)
+      pendingRequestRef.current = null
       setStreamingText('')
     }
   }

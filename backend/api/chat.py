@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWorker
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
 from backend.config import get_settings
-from backend.db.database import get_db_session
+from backend.db.database import get_db_session, session_factory
 from backend.db.models import ChatMessage, ChatSession, utc_now
 from backend.schemas import (
     ChatMessageCreateSchema,
@@ -42,6 +43,25 @@ class ChatReplyResponseSchema(BaseModel):
     suggestion: dict[str, Any] | None = None
 
 
+class ChatBackgroundRequestSchema(BaseModel):
+    messages: list[dict[str, Any]]
+    model: str | None = None
+
+
+class ChatBackgroundSubmitResponseSchema(BaseModel):
+    task_id: str
+
+
+class ChatBackgroundTaskResponseSchema(BaseModel):
+    task_id: str
+    status: str
+    result: dict[str, Any] | None = None
+    message: str = ""
+
+
+background_worker: BackgroundWorker | None = None
+
+
 def get_deepseek_client() -> DeepSeekClient:
     settings = get_settings()
     return DeepSeekClient(
@@ -49,6 +69,41 @@ def get_deepseek_client() -> DeepSeekClient:
         base_url=settings.deepseek_base_url,
         timeout=settings.deepseek_timeout_seconds,
     )
+
+
+def initialize_background_worker(
+    worker: BackgroundWorker | None = None,
+    *,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    client_factory: Any = get_deepseek_client,
+    default_model: str | None = None,
+) -> None:
+    global background_worker
+
+    if worker is not None or session_factory is None:
+        background_worker = worker
+        return
+
+    settings = get_settings()
+    background_worker = BackgroundWorker(
+        session_factory=session_factory,
+        client_factory=client_factory,
+        default_model=default_model or settings.default_model,
+    )
+
+
+def get_background_worker() -> BackgroundWorker:
+    global background_worker
+
+    if background_worker is None:
+        settings = get_settings()
+        background_worker = BackgroundWorker(
+            session_factory=session_factory,
+            client_factory=get_deepseek_client,
+            default_model=settings.default_model,
+        )
+
+    return background_worker
 
 
 def build_session_response(session: ChatSession) -> ChatSessionSchema:
@@ -309,6 +364,44 @@ async def request_chat_reply(
     except DeepSeekClientError as exc:
         await session.rollback()
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def build_background_task_response(record: BackgroundTaskRecord) -> ChatBackgroundTaskResponseSchema:
+    return ChatBackgroundTaskResponseSchema(
+        task_id=record.task_id,
+        status=record.status,
+        result=record.result,
+        message=record.message,
+    )
+
+
+@router.post(
+    "/{session_id}/background",
+    response_model=ChatBackgroundSubmitResponseSchema,
+)
+async def submit_background_chat_task(
+    session_id: int,
+    payload: ChatBackgroundRequestSchema,
+    session: AsyncSession = Depends(get_db_session),
+) -> ChatBackgroundSubmitResponseSchema:
+    user_content = read_last_user_message(payload.messages)
+    await resolve_chat_session(session_id, session)
+    worker = get_background_worker()
+    record = await worker.submit(
+        session_id=session_id,
+        messages=payload.messages,
+        user_content=user_content,
+        model=payload.model,
+    )
+    return ChatBackgroundSubmitResponseSchema(task_id=record.task_id)
+
+
+@router.get(
+    "/background/{task_id}",
+    response_model=ChatBackgroundTaskResponseSchema,
+)
+async def get_background_chat_task(task_id: str) -> ChatBackgroundTaskResponseSchema:
+    return build_background_task_response(get_background_worker().get(task_id))
 
 
 @router.get(

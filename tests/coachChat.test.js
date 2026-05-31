@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  getBackgroundCoachTask,
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
+  startBackgroundCoachReply,
 } from '../src/utils/coachChat.js'
 
 test('requestCoachReply 会先构建 system prompt 再调用聊天请求，并返回纯文本解析结果', async () => {
@@ -168,4 +170,47 @@ test('requestCoachReplyStream 会把流式文本拼成最终回复并保留 sugg
 test('shouldFallbackCoachStream 只允许在尚未收到流式文本时回退普通请求', () => {
   assert.equal(shouldFallbackCoachStream({ hasReceivedText: false }), true)
   assert.equal(shouldFallbackCoachStream({ hasReceivedText: true }), false)
+})
+
+test('startBackgroundCoachReply 会复用上下文构建逻辑提交后台任务', async () => {
+  const result = await startBackgroundCoachReply(
+    {
+      chatHistory: [{ role: 'assistant', content: '先休息。' }],
+      userInput: '离页后继续分析',
+      profile: { basic: { name: '测试用户' } },
+      weeklyPlan: { Friday: { type: '拉日', exercises: [] } },
+      dailyLog: { '2026-05-31': { fatigue: 5 } },
+      sessionId: 9,
+    },
+    {
+      buildPromptImpl: () => 'SYSTEM_PROMPT',
+      submitImpl: async (messages, options) => {
+        assert.equal(options.sessionId, 9)
+        assert.deepEqual(messages, [
+          { role: 'system', content: 'SYSTEM_PROMPT' },
+          { role: 'assistant', content: '先休息。' },
+          { role: 'user', content: '离页后继续分析' },
+        ])
+        return { taskId: 'task-1', sessionId: 9 }
+      },
+    },
+  )
+
+  assert.deepEqual(result, { taskId: 'task-1', sessionId: 9 })
+})
+
+test('getBackgroundCoachTask 会转交后台任务查询实现', async () => {
+  const result = await getBackgroundCoachTask('task-1', {
+    getTaskImpl: async (taskId) => {
+      assert.equal(taskId, 'task-1')
+      return { taskId, status: 'not_found', result: null, message: '未找到对应的后台思考任务。' }
+    },
+  })
+
+  assert.deepEqual(result, {
+    taskId: 'task-1',
+    status: 'not_found',
+    result: null,
+    message: '未找到对应的后台思考任务。',
+  })
 })

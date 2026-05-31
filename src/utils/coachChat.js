@@ -1,4 +1,9 @@
-import { requestBackendCoachReply, streamBackendCoachReply } from '../api/coachBackend.js'
+import {
+  getBackendCoachBackgroundTask,
+  requestBackendCoachReply,
+  streamBackendCoachReply,
+  submitBackendCoachBackgroundTask,
+} from '../api/coachBackend.js'
 import { buildSystemPrompt } from './prompt.js'
 
 function buildCoachMessages({ chatHistory = [], dailyLog = {}, profile = {}, userInput = '', weeklyPlan = {} }, buildPromptImpl) {
@@ -47,4 +52,26 @@ export async function requestCoachReplyStream(
       onText?.(fullText)
     },
   })
+}
+
+export async function startBackgroundCoachReply(
+  { chatHistory = [], dailyLog = {}, profile = {}, sessionId = null, userInput = '', weeklyPlan = {} },
+  {
+    buildPromptImpl = buildSystemPrompt,
+    submitImpl = submitBackendCoachBackgroundTask,
+  } = {},
+) {
+  const messages = buildCoachMessages(
+    { chatHistory, dailyLog, profile, userInput, weeklyPlan },
+    buildPromptImpl,
+  )
+
+  return submitImpl(messages, { sessionId })
+}
+
+export async function getBackgroundCoachTask(
+  taskId,
+  { getTaskImpl = getBackendCoachBackgroundTask } = {},
+) {
+  return getTaskImpl(taskId)
 }

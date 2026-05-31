@@ -100,6 +100,15 @@ function normalizeReplyPayload(data) {
   }
 }
 
+function normalizeBackgroundTask(data) {
+  return {
+    taskId: typeof data?.task_id === 'string' ? data.task_id : data?.taskId || '',
+    status: typeof data?.status === 'string' ? data.status : 'unknown',
+    result: data?.result ?? null,
+    message: typeof data?.message === 'string' ? data.message : '',
+  }
+}
+
 function parseSseBlock(block) {
   let event = ''
   const dataLines = []
@@ -287,6 +296,109 @@ export async function streamBackendCoachReply(messages, options = {}) {
     }
 
     throw new BackendCoachApiError(`后端 AI 教练连接失败，请确认本地后端已启动：${error.message}`, {
+      code: 'network_error',
+      cause: error,
+    })
+  }
+}
+
+async function resolveBackgroundSessionId({ baseUrl, fetchImpl, sessionId, signal }) {
+  if (Number.isInteger(sessionId)) {
+    return sessionId
+  }
+
+  const response = await fetchImpl(createRequestUrl(baseUrl, '/chat/sessions/default'), {
+    method: 'GET',
+    signal,
+  })
+
+  await assertOkResponse(response)
+  const data = await readJsonResponse(response)
+  return Number.isInteger(data?.id) ? data.id : null
+}
+
+export async function submitBackendCoachBackgroundTask(messages, options = {}) {
+  const {
+    baseUrl = DEFAULT_BASE_URL,
+    fetchImpl = globalThis.fetch,
+    model,
+    sessionId,
+    signal,
+  } = options
+
+  assertFetchAvailable(fetchImpl)
+
+  try {
+    const resolvedSessionId = await resolveBackgroundSessionId({
+      baseUrl,
+      fetchImpl,
+      sessionId,
+      signal,
+    })
+
+    if (!Number.isInteger(resolvedSessionId)) {
+      throw new BackendCoachApiError('后端默认会话解析失败，暂时无法提交后台思考任务。', {
+        code: 'invalid_session',
+      })
+    }
+
+    const response = await fetchImpl(
+      createRequestUrl(baseUrl, `/chat/${resolvedSessionId}/background`),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages,
+          ...(model ? { model } : {}),
+        }),
+        keepalive: true,
+        signal,
+      },
+    )
+
+    await assertOkResponse(response)
+    const data = await readJsonResponse(response)
+    return {
+      taskId: typeof data?.task_id === 'string' ? data.task_id : data?.taskId || '',
+      sessionId: resolvedSessionId,
+    }
+  } catch (error) {
+    if (error instanceof BackendCoachApiError) {
+      throw error
+    }
+
+    throw new BackendCoachApiError(`后台思考任务提交失败，请确认本地后端已启动：${error.message}`, {
+      code: 'network_error',
+      cause: error,
+    })
+  }
+}
+
+export async function getBackendCoachBackgroundTask(taskId, options = {}) {
+  const {
+    baseUrl = DEFAULT_BASE_URL,
+    fetchImpl = globalThis.fetch,
+    signal,
+  } = options
+
+  assertFetchAvailable(fetchImpl)
+
+  try {
+    const response = await fetchImpl(createRequestUrl(baseUrl, `/chat/background/${taskId}`), {
+      method: 'GET',
+      signal,
+    })
+
+    await assertOkResponse(response)
+    return normalizeBackgroundTask(await readJsonResponse(response))
+  } catch (error) {
+    if (error instanceof BackendCoachApiError) {
+      throw error
+    }
+
+    throw new BackendCoachApiError(`后台思考任务查询失败，请确认本地后端已启动：${error.message}`, {
       code: 'network_error',
       cause: error,
     })

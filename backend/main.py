@@ -1,16 +1,30 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.chat import router as chat_router
+from backend.api.chat import initialize_background_worker, router as chat_router
 from backend.api.daily_log import router as daily_log_router
 from backend.api.migrate import router as migrate_router
 from backend.api.profile import router as profile_router
 from backend.api.weekly_plan import router as weekly_plan_router
 from backend.config import get_settings
+from backend.db.database import session_factory
 
 settings = get_settings()
 
-app = FastAPI(title="FitLoop Backend")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    initialize_background_worker(
+        session_factory=session_factory,
+        default_model=settings.default_model,
+    )
+    yield
+
+
+app = FastAPI(title="FitLoop Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
