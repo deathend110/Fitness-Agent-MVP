@@ -23,6 +23,11 @@ import {
   saveProfile,
   saveWeeklyPlan,
 } from './api/appData.js'
+import {
+  hasLocalMigrationFlag,
+  importLocalStorageToBackend,
+  isLocalMigrationCandidate,
+} from './utils/localMigration.js'
 import { loadStorage, migrateLegacyDemoData, saveStorage } from './utils/storage.js'
 import { normalizeWeeklyPlan } from './utils/weeklyPlan.js'
 
@@ -49,6 +54,10 @@ function App() {
     mode: 'loading',
     message: '正在连接本地后端并加载训练数据...',
   })
+  const [migrationPrompt, setMigrationPrompt] = useState({
+    visible: false,
+    reason: '',
+  })
   const syncedProfileRef = useRef(null)
   const syncedWeeklyPlanRef = useRef(null)
   const syncedDailyLogRef = useRef(null)
@@ -71,6 +80,27 @@ function App() {
         syncedProfileRef.current = nextData.profile
         syncedWeeklyPlanRef.current = normalizeWeeklyPlan(nextData.weeklyPlan)
         syncedDailyLogRef.current = nextData.dailyLog
+        const localDataSnapshot = { profile, weeklyPlan, dailyLog, chatHistory }
+        const backendIsEmpty =
+          isSameAppDataSnapshot(nextData.profile, defaultProfile) &&
+          isSameAppDataSnapshot(normalizeWeeklyPlan(nextData.weeklyPlan), defaultWeeklyPlan) &&
+          isSameAppDataSnapshot(nextData.dailyLog, defaultDailyLog)
+
+        if (
+          backendIsEmpty &&
+          isLocalMigrationCandidate(localDataSnapshot) &&
+          !hasLocalMigrationFlag()
+        ) {
+          setMigrationPrompt({
+            visible: true,
+            reason: 'local_data_detected',
+          })
+        } else {
+          setMigrationPrompt({
+            visible: false,
+            reason: '',
+          })
+        }
         setBackendStatus({
           mode: 'ready',
           message: '当前档案、周计划和今日日志已切换为后端数据源。',
@@ -83,6 +113,10 @@ function App() {
         setBackendStatus({
           mode: 'fallback',
           message: `${error.message} 当前先展示本地缓存数据，页面仍可继续演示。`,
+        })
+        setMigrationPrompt({
+          visible: false,
+          reason: '',
         })
       } finally {
         if (!cancelled) {
@@ -199,13 +233,43 @@ function App() {
     setActiveTabId('coach')
   }
 
+  function handleDismissMigrationPrompt() {
+    setMigrationPrompt((currentPrompt) => ({
+      ...currentPrompt,
+      visible: false,
+    }))
+  }
+
+  async function handleImportToBackend() {
+    const localDataSnapshot = { profile, weeklyPlan, dailyLog, chatHistory }
+    const result = await importLocalStorageToBackend(localDataSnapshot)
+
+    syncedProfileRef.current = profile
+    syncedWeeklyPlanRef.current = weeklyPlan
+    syncedDailyLogRef.current = dailyLog
+    setMigrationPrompt({
+      visible: false,
+      reason: 'completed',
+    })
+    setBackendStatus({
+      mode: 'ready',
+      message: '已将 localStorage 数据导入后端；chatHistory 仍继续保留在本地。',
+    })
+
+    return result
+  }
+
   function renderActiveTab(tabId) {
     switch (tabId) {
       case 'profile':
         return (
           <ProfileTab
             appState={{ profile, weeklyPlan, dailyLog, chatHistory }}
+            backendStatus={backendStatus}
+            migrationPrompt={migrationPrompt}
+            onDismissMigrationPrompt={handleDismissMigrationPrompt}
             onImportData={handleImportData}
+            onImportToBackend={handleImportToBackend}
             onProfileChange={setProfile}
             profile={profile}
           />
@@ -243,7 +307,11 @@ function App() {
         return (
           <ProfileTab
             appState={{ profile, weeklyPlan, dailyLog, chatHistory }}
+            backendStatus={backendStatus}
+            migrationPrompt={migrationPrompt}
+            onDismissMigrationPrompt={handleDismissMigrationPrompt}
             onImportData={handleImportData}
+            onImportToBackend={handleImportToBackend}
             onProfileChange={setProfile}
             profile={profile}
           />
