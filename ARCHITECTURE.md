@@ -532,12 +532,13 @@ AI 教练页的消息展示补充约束：
 {
   "taskId": "uuid-like-task-id",
   "sessionId": 1,
+  "sourceUserIndex": 3,
   "userContent": "离页前发送的用户问题",
   "createdAt": "2026-05-31T00:00:00.000Z"
 }
 ```
 
-页面恢复可见时会调用 `GET /api/chat/background/{task_id}` 查询；成功后先校验 `userContent` 是否仍存在于当前 `fitloop_chatHistory`，匹配时补 assistant 文本并清理该 key，不匹配时提示用户当前对话已变化并清理该 key。
+页面恢复可见时会调用 `GET /api/chat/background/{task_id}` 查询；成功后优先校验 `sourceUserIndex` 指向的当前消息是否仍是同一条 user 内容，匹配时补 assistant 文本并清理该 key，不匹配时提示用户当前对话已变化并清理该 key。旧格式记录缺少 `sourceUserIndex` 时仍按 `userContent` 存在性兜底。
 
 ### 后端 `chat_session / chat_message`
 

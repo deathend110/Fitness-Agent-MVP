@@ -75,7 +75,7 @@ export async function startBackgroundCoachReply(
   return submitImpl(messages, { sessionId })
 }
 
-export function buildBackgroundCoachTaskRecord(task, { userInput = '' } = {}) {
+export function buildBackgroundCoachTaskRecord(task, { sourceUserIndex = null, userInput = '' } = {}) {
   if (!task?.taskId) {
     return null
   }
@@ -83,6 +83,7 @@ export function buildBackgroundCoachTaskRecord(task, { userInput = '' } = {}) {
   return {
     taskId: task.taskId,
     sessionId: Number.isInteger(task.sessionId) ? task.sessionId : null,
+    sourceUserIndex: Number.isInteger(sourceUserIndex) ? sourceUserIndex : null,
     userContent: userInput.trim(),
     createdAt: new Date().toISOString(),
   }
@@ -110,9 +111,15 @@ export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTa
     }
   }
 
-  const hasSourceUser = currentHistory.some(
-    (message) => message.role === 'user' && message.content === userContent,
-  )
+  const sourceUserIndex = Number.isInteger(storedTask?.sourceUserIndex)
+    ? storedTask.sourceUserIndex
+    : null
+  const sourceUser = sourceUserIndex === null
+    ? null
+    : currentHistory[sourceUserIndex]
+  const hasSourceUser = sourceUserIndex === null
+    ? currentHistory.some((message) => message.role === 'user' && message.content === userContent)
+    : sourceUser?.role === 'user' && sourceUser.content === userContent
 
   if (!hasSourceUser) {
     return {

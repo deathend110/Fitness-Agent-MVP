@@ -262,6 +262,7 @@ function CoachTab({
       backgroundSubmitPromiseRef.current = (async () => {
         const task = await startBackgroundCoachReply(payload)
         const taskRecord = buildBackgroundCoachTaskRecord(task, {
+          sourceUserIndex: payload.sourceUserIndex,
           userInput: payload.userInput,
         })
 
@@ -433,6 +434,7 @@ function CoachTab({
       dailyLog,
       profile,
       sessionId: getBackendSessionId(activeSessionId),
+      sourceUserIndex: nextHistory.length - 1,
       userInput,
       weeklyPlan,
     }

@@ -284,7 +284,7 @@ V2.3 Phase 1 验收记录见 [task/V2.3/V2.3 Phase 1 验收记录.md](/g:/VSCODE
 - `GET /api/chat/background/{task_id}`：查询后台任务状态，成功时返回 `{text, suggestion}` 并已落库
 - `POST /api/weekly-plan/adopt`：接收 `{day, changes[]}`，返回 `{ok, message, plan}`；只支持显式 `action: "update"` 更新已有动作字段，失败时不写入脏数据
 
-说明：聊天代理仍由前端构建 system prompt 并传入 `messages[]`；后端负责藏密钥、流式转发、解析 `suggestion` 并在完整成功后落库 user + assistant。离页后台思考会先中止当前前台请求，只有成功拿到 `task_id` 后才抑制前台错误；回页补结果时会校验源 user 消息仍在当前聊天内，避免污染已清空的新对话。后台思考使用进程内任务表，服务重启后旧 task_id 不再可查；计划采纳仍保留用户点击确认闸门，AI 建议不会自动写回。
+说明：聊天代理仍由前端构建 system prompt 并传入 `messages[]`；后端负责藏密钥、流式转发、解析 `suggestion` 并在完整成功后落库 user + assistant。离页后台思考会先中止当前前台请求，只有成功拿到 `task_id` 后才抑制前台错误；回页补结果时会校验源 user 消息的本地下标与内容仍匹配，避免旧后台结果污染已清空或同文本重开的新对话。后台思考使用进程内任务表，服务重启后旧 task_id 不再可查；计划采纳仍保留用户点击确认闸门，AI 建议不会自动写回。
 
 ## localStorage 键说明
 
@@ -292,7 +292,7 @@ V2.3 Phase 1 验收记录见 [task/V2.3/V2.3 Phase 1 验收记录.md](/g:/VSCODE
 - `fitloop_weeklyPlan`
 - `fitloop_dailyLog`
 - `fitloop_chatHistory`（AI 教练页仍用于本地显示状态；新发送消息同时由后端 chat 表落库）
-- `fitloop:coach-background-task`（离页后台思考的待查询 task_id，回页成功补齐后清理）
+- `fitloop:coach-background-task`（离页后台思考的待查询 task_id、源 user 下标和内容，回页成功补齐或判定对话已变化后清理）
 - `fitloop_storageVersion`
 
 更多模块职责、数据流与数据结构说明见 [ARCHITECTURE.md](/g:/VSCODE-G/Fitness Agent MVP/ARCHITECTURE.md)。

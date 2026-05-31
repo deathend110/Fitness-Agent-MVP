@@ -249,11 +249,12 @@ test('startBackgroundCoachReply 会复用上下文构建逻辑提交后台任务
 test('buildBackgroundCoachTaskRecord 会保存 taskId 和源用户消息用于回页校验', () => {
   const record = buildBackgroundCoachTaskRecord(
     { taskId: 'task-1', sessionId: 9 },
-    { userInput: '离页后继续分析' },
+    { sourceUserIndex: 3, userInput: '离页后继续分析' },
   )
 
   assert.equal(record.taskId, 'task-1')
   assert.equal(record.sessionId, 9)
+  assert.equal(record.sourceUserIndex, 3)
   assert.equal(record.userContent, '离页后继续分析')
   assert.equal(typeof record.createdAt, 'string')
 })
@@ -288,6 +289,23 @@ test('mergeBackgroundCoachReply 在用户已清空当前聊天时不污染当前
 
   assert.equal(mergeResult.status, 'source_user_missing')
   assert.deepEqual(mergeResult.nextHistory, [])
+})
+
+test('mergeBackgroundCoachReply 不会把旧后台结果合并到同文本的新用户轮次', () => {
+  const mergeResult = mergeBackgroundCoachReply({
+    currentHistory: [{ role: 'user', content: '离页后继续分析' }],
+    reply: { text: '旧后台分析完成', suggestion: null },
+    storedTask: {
+      taskId: 'task-1',
+      userContent: '离页后继续分析',
+      sourceUserIndex: 2,
+    },
+  })
+
+  assert.equal(mergeResult.status, 'source_user_missing')
+  assert.deepEqual(mergeResult.nextHistory, [
+    { role: 'user', content: '离页后继续分析' },
+  ])
 })
 
 test('getBackgroundCoachTask 会转交后台任务查询实现', async () => {
