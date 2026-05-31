@@ -26,6 +26,14 @@
 
 **结论先行**：V2.5/V3 的新需求绝大多数命中①~⑤，纯前端架构无法承载，需要引入**本地 Python 后端**并把数据层全量迁移到 SQLite；前端退化为 API 客户端，仅保留 UI 与即时交互。
 
+### 外部参考与取舍（Phase 3 Agent 设计补充）
+
+本次 Phase 3 设计参考两类材料，但不直接照搬：
+
+- **Claude Code 源码分析**（`https://github.com/liuup/claude-code-analysis` / DeepWiki 解析）：取其"上下文治理"思想，而不是取其 coding-agent 领域实现。可借鉴点包括：短期 transcript、会话压缩摘要、长期 memory 分层；压缩前预留输出空间；压缩失败熔断；压缩后回注当前工作状态、工具 schema 与关键附件；工具结果脱水，避免把可重取的大块内容塞回上下文。
+- **DeepSeek 官方 API 文档**（`https://api-docs.deepseek.com/`）：具体实现必须按 DeepSeek 的接口语义来做。DeepSeek `/chat/completions` 是无状态接口，每轮都要由后端拼好 `messages`；Context Caching 默认启用，但命中依赖稳定前缀；Tool Calls 需要后端执行函数并把 `tool` 结果再交给模型；Thinking Mode 需要正确处理 `reasoning_content`，尤其是带工具调用时后续轮次必须保留相关 reasoning 字段。
+- **领域取舍**：RepMind 是高度特化的健身助手，不是 coding agent。Phase 3 不追求通用 shell/文件编辑/MCP 代理能力，而是优先做"训练计划、恢复、饮食、日志、文件解析、记忆检索"这些健身闭环工具；所有写计划动作仍保留用户确认闸门，避免 AI 自动改坏训练安排。
+
 ---
 
 ## 二、当前现状画像（V2.1，代码核实）
@@ -115,6 +123,8 @@
     chat_session.py        # 多轮对话状态机（会话级）
     tool_calling.py        # Function Calling 编排（计划读写工具，复用 adoptPlanChange 校验）
     context_manager.py     # 上下文窗口管理 + 压缩 + system prompt 构建（迁移 prompt*.js）
+    memory.py              # 会话摘要、长期记忆、知识片段检索与 memory 晋升
+    usage_ledger.py        # token/cache 使用记录，用于成本与压缩效果评估
     response_parser.py     # ---JSON--- / 结构化建议解析（迁移自 aiResponse.js）
     background_worker.py   # asyncio 任务队列，支持离页继续推理
   ```
@@ -139,11 +149,19 @@
 
 - **当前文件**：`src/utils/chatHistory.js`、`src/utils/coachChat.js`、`src/utils/prompt.js`
 - **问题**：当前"上下文管理"仅 `.slice(-20)`；V2.5 要求压缩、长对话与多工具调用下的 token 优化。
-- **Python 目标**（`backend/agent/context_manager.py`）：
-  - `ContextWindow`：滑动窗口 + 精确 token 计数（tokenizer）
-  - `SummaryCompressor`：超阈值时调用 AI 把早期对话压缩为摘要 message
-  - `PromptBuilder`：静态档案 / 动态今日日志分层，仅数据变化时重建；工具结果裁剪冗余字段
-- **参考**：Claude Code / OpenCode 长对话设计（阈值压缩、工具结果精简、分层注入）。
+- **Python 目标**（`backend/agent/context_manager.py` + `backend/agent/memory.py`）：
+  - `PromptAssembler`：按"稳定前缀 → 领域状态 → 检索记忆 → 最近对话 → 当前用户输入"拼装 messages。稳定前缀包括 Agent 身份、安全边界、输出格式、工具 schema 摘要，尽量保持字节级稳定，主动利用 DeepSeek Context Caching。
+  - `ContextWindow`：维护模型上下文窗口、回复预留 token、工具调用预留 token 与压缩触发阈值。不要把模型最大上下文全部塞满；默认 70% 预警、85% 自动压缩、95% 进入强制瘦身/拒绝超大附件。
+  - `SummaryCompressor`：不是简单截断，而是把早期对话压成结构化 Markdown/JSON 摘要，必须保留训练目标、伤病限制、已采纳/拒绝过的建议、当前周期进度、关键体重/热量趋势、用户偏好和未完成承诺。
+  - `StateReinjector`：压缩后回注"当前活跃状态"，对应健身领域包括：当前周计划、今日日志、最近一次 AI 建议卡状态、待确认的计划修改、上传文件摘要、工具 schema 版本。避免摘要把正在处理的计划改动吞掉。
+  - `ToolResultSlimmer`：工具结果只保留模型下一步决策所需字段。完整数据仍在 SQLite，可重查；上下文中只放 `tool_result_summary`、关键 diff、`file_id/session_id/date` 等引用，避免 Excel/日志全量反复进入 prompt。
+  - `MemoryRetriever`：两步检索，先给模型/规则层一个轻量 memory index（类型、时间、关键词、置信度），再取少量相关详情；不要把全部长期记忆直接注入。
+  - `UsageLedger`：记录每次 DeepSeek 返回的 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`，用于观察缓存命中、压缩收益和长对话成本。
+- **DeepSeek 适配原则**：
+  - DeepSeek 多轮对话由客户端/后端拼接上下文，后端必须成为唯一上下文编排者，前端不再手拼 system prompt。
+  - Context Caching 默认启用，因此稳定内容应放在 messages 前部，动态日志、当前问题、工具结果放后部；不要在 system prompt 顶部塞时间戳、随机会话 id 或实时指标。
+  - Thinking Mode 作为可配置能力：普通聊天默认 `high`，复杂计划重排/多工具任务可升到 `max`；思考模式下不设置无效的 `temperature/top_p`；带工具调用的轮次必须按 DeepSeek 规则保存并回传必要的 `reasoning_content`。
+  - Tool Calls 优先使用 DeepSeek OpenAI 兼容格式；可用 strict JSON schema 时给工具参数加 `strict: true` 与 `additionalProperties: false`，后端仍必须用 Pydantic 二次校验。
 
 ### 🟠 P1 — 文件上传与解析
 
@@ -250,6 +268,8 @@ backend/
 │   ├── chat_session.py
 │   ├── tool_calling.py
 │   ├── context_manager.py
+│   ├── memory.py
+│   ├── usage_ledger.py
 │   ├── response_parser.py
 │   └── background_worker.py
 ├── metrics/
@@ -278,7 +298,10 @@ backend/
 | `daily_log` | `fitloop_dailyLog` 每日一行 | date(PK)、weight、kcal、protein、sleep、fatigue、steps、trainingDone、trainingNotes、tdee_manual |
 | `chat_session` | 新增（真实多会话） | id、title、created_at、updated_at |
 | `chat_message` | `fitloop_chatHistory`（去掉 20 条裁剪，全量） | id、session_id(FK)、role、content、created_at、suggestion(JSON,可空) |
+| `chat_session_summary` | 新增（长对话压缩结果） | session_id、summary_text、covered_message_id_range、token_estimate、created_at、updated_at |
 | `knowledge_item` | 新增（跨对话知识库建模） | id、source_session_id、kind、content/embedding、created_at |
+| `memory_item` | 新增（长期用户记忆） | id、kind、content、confidence、source_message_id、last_used_at、created_at |
+| `tool_call_log` | 新增（工具调用审计） | id、session_id、tool_name、arguments_json、result_summary、status、created_at |
 | `uploaded_file` | 新增（文件上传） | id、session_id、path、mime、parsed_text、created_at |
 | `metrics_correction` | 新增（AI 修正 TDEE/体脂持久化） | id、date、field、value、reason、created_at |
 
@@ -286,6 +309,16 @@ backend/
 当前动作对象同时含 `template`（编排）、`instance`（执行层负重/RPE/备注）和一组扁平字段（`pct/kg/sets/reps/rpe/note`，供 `adoptPlanChange` 与采纳链路消费）。为**零风险、无损迁移**，Phase 1 推荐把 `weekly_plan_day.exercises` 整体存为 **JSON 列**，原样保留三层结构；不在初期强行规范化为 `exercise` 行表，避免破坏扁平兼容字段与现有前端契约。待 V3 周期计划需要按动作检索时，再评估抽出独立 `exercise` 表（保留 JSON 影子字段过渡）。
 
 **知识库（V2.5 跨对话记忆）建模建议**：MVP 阶段先用 `knowledge_item` 存结构化要点 + 关键词检索；需要语义检索时再引入向量（sqlite-vec / FAISS）。"所有模型聊天从知识库取信息"在 `context_manager.py` 注入时实现。
+
+**Memory 分层建议（借鉴 Claude Code，但适配健身 Agent）**：
+
+- `chat_message`：完整 transcript，不再裁剪，用于审计和重新压缩。
+- `chat_session_summary`：会话内压缩摘要，只服务当前会话续聊，保存覆盖到哪条消息，避免重复压缩。
+- `memory_item`：跨会话长期记忆，只保存稳定事实和明确偏好，例如伤病史、训练目标、器械条件、作息限制、饮食禁忌、用户明确喜欢/不喜欢的训练方式。临时情绪、一次性抱怨、单日状态不要晋升为长期记忆。
+- `knowledge_item`：外部资料/上传文件/训练模板的知识片段，和用户长期记忆分开，避免"资料内容"被误当成"用户事实"。
+- `tool_call_log`：记录模型为什么调用工具、传了什么参数、后端如何裁剪结果。后续排查"AI 为什么改错计划"时比纯聊天日志更有价值。
+
+**Memory 晋升规则**：只有满足"用户明确陈述/多次出现/被采纳计划反复验证"之一的事实才可进入 `memory_item`；影响训练安全的记忆（伤病、疼痛、疾病、极端饮食）需要标记 `kind=safety`，注入优先级高于普通偏好。低置信度记忆进入候选区，前端后续可以做"是否记住这点"的小确认。
 
 ---
 
@@ -312,6 +345,13 @@ GET  /api/chat/sessions/{id}/messages   -> [message]            # 全量，无 2
 GET  /api/chat/stream?session_id&model&input  -> text/event-stream   # SSE 流式回复
 POST /api/chat/{session_id}/background   {input}   -> {task_id}  # 后台思考
 
+# Phase 3 上下文、记忆与工具
+GET  /api/chat/sessions/{id}/context/debug -> {budget, selected_memories, summaries, token_estimate} # 本地调试用
+POST /api/memory/candidates/{id}/confirm   -> memory_item        # 用户确认低置信度长期记忆
+GET  /api/memory/items?kind&query          -> [memory_item]
+POST /api/tools/plan/propose               -> {proposal_id, card} # 只生成建议卡，不直接写计划
+POST /api/tools/plan/commit                -> {ok, message, plan} # 用户确认后写回
+
 # 模型与文件
 GET  /api/models                        -> [{id, label, supports_thinking}]
 POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
@@ -319,6 +359,7 @@ POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
 
 - SSE 事件：`delta`（增量文本）/ `suggestion`（结构化建议）/ `done` / `error`。
 - 计划采纳：把 `src/utils/adoptPlan.js` 的校验语义搬到后端，既服务 REST `/adopt`，也作为 `tool_calling.py` 的工具实现，保证"用户确认闸门"不丢。
+- Phase 3 工具调用：模型只能调用"提议类"工具生成变更卡片，真正写库必须走用户确认后的 commit 接口。这样既保留 DeepSeek Tool Calls 的自动编排能力，又避免健身计划被模型静默修改。
 
 ---
 
@@ -335,8 +376,40 @@ POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
 - 验收：成功——发消息流式回复、离页后台继续、回页可见结果；边界——离页/超时/取消；失败——Key 缺失/网络错误友好提示，前端不崩。
 
 ### Phase 3 — 上下文管理 + token 优化 + 工具调用改计划
-- 交付：`context_manager`（压缩/分层/token 计数）、`tool_calling`（改计划工具，复用 adopt 校验）。
-- 验收（含 V2.5 #3）：成功——长对话不超限、模型按工具正确改计划且需用户确认；边界——超阈值触发摘要、无效动作名拒绝；失败——工具参数非法时不写脏数据。
+- 交付：
+  - `context_manager`：完成 PromptAssembler、ContextWindow、SummaryCompressor、StateReinjector、ToolResultSlimmer、UsageLedger。
+  - `memory.py`：完成会话摘要、长期用户记忆、知识片段检索与安全记忆优先注入。
+  - `tool_calling.py`：完成计划读取、今日日志读取、指标计算、计划修改提议、采纳提交等健身领域工具；所有写计划工具复用 adopt 校验。
+  - `chat_session.py`：把前端 system prompt 构建迁到后端，前端只传用户输入、session_id、模型与可选文件/工具开关。
+  - 调试接口：提供本地 `/context/debug`，返回本轮选择了哪些摘要/记忆/工具结果与 token 预算，便于课程报告解释"为什么这次上下文没有超限"。
+- 实施顺序：
+  1. 先做无工具的上下文拼装与 usage 记录，验证 DeepSeek Context Caching 命中稳定前缀。
+  2. 再做摘要压缩，把旧消息压成 `chat_session_summary`，但保留全量 `chat_message`。
+  3. 再做长期 memory 晋升与检索，先规则/关键词，后续再评估向量检索。
+  4. 最后接 DeepSeek Tool Calls。先只读工具，再接"计划修改提议"，确认卡稳定后再允许 commit。
+- Token 预算建议：
+  - 稳定 system + 工具 schema：优先前置，保持稳定，约 10%–15%。
+  - 用户档案、目标、安全限制、当前周计划：约 20%–30%，安全限制永不丢。
+  - 检索记忆与知识片段：约 10%–20%，按相关性排序，低相关性不注入。
+  - 最近对话窗口：约 20%–30%，优先保留最近用户问题、AI 待办、未确认建议卡。
+  - 工具结果与上传文件摘要：约 10%–15%，只放摘要与引用 id。
+  - 回复与工具调用预留：至少 15%，避免模型没空间输出完整计划建议。
+- 压缩保真要求：
+  - 摘要必须区分"事实 / 用户偏好 / AI 建议 / 已采纳计划 / 被拒绝建议 / 待确认事项"。
+  - 不能把单日疲劳、偶发疼痛自动写成长期伤病；涉及安全的内容要带时间与来源。
+  - 上传文件只保留摘要、表头、关键训练行和 `file_id`，完整解析文本在 DB/文件缓存中按需读取。
+  - 压缩连续失败 3 次进入熔断：保留最近窗口 + 安全记忆 + 当前计划，提示用户上下文过长但不阻断普通聊天。
+- 工具调用设计：
+  - 工具清单限制在健身闭环内：`get_profile`、`get_weekly_plan`、`get_daily_log`、`calculate_metrics`、`propose_plan_change`、`validate_plan_change`、`commit_plan_change_after_user_confirm`、`search_memory`、`read_uploaded_file_summary`。
+  - `propose_plan_change` 只返回建议卡片，不写库；`commit_plan_change_after_user_confirm` 只由前端确认按钮触发，不由模型直接触发。
+  - 工具参数用严格 schema + Pydantic 双重校验，拒绝未知字段、非法 day、找不到的动作名、非有限数字、越界 RPE。
+  - 工具结果进入模型前由 ToolResultSlimmer 裁剪，前端展示可另走 REST 读完整数据。
+- 验收（含 V2.5 #3）：
+  - 成功路径：连续 80+ 轮对话后仍能回答与当前计划相关的问题；模型提出计划修改，用户确认后计划正确写回。
+  - 边界 1：上下文超过 85% 阈值触发摘要，摘要后仍记得伤病限制、目标体重、当前周计划和已拒绝建议。
+  - 边界 2：上传大 Excel 后，prompt 只注入摘要和引用 id，不把整表塞入上下文。
+  - 边界 3：模型请求不存在的动作名/日期/字段时，工具返回可解释错误，计划不变。
+  - 失败场景：DeepSeek 工具调用参数不合法或上游超时时，不写脏数据，前端显示可重试提示；`chat_message` 不保存半截 assistant。
 
 ### Phase 4 — 文件上传解析 + 模型选择 + 前端 MD 渲染 + 草稿持久化
 - 交付：`files/*`、`/api/models` + 前端下拉、前端 MD 渲染器、草稿后端持久化、对话滚动定位到最新。
@@ -358,6 +431,10 @@ POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
 | API Key 管理 | 泄露/缺失 | Key 只存后端 `.env`；前端永不接触；缺失时 `/api/models` 与 chat 返回明确错误 |
 | SSE 兼容/断连 | 流式中断 | `EventSource` 自动重连 + 后台任务兜底（离页用 background_worker 持久化结果） |
 | 长对话 token 成本 | 费用/超限 | `context_manager` 压缩 + 工具结果裁剪 + 分层 prompt（参考 Claude Code/OpenCode） |
+| DeepSeek 缓存命中低 | 成本上升、延迟变高 | 稳定 system/tool schema 前置；动态数据后置；禁用在前缀中插入时间戳、随机 id；记录 cache hit/miss |
+| Thinking Mode 与工具调用串联错误 | 后续轮次报错或丢推理状态 | `chat_session.py` 按 DeepSeek 文档保存必要 `reasoning_content`，工具结果与 assistant tool_calls 成对落库 |
+| Memory 污染 | 把临时状态误记成长期事实 | memory 晋升规则 + 置信度 + 来源消息；安全类记忆单独标记；低置信度记忆让用户确认 |
+| 工具误写计划 | 训练安排被静默改坏 | 模型只调用 propose 工具；写库必须经过前端采纳按钮和后端 Pydantic/adopt 双重校验 |
 | 知识库语义检索复杂度 | 过度工程 | MVP 先关键词/结构化检索，确有需要再上向量库 |
 
 ---
