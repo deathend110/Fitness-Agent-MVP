@@ -12,10 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWorker
-from backend.agent.chat_session import build_agent_request
+from backend.agent.chat_session import build_agent_request, run_tool_calling_chat
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.context_manager import TokenBudgetConfig
+from backend.agent.tool_calling import build_default_tool_registry
 from backend.agent.usage_ledger import record_usage, summarize_session_usage
 from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
@@ -43,6 +44,7 @@ class ChatReplyRequestSchema(BaseModel):
 class ChatReplyResponseSchema(BaseModel):
     text: str
     suggestion: dict[str, Any] | None = None
+    proposal: dict[str, Any] | None = None
 
 
 class ChatBackgroundRequestSchema(BaseModel):
@@ -238,6 +240,36 @@ def build_error_payload(error: Exception) -> dict[str, Any]:
     }
 
 
+async def request_agent_tool_reply(
+    *,
+    deepseek_client: DeepSeekClient,
+    messages: list[dict[str, Any]],
+    model: str,
+    session: AsyncSession,
+    session_id: int,
+) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+    if not hasattr(deepseek_client, "request_chat_with_usage"):
+        content, _usage = await request_deepseek_reply_with_usage(
+            deepseek_client=deepseek_client,
+            messages=messages,
+            model=model,
+        )
+        parsed_reply = parse_ai_response(content)
+        return parsed_reply["text"], parsed_reply["suggestion"], None
+
+    tool_result = await run_tool_calling_chat(
+        session=session,
+        session_id=session_id,
+        messages=messages,
+        model=model,
+        deepseek_client=deepseek_client,
+        registry=build_default_tool_registry(),
+    )
+    parsed_reply = parse_ai_response(tool_result.content)
+    proposal = tool_result.proposals[-1] if tool_result.proposals else None
+    return parsed_reply["text"], parsed_reply["suggestion"], proposal
+
+
 async def persist_successful_chat_turn(
     *,
     chat_session: ChatSession,
@@ -392,6 +424,31 @@ async def stream_chat_reply(
         usage: dict[str, Any] | None = None
 
         try:
+            if direct_user_input is not None:
+                assistant_text, suggestion, proposal = await request_agent_tool_reply(
+                    deepseek_client=deepseek_client,
+                    messages=request_messages,
+                    model=selected_model,
+                    session=session,
+                    session_id=chat_session.id,
+                )
+                if assistant_text:
+                    yield build_sse_frame("delta", {"text": assistant_text})
+                await persist_successful_chat_turn(
+                    chat_session=chat_session,
+                    session=session,
+                    user_content=user_content,
+                    assistant_text=assistant_text,
+                    suggestion=proposal or suggestion,
+                    model=selected_model,
+                    usage=None,
+                )
+                if proposal is not None:
+                    yield build_sse_frame("proposal", {"proposal": proposal})
+                yield build_sse_frame("suggestion", {"suggestion": suggestion})
+                yield build_sse_frame("done", {"text": assistant_text})
+                return
+
             async for chunk, event_usage in stream_deepseek_reply_with_usage(
                 deepseek_client=deepseek_client,
                 messages=request_messages,
@@ -455,25 +512,39 @@ async def request_chat_reply(
         request_messages = payload.messages
 
     try:
-        content, usage = await request_deepseek_reply_with_usage(
-            deepseek_client=deepseek_client,
-            messages=request_messages,
-            model=selected_model,
-        )
+        proposal = None
+        usage = None
+        if payload.userInput is not None:
+            assistant_text, suggestion, proposal = await request_agent_tool_reply(
+                deepseek_client=deepseek_client,
+                messages=request_messages,
+                model=selected_model,
+                session=session,
+                session_id=chat_session.id,
+            )
+        else:
+            content, usage = await request_deepseek_reply_with_usage(
+                deepseek_client=deepseek_client,
+                messages=request_messages,
+                model=selected_model,
+            )
+            parsed_reply = parse_ai_response(content)
+            assistant_text = parsed_reply["text"]
+            suggestion = parsed_reply["suggestion"]
 
-        parsed_reply = parse_ai_response(content)
         await persist_successful_chat_turn(
             chat_session=chat_session,
             session=session,
             user_content=user_content,
-            assistant_text=parsed_reply["text"],
-            suggestion=parsed_reply["suggestion"],
+            assistant_text=assistant_text,
+            suggestion=proposal or suggestion,
             model=selected_model,
             usage=usage,
         )
         return ChatReplyResponseSchema(
-            text=parsed_reply["text"],
-            suggestion=parsed_reply["suggestion"],
+            text=assistant_text,
+            suggestion=suggestion,
+            proposal=proposal,
         )
     except DeepSeekClientError as exc:
         await session.rollback()

@@ -38,6 +38,7 @@ class ToolLoopResult:
     content: str
     messages: list[dict[str, Any]]
     tool_rounds: int
+    proposals: list[dict[str, Any]]
 
 
 async def build_agent_request(
@@ -87,6 +88,7 @@ async def run_tool_calling_chat(
 ) -> ToolLoopResult:
     active_messages = list(messages)
     active_slimmer = slimmer or ToolResultSlimmer()
+    proposals: list[dict[str, Any]] = []
     tools = registry.to_deepseek_tools()
 
     for round_index in range(max_tool_rounds + 1):
@@ -98,13 +100,19 @@ async def run_tool_calling_chat(
             stream=False,
         )
         if not result.tool_calls:
-            return ToolLoopResult(content=result.content, messages=active_messages, tool_rounds=round_index)
+            return ToolLoopResult(
+                content=result.content,
+                messages=active_messages,
+                tool_rounds=round_index,
+                proposals=proposals,
+            )
 
         if round_index >= max_tool_rounds:
             return ToolLoopResult(
                 content="工具调用次数过多，请稍后重试或缩小问题范围。",
                 messages=active_messages,
                 tool_rounds=round_index,
+                proposals=proposals,
             )
 
         active_messages.append(
@@ -119,6 +127,10 @@ async def run_tool_calling_chat(
             tool_call_id = str(tool_call.get("id") or tool_name)
             try:
                 tool_result = await registry.execute(session, tool_name, tool_arguments)
+                if tool_name == "propose_plan_change" and isinstance(tool_result, dict):
+                    proposal = tool_result.get("proposal")
+                    if isinstance(proposal, dict):
+                        proposals.append(proposal)
                 result_summary = active_slimmer.slim(tool_name, tool_result)
                 status = "succeeded"
                 error_message = None
@@ -153,6 +165,7 @@ async def run_tool_calling_chat(
         content="工具调用次数过多，请稍后重试或缩小问题范围。",
         messages=active_messages,
         tool_rounds=max_tool_rounds,
+        proposals=proposals,
     )
 
 

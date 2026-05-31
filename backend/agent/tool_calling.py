@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agent.adopt_plan import build_plan_change_proposal
 from backend.agent.memory import MemoryRetriever
 from backend.db.models import DailyLog, Profile, WEEKDAY_ORDER, WeeklyPlanDay
 from backend.db.seed import DEFAULT_PROFILE_ID
@@ -34,6 +35,24 @@ class ReadFileSummaryToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     file_id: int
+
+
+class PlanChangeItemArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: str
+    exerciseName: str
+    field: str
+    newValue: Any
+    oldValue: Any | None = None
+
+
+class ProposePlanChangeToolArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    day: str
+    summary: str = ""
+    changes: list[PlanChangeItemArgs]
 
 
 @dataclass(frozen=True)
@@ -128,6 +147,14 @@ def build_default_tool_registry() -> ToolRegistry:
     registry.register(
         RegisteredTool("read_uploaded_file_summary", "读取上传文件摘要占位。", ReadFileSummaryToolArgs, _read_uploaded_file_summary)
     )
+    registry.register(
+        RegisteredTool(
+            "propose_plan_change",
+            "生成训练计划修改建议卡；只生成 proposal，不直接写入计划。",
+            ProposePlanChangeToolArgs,
+            _propose_plan_change,
+        )
+    )
     return registry
 
 
@@ -193,6 +220,24 @@ async def _search_memory(session: AsyncSession, args: SearchMemoryToolArgs) -> d
 
 async def _read_uploaded_file_summary(_session: AsyncSession, args: ReadFileSummaryToolArgs) -> dict[str, Any]:
     return {"fileId": args.file_id, "summary": "当前 MVP 尚未接入上传文件解析。"}
+
+
+async def _propose_plan_change(session: AsyncSession, args: ProposePlanChangeToolArgs) -> dict[str, Any]:
+    current_plan = await _get_weekly_plan(session, EmptyToolArgs())
+    proposal = build_plan_change_proposal(
+        current_plan=current_plan,
+        session_id=None,
+        day=args.day,
+        summary=args.summary,
+        changes=[item.model_dump() for item in args.changes],
+    )
+    return {
+        "proposal": proposal.card,
+        "validation": {
+            "ok": proposal.validation.ok,
+            "message": proposal.validation.message,
+        },
+    }
 
 
 def _dump_daily_log(entry: DailyLog) -> dict[str, Any]:

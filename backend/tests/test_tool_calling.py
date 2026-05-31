@@ -56,6 +56,7 @@ def test_default_tool_registry_exports_deepseek_compatible_strict_schema() -> No
         "calculate_metrics",
         "search_memory",
         "read_uploaded_file_summary",
+        "propose_plan_change",
     ]
     assert all(tool["type"] == "function" for tool in tools)
     assert all(tool["function"]["parameters"]["additionalProperties"] is False for tool in tools)

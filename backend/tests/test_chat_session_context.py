@@ -187,7 +187,11 @@ async def test_reply_endpoint_uses_backend_context_for_user_input_request(
     )
 
     assert response.status_code == 200
-    assert response.json() == {"text": "后端上下文已就绪。", "suggestion": None}
+    assert response.json() == {
+        "text": "后端上下文已就绪。",
+        "suggestion": None,
+        "proposal": None,
+    }
     sent_messages = fake_client.calls[-1]
     assert sent_messages[0]["role"] == "system"
     assert sent_messages[-1]["content"] == "只看今天疲劳，明天要降容量吗？"
