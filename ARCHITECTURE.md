@@ -1,6 +1,76 @@
 ﻿# FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 Phase 1 后端基建、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+
+## V2.3 Phase 1 后端化总览
+
+当前项目已经从“纯前端 + localStorage”演进为“前端 + 本地 Python 后端”的双层结构：
+
+- 前端继续负责 UI、交互、页面状态组织
+- 本地 FastAPI 后端负责 `profile / weeklyPlan / dailyLog` 的持久化
+- SQLite 作为本地结构化存储
+- `chatHistory` 当前仍只保留在 localStorage，等待 Phase 2 再后移
+
+### 当前数据源分工
+
+- `profile / weeklyPlan / dailyLog`
+  - 主数据源：后端 SQLite
+  - 本地缓存：浏览器 localStorage
+- `chatHistory`
+  - 当前唯一数据源：浏览器 localStorage
+
+### 当前新增目录
+
+```text
+backend/
+  api/
+    daily_log.py
+    migrate.py
+    profile.py
+    weekly_plan.py
+  db/
+    database.py
+    models.py
+    seed.py
+    migrations/
+  tests/
+    test_health.py
+    test_models.py
+    test_crud_api.py
+    test_migrate.py
+  config.py
+  main.py
+  requirements.txt
+```
+
+### 当前新增前端接口层
+
+```text
+src/
+  api/
+    appData.js
+    backendClient.js
+  utils/
+    localMigration.js
+```
+
+### 当前阶段边界
+
+Phase 1 只覆盖：
+
+- 非 AI 主数据 CRUD
+- localStorage 到 SQLite 的一次性迁移
+- 后端不可用时的降级提示
+
+当前不覆盖：
+
+- DeepSeek 后端代理
+- SSE 流式
+- 后台思考
+- 计划采纳后端化
+- `chatHistory` 入库
+
+这些内容属于 V2.3 Phase 2。
 
 ## 当前项目结构
 
