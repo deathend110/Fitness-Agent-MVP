@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "cd backend && uvicorn main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:backend": "uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:backend\"",
     "test": "node --test \"tests/*.test.js\"",
     "build": "vite build",
