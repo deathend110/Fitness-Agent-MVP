@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AppShell from './components/app-shell/AppShell.jsx'
 import {
   appShellTabs,
@@ -16,6 +16,13 @@ import {
   defaultWeeklyPlan,
   storageKeys,
 } from './utils/defaultData.js'
+import {
+  isSameAppDataSnapshot,
+  loadAppData,
+  saveDailyLog,
+  saveProfile,
+  saveWeeklyPlan,
+} from './api/appData.js'
 import { loadStorage, migrateLegacyDemoData, saveStorage } from './utils/storage.js'
 import { normalizeWeeklyPlan } from './utils/weeklyPlan.js'
 
@@ -37,6 +44,60 @@ function App() {
   const [chatHistory, setChatHistory] = useState(() =>
     loadInitialState(storageKeys.chatHistory, defaultChatHistory),
   )
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
+  const [backendStatus, setBackendStatus] = useState({
+    mode: 'loading',
+    message: '正在连接本地后端并加载训练数据...',
+  })
+  const syncedProfileRef = useRef(null)
+  const syncedWeeklyPlanRef = useRef(null)
+  const syncedDailyLogRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const abortController = new AbortController()
+
+    async function bootstrapAppData() {
+      try {
+        const nextData = await loadAppData({ signal: abortController.signal })
+
+        if (cancelled) {
+          return
+        }
+
+        setProfile(nextData.profile)
+        setWeeklyPlan(normalizeWeeklyPlan(nextData.weeklyPlan))
+        setDailyLog(nextData.dailyLog)
+        syncedProfileRef.current = nextData.profile
+        syncedWeeklyPlanRef.current = normalizeWeeklyPlan(nextData.weeklyPlan)
+        syncedDailyLogRef.current = nextData.dailyLog
+        setBackendStatus({
+          mode: 'ready',
+          message: '当前档案、周计划和今日日志已切换为后端数据源。',
+        })
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+
+        setBackendStatus({
+          mode: 'fallback',
+          message: `${error.message} 当前先展示本地缓存数据，页面仍可继续演示。`,
+        })
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false)
+        }
+      }
+    }
+
+    bootstrapAppData()
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+    }
+  }, [])
 
   useEffect(() => {
     saveStorage(storageKeys.profile, profile)
@@ -53,6 +114,74 @@ function App() {
   useEffect(() => {
     saveStorage(storageKeys.chatHistory, chatHistory)
   }, [chatHistory])
+
+  useEffect(() => {
+    if (isBootstrapping || backendStatus.mode !== 'ready') {
+      return
+    }
+
+    if (isSameAppDataSnapshot(syncedProfileRef.current, profile)) {
+      return
+    }
+
+    saveProfile(profile)
+      .then((savedProfile) => {
+        syncedProfileRef.current = savedProfile
+      })
+      .catch((error) => {
+        console.warn('[app] 同步 profile 到后端失败，当前仅保留本地缓存。', error)
+        setBackendStatus({
+          mode: 'fallback',
+          message: `${error.message} 当前改动已保留在本地缓存，后端恢复后可继续同步。`,
+        })
+      })
+  }, [backendStatus.mode, isBootstrapping, profile])
+
+  useEffect(() => {
+    if (isBootstrapping || backendStatus.mode !== 'ready') {
+      return
+    }
+
+    if (isSameAppDataSnapshot(syncedWeeklyPlanRef.current, weeklyPlan)) {
+      return
+    }
+
+    saveWeeklyPlan(weeklyPlan)
+      .then((savedWeeklyPlan) => {
+        syncedWeeklyPlanRef.current = savedWeeklyPlan
+      })
+      .catch((error) => {
+        console.warn('[app] 同步 weeklyPlan 到后端失败，当前仅保留本地缓存。', error)
+        setBackendStatus({
+          mode: 'fallback',
+          message: `${error.message} 当前改动已保留在本地缓存，后端恢复后可继续同步。`,
+        })
+      })
+  }, [backendStatus.mode, isBootstrapping, weeklyPlan])
+
+  useEffect(() => {
+    if (isBootstrapping || backendStatus.mode !== 'ready') {
+      return
+    }
+
+    if (isSameAppDataSnapshot(syncedDailyLogRef.current, dailyLog)) {
+      return
+    }
+
+    saveDailyLog(dailyLog, {
+      previousDailyLog: syncedDailyLogRef.current ?? defaultDailyLog,
+    })
+      .then((savedDailyLog) => {
+        syncedDailyLogRef.current = savedDailyLog
+      })
+      .catch((error) => {
+        console.warn('[app] 同步 dailyLog 到后端失败，当前仅保留本地缓存。', error)
+        setBackendStatus({
+          mode: 'fallback',
+          message: `${error.message} 当前改动已保留在本地缓存，后端恢复后可继续同步。`,
+        })
+      })
+  }, [backendStatus.mode, dailyLog, isBootstrapping])
 
   function handleImportData({
     profile: nextProfile,
@@ -127,15 +256,30 @@ function App() {
   const shellStatus = buildAppShellStatus()
 
   return (
-    <AppShell
-      activeTabId={activeTabId}
-      onTabChange={setActiveTabId}
-      status={shellStatus}
-      tabs={appShellTabs}
-    >
-      {/* App 统一注入本地状态，Tab 只负责呈现和提交变更。 */}
-      {renderActiveTab(activeTab.id)}
-    </AppShell>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="mx-auto max-w-[1600px] px-4 pt-4 sm:px-6">
+        <div
+          className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+            backendStatus.mode === 'fallback'
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+              : backendStatus.mode === 'ready'
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                : 'border-slate-700 bg-slate-900/80 text-slate-200'
+          }`}
+        >
+          {backendStatus.message}
+        </div>
+      </div>
+      <AppShell
+        activeTabId={activeTabId}
+        onTabChange={setActiveTabId}
+        status={shellStatus}
+        tabs={appShellTabs}
+      >
+        {/* App 统一注入状态；训练主数据优先来自后端，chatHistory 仍只保留在本地。 */}
+        {renderActiveTab(activeTab.id)}
+      </AppShell>
+    </div>
   )
 }
 
