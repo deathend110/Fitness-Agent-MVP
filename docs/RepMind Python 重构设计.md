@@ -145,7 +145,7 @@
   ```
 - **技术选型**：SQLAlchemy 2.x（async）+ SQLite + Alembic。
 
-### 🟠 P1 — 上下文管理与 Token 优化
+### ✅ P1 — 上下文管理与 Token 优化（V2.3 Phase 3 已完成 MVP 落地）
 
 - **当前文件**：`src/utils/chatHistory.js`、`src/utils/coachChat.js`、`src/utils/prompt.js`
 - **问题**：当前"上下文管理"仅 `.slice(-20)`；V2.5 要求压缩、长对话与多工具调用下的 token 优化。
@@ -162,6 +162,12 @@
   - Context Caching 默认启用，因此稳定内容应放在 messages 前部，动态日志、当前问题、工具结果放后部；不要在 system prompt 顶部塞时间戳、随机会话 id 或实时指标。
   - Thinking Mode 作为可配置能力：普通聊天默认 `high`，复杂计划重排/多工具任务可升到 `max`；思考模式下不设置无效的 `temperature/top_p`；带工具调用的轮次必须按 DeepSeek 规则保存并回传必要的 `reasoning_content`。
   - Tool Calls 优先使用 DeepSeek OpenAI 兼容格式；可用 strict JSON schema 时给工具参数加 `strict: true` 与 `additionalProperties: false`，后端仍必须用 Pydantic 二次校验。
+- **V2.3 Phase 3 已落地取舍**：
+  - 已实现 `PromptAssembler / SummaryCompressor / StateReinjector / UsageLedger / MemoryRetriever / ToolRegistry`，前端 AI 教练发送链路已切为 `sessionId + userInput + model/thinking + files`。
+  - memory 先采用规则与关键词检索，低置信度候选通过确认接口晋升；向量检索与完整知识库留 Phase 5。
+  - `read_uploaded_file_summary` 作为工具占位，真实上传文件解析和全文读取留 Phase 4。
+  - `calculate_metrics` 先覆盖当前已落库数据的轻量指标，完整 Python 指标服务迁移留后续版本。
+  - 计划修改使用 propose/commit 两段式：模型只能生成建议卡，真正写回必须来自用户确认路径。
 
 ### 🟠 P1 — 文件上传与解析
 
@@ -375,13 +381,17 @@ POST /api/files/upload  (multipart)     -> {file_id, parsed_text?}
 - 交付：`deepseek_client` + `chat/stream` SSE + `background_worker`；API Key 移到后端 `.env`，前端不再持有。
 - 验收：成功——发消息流式回复、离页后台继续、回页可见结果；边界——离页/超时/取消；失败——Key 缺失/网络错误友好提示，前端不崩。
 
-### Phase 3 — 上下文管理 + token 优化 + 工具调用改计划
+### Phase 3 — 上下文管理 + token 优化 + 工具调用改计划（V2.3 已完成）
 - 交付：
   - `context_manager`：完成 PromptAssembler、ContextWindow、SummaryCompressor、StateReinjector、ToolResultSlimmer、UsageLedger。
   - `memory.py`：完成会话摘要、长期用户记忆、知识片段检索与安全记忆优先注入。
   - `tool_calling.py`：完成计划读取、今日日志读取、指标计算、计划修改提议、采纳提交等健身领域工具；所有写计划工具复用 adopt 校验。
   - `chat_session.py`：把前端 system prompt 构建迁到后端，前端只传用户输入、session_id、模型与可选文件/工具开关。
   - 调试接口：提供本地 `/context/debug`，返回本轮选择了哪些摘要/记忆/工具结果与 token 预算，便于课程报告解释"为什么这次上下文没有超限"。
+- V2.3 实施状态：
+  - 已完成 Task 13-21：数据模型、上下文拼装、usage/cache 观测、长对话摘要、memory、DeepSeek Tool Calls、计划 propose/commit、前端 Agent 请求契约、文档与验收记录。
+  - 已保留兼容路径：Phase 2 旧 `messages[]` 请求仍可用于测试和回退；新前端默认走后端 Agent Orchestrator。
+  - 已明确 MVP 边界：上传文件摘要工具、完整指标服务、真实多会话 UI、向量知识库与周期计划引擎继续留 Phase 4/5。
 - 实施顺序：
   1. 先做无工具的上下文拼装与 usage 记录，验证 DeepSeek Context Caching 命中稳定前缀。
   2. 再做摘要压缩，把旧消息压成 `chat_session_summary`，但保留全量 `chat_message`。
