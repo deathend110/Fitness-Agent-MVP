@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     # DeepSeek 密钥只允许保存在后端 .env 中，前端 bundle 永不直接读取。
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    default_model: str = "deepseek-chat"
+    default_model: str = "deepseek-v4-flash"
+    deepseek_timeout_seconds: float = 30.0
 
 
 @lru_cache

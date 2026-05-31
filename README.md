@@ -195,6 +195,12 @@ npm run build
 uv run python -m pytest backend\tests\test_health.py backend\tests\test_models.py backend\tests\test_crud_api.py backend\tests\test_migrate.py
 ```
 
+也可以直接运行：
+
+```powershell
+uv run pytest backend\tests\test_health.py backend\tests\test_models.py backend\tests\test_crud_api.py backend\tests\test_migrate.py
+```
+
 前端后端客户端定向测试：
 
 ```powershell

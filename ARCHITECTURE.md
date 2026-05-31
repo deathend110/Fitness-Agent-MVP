@@ -23,6 +23,7 @@
 
 ```text
 backend/
+  __init__.py
   api/
     daily_log.py
     migrate.py
@@ -42,6 +43,12 @@ backend/
   main.py
   requirements.txt
 ```
+
+### 测试导入约定
+
+- `backend/` 现在作为常规 Python 包参与导入，避免测试收集阶段依赖临时 `sys.path` 补丁。
+- `pyproject.toml` 中的 `tool.pytest.ini_options.pythonpath = ["."]` 让 `uv run pytest ...` 与 `uv run python -m pytest ...` 的导入根路径保持一致。
+- 后端测试文件直接使用 `from backend...` 导入，不再在测试体内手动插入项目根目录。
 
 ### 当前新增前端接口层
 
