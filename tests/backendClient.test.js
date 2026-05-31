@@ -46,6 +46,7 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
   await client.getDefaultChatSession()
   await client.getCoachDraft(12)
   await client.saveCoachDraft(12, { content: 'hello', attachedFileIds: [1] })
+  await client.getDailyMetricsSummary({ date: '2026-06-01' })
 
   assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/profile')
   assert.equal(requests[0].options.method, 'GET')
@@ -76,6 +77,7 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
   assert.equal(requests[9].url, 'http://127.0.0.1:8000/api/chat/sessions/12/draft')
   assert.equal(requests[9].options.method, 'PUT')
   assert.deepEqual(JSON.parse(requests[9].options.body), { content: 'hello', attachedFileIds: [1] })
+  assert.equal(requests[10].url, 'http://127.0.0.1:8000/api/metrics/daily-summary?date=2026-06-01')
 })
 
 test('createBackendClient 会把 HTTP 错误归一成可展示异常', async () => {

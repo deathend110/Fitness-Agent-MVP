@@ -187,6 +187,9 @@ export function createBackendClient(options = {}) {
     getModels({ signal } = {}) {
       return request('/models', { signal })
     },
+    getDailyMetricsSummary(query = {}, { signal } = {}) {
+      return request('/metrics/daily-summary', { query, signal })
+    },
     getDefaultChatSession({ signal } = {}) {
       return request('/chat/sessions/default', { signal })
     },
