@@ -39,7 +39,7 @@ test('requestCoachReply 会把用户输入交给后端 Agent，不再构建 syst
   })
   assert.equal(calls.length, 1)
   assert.deepEqual(calls[0].payload, {
-    files: [],
+    fileIds: [],
     model: undefined,
     sessionId: null,
     thinking: undefined,
@@ -108,7 +108,7 @@ test('requestCoachReplyStream 会把流式文本拼成最终回复并保留 sugg
     {
       streamImpl: async (payload, { onDelta }) => {
         assert.deepEqual(payload, {
-          files: [],
+          fileIds: [],
           model: undefined,
           sessionId: null,
           thinking: undefined,
@@ -232,6 +232,7 @@ test('startBackgroundCoachReply 会复用上下文构建逻辑提交后台任务
       submitImpl: async (payload, options) => {
         assert.equal(options.sessionId, 9)
         assert.equal(payload.userInput, '离页后继续分析')
+        assert.deepEqual(payload.fileIds, [])
         return { taskId: 'task-1', sessionId: 9 }
       },
     },

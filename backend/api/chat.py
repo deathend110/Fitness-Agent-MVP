@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -39,6 +39,8 @@ class ChatReplyRequestSchema(BaseModel):
     userInput: str | None = None
     messages: list[dict[str, Any]] | None = None
     model: str | None = None
+    thinking: dict[str, Any] | None = None
+    fileIds: list[int] = Field(default_factory=list)
 
 
 class ChatReplyResponseSchema(BaseModel):
@@ -52,6 +54,8 @@ class ChatBackgroundRequestSchema(BaseModel):
     userInput: str | None = None
     messages: list[dict[str, Any]] | None = None
     model: str | None = None
+    thinking: dict[str, Any] | None = None
+    fileIds: list[int] = Field(default_factory=list)
 
 
 class ChatBackgroundSubmitResponseSchema(BaseModel):
@@ -214,6 +218,23 @@ def parse_messages_query(raw_messages: str) -> list[dict[str, Any]]:
             raise HTTPException(status_code=422, detail="messages 中每一项都必须是对象")
 
     return messages
+
+
+def parse_file_ids_query(raw_file_ids: list[str] | None) -> list[int]:
+    if not raw_file_ids:
+        return []
+
+    values: list[int] = []
+    for item in raw_file_ids:
+        for part in str(item).split(","):
+            stripped = part.strip()
+            if not stripped:
+                continue
+            try:
+                values.append(int(stripped))
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="fileIds 必须是整数列表") from exc
+    return list(dict.fromkeys(value for value in values if value > 0))
 
 
 def build_sse_frame(event: str, payload: dict[str, Any]) -> str:
@@ -396,6 +417,7 @@ async def stream_chat_reply(
     user_input: str | None = Query(default=None, alias="userInput"),
     session_id: int | None = None,
     model: str | None = None,
+    file_ids: list[str] | None = Query(default=None, alias="fileIds"),
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
@@ -403,6 +425,7 @@ async def stream_chat_reply(
     settings = get_settings()
     selected_model = model or settings.default_model
     direct_user_input = read_user_input(user_input)
+    selected_file_ids = parse_file_ids_query(file_ids)
 
     if direct_user_input is not None:
         user_content = direct_user_input
@@ -410,6 +433,7 @@ async def stream_chat_reply(
             session=session,
             session_id=chat_session.id,
             user_input=user_content,
+            file_ids=selected_file_ids,
             model_config={"model": selected_model},
         )
         request_messages = agent_request.messages
@@ -503,6 +527,7 @@ async def request_chat_reply(
             session=session,
             session_id=chat_session.id,
             user_input=user_content,
+            file_ids=payload.fileIds,
             model_config={"model": selected_model},
         )
         request_messages = agent_request.messages
@@ -583,6 +608,7 @@ async def submit_background_chat_task(
             session=session,
             session_id=chat_session.id,
             user_input=user_content,
+            file_ids=payload.fileIds,
             model_config={"model": selected_model},
         )
         request_messages = agent_request.messages

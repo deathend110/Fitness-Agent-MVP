@@ -19,6 +19,7 @@ from backend.db.models import (
     MemoryItem,
     Profile,
     ToolCallLog,
+    UploadedFile,
     WEEKDAY_ORDER,
     WeeklyPlanDay,
     utc_now,
@@ -46,6 +47,7 @@ async def build_agent_request(
     session: AsyncSession,
     session_id: int,
     user_input: str,
+    file_ids: list[int] | None = None,
     model_config: dict[str, Any] | None = None,
     assembler: PromptAssembler | None = None,
     compressor: SummaryCompressor | None = None,
@@ -54,11 +56,13 @@ async def build_agent_request(
     if compressor is not None:
         await compressor.compress_if_needed(session, session_id=session_id)
 
+    file_context = await _load_selected_file_summaries(session, file_ids or [])
     context = active_assembler.assemble(
         user_input=user_input,
         profile=await _load_profile(session),
         weekly_plan=await _load_weekly_plan(session),
         daily_logs=await _load_recent_daily_logs(session),
+        recent_files_summary=file_context["summaries"],
         memories=await _load_memories(session),
         knowledge=await _load_knowledge(session),
         summaries=await _load_session_summaries(session, session_id),
@@ -70,6 +74,9 @@ async def build_agent_request(
             **context.debug,
             "source": "agent_orchestrator",
             "session_id": session_id,
+            "selected_files": file_context["selected_files"],
+            "missing_files": file_context["missing_files"],
+            "trimmed_file_summaries": file_context["trimmed_file_summaries"],
         },
         model=(model_config or {}).get("model"),
     )
@@ -256,6 +263,46 @@ async def _load_knowledge(session: AsyncSession, limit: int = 5) -> list[dict[st
         }
         for item in result.scalars().all()
     ]
+
+
+async def _load_selected_file_summaries(session: AsyncSession, file_ids: list[int]) -> dict[str, Any]:
+    if not file_ids:
+        return {"summaries": [], "selected_files": [], "missing_files": [], "trimmed_file_summaries": []}
+
+    unique_ids = list(dict.fromkeys(int(file_id) for file_id in file_ids if int(file_id) > 0))
+    if not unique_ids:
+        return {"summaries": [], "selected_files": [], "missing_files": [], "trimmed_file_summaries": []}
+
+    result = await session.execute(select(UploadedFile).where(UploadedFile.id.in_(unique_ids)))
+    files_by_id = {item.id: item for item in result.scalars().all()}
+    summaries: list[dict[str, Any]] = []
+    trimmed: list[int] = []
+
+    for file_id in unique_ids:
+        uploaded = files_by_id.get(file_id)
+        if uploaded is None:
+            continue
+        summary = uploaded.summary or {}
+        text = str(summary.get("summary") or summary.get("text") or "").strip()
+        if len(text) > 800:
+            text = text[:800] + "...[trimmed:file_summary]"
+            trimmed.append(file_id)
+        summaries.append(
+            {
+                "fileId": uploaded.id,
+                "name": uploaded.original_name,
+                "kind": summary.get("kind") or uploaded.extension.lstrip("."),
+                "status": uploaded.parser_status,
+                "summary": text,
+            }
+        )
+
+    return {
+        "summaries": summaries,
+        "selected_files": [item["fileId"] for item in summaries],
+        "missing_files": [file_id for file_id in unique_ids if file_id not in files_by_id],
+        "trimmed_file_summaries": trimmed,
+    }
 
 
 async def _load_session_summaries(

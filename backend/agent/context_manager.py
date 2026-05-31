@@ -244,6 +244,7 @@ class PromptAssembler:
         profile: dict[str, Any] | None = None,
         weekly_plan: dict[str, Any] | None = None,
         daily_logs: dict[str, Any] | None = None,
+        recent_files_summary: list[dict[str, Any]] | None = None,
         memories: list[dict[str, Any]] | None = None,
         knowledge: list[dict[str, Any]] | None = None,
         summaries: list[dict[str, Any]] | None = None,
@@ -254,6 +255,7 @@ class PromptAssembler:
             profile=profile,
             weekly_plan=weekly_plan,
             daily_logs=daily_logs,
+            recent_files_summary=recent_files_summary or [],
             memories=memories or [],
             knowledge=knowledge or [],
             summaries=summaries or [],
@@ -288,6 +290,7 @@ class PromptAssembler:
         profile: dict[str, Any] | None,
         weekly_plan: dict[str, Any] | None,
         daily_logs: dict[str, Any] | None,
+        recent_files_summary: list[dict[str, Any]],
         memories: list[dict[str, Any]],
         knowledge: list[dict[str, Any]],
         summaries: list[dict[str, Any]],
@@ -338,6 +341,14 @@ class PromptAssembler:
                     "knowledge",
                     {"role": "system", "content": self._format_collection("## 相关知识", knowledge)},
                     priority=40,
+                )
+            )
+        if recent_files_summary:
+            items.append(
+                _ContextItem(
+                    "uploaded_files",
+                    {"role": "system", "content": self._format_collection("## 上传文件摘要", recent_files_summary)},
+                    priority=42,
                 )
             )
         for summary in summaries[-2:]:

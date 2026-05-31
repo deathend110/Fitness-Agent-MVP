@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.adopt_plan import build_plan_change_proposal
 from backend.agent.memory import MemoryRetriever
-from backend.db.models import DailyLog, Profile, WEEKDAY_ORDER, WeeklyPlanDay
+from backend.db.models import DailyLog, Profile, UploadedFile, WEEKDAY_ORDER, WeeklyPlanDay
 from backend.db.seed import DEFAULT_PROFILE_ID
 
 
@@ -145,7 +145,7 @@ def build_default_tool_registry() -> ToolRegistry:
         RegisteredTool("search_memory", "检索长期记忆。", SearchMemoryToolArgs, _search_memory)
     )
     registry.register(
-        RegisteredTool("read_uploaded_file_summary", "读取上传文件摘要占位。", ReadFileSummaryToolArgs, _read_uploaded_file_summary)
+        RegisteredTool("read_uploaded_file_summary", "读取用户上传文件的真实解析摘要。", ReadFileSummaryToolArgs, _read_uploaded_file_summary)
     )
     registry.register(
         RegisteredTool(
@@ -218,8 +218,24 @@ async def _search_memory(session: AsyncSession, args: SearchMemoryToolArgs) -> d
     }
 
 
-async def _read_uploaded_file_summary(_session: AsyncSession, args: ReadFileSummaryToolArgs) -> dict[str, Any]:
-    return {"fileId": args.file_id, "summary": "当前 MVP 尚未接入上传文件解析。"}
+async def _read_uploaded_file_summary(session: AsyncSession, args: ReadFileSummaryToolArgs) -> dict[str, Any]:
+    uploaded = await session.get(UploadedFile, args.file_id)
+    if uploaded is None:
+        return {"ok": False, "fileId": args.file_id, "error": "uploaded file not found"}
+
+    summary = dict(uploaded.summary or {})
+    text = str(summary.get("text") or "")
+    if len(text) > 1500:
+        summary["text"] = text[:1500] + "...[trimmed:file_text]"
+
+    return {
+        "ok": True,
+        "fileId": uploaded.id,
+        "name": uploaded.original_name,
+        "status": uploaded.parser_status,
+        "parserError": uploaded.parser_error,
+        "summary": summary,
+    }
 
 
 async def _propose_plan_change(session: AsyncSession, args: ProposePlanChangeToolArgs) -> dict[str, Any]:

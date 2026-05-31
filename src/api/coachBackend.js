@@ -36,6 +36,20 @@ function createRequestUrl(baseUrl, path, query = {}) {
   return url.toString()
 }
 
+function normalizeFileIds(payload = {}) {
+  if (Array.isArray(payload.fileIds)) {
+    return payload.fileIds.filter(Number.isInteger)
+  }
+
+  if (Array.isArray(payload.files)) {
+    return payload.files
+      .map((file) => (Number.isInteger(file) ? file : file?.id))
+      .filter(Number.isInteger)
+  }
+
+  return []
+}
+
 async function readJsonResponse(response) {
   if (typeof response?.json !== 'function') {
     return null
@@ -249,6 +263,7 @@ export async function streamBackendCoachReply(messages, options = {}) {
           userInput: messages?.userInput,
           model: messages?.model || model,
           session_id: messages?.sessionId ?? sessionId,
+          fileIds: normalizeFileIds(messages).join(','),
         }
     const response = await fetchImpl(
       createRequestUrl(baseUrl, '/chat/stream', query),
@@ -399,12 +414,14 @@ export async function requestAgentReplyStream(payload, options = {}) {
 }
 
 function normalizeAgentRequestBody(payload = {}) {
+  const fileIds = normalizeFileIds(payload)
+
   return {
     ...(payload.sessionId === undefined || payload.sessionId === null ? {} : { sessionId: payload.sessionId }),
     userInput: payload.userInput || '',
     ...(payload.model ? { model: payload.model } : {}),
     ...(payload.thinking ? { thinking: payload.thinking } : {}),
-    ...(payload.files ? { files: payload.files } : {}),
+    ...(fileIds.length ? { fileIds } : {}),
   }
 }
 

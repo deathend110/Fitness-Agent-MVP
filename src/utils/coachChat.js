@@ -7,13 +7,20 @@ import {
 
 function buildAgentPayload({
   files = [],
+  fileIds,
   model,
   sessionId = null,
   thinking,
   userInput = '',
 } = {}) {
+  const normalizedFileIds = Array.isArray(fileIds)
+    ? fileIds
+    : files
+        .map((file) => (Number.isInteger(file) ? file : file?.id))
+        .filter(Number.isInteger)
+
   return {
-    files,
+    fileIds: normalizedFileIds,
     model,
     sessionId,
     thinking,
@@ -77,6 +84,9 @@ export function buildBackgroundCoachTaskRecord(task, { sourceUserIndex = null, u
     sessionId: Number.isInteger(task.sessionId) ? task.sessionId : null,
     sourceUserIndex: Number.isInteger(sourceUserIndex) ? sourceUserIndex : null,
     userContent: userInput.trim(),
+    files: Array.isArray(task.files)
+      ? task.files.map((file) => ({ id: file.id, name: file.name || file.originalName || '' }))
+      : [],
     createdAt: new Date().toISOString(),
   }
 }
