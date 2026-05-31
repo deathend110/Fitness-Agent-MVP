@@ -88,10 +88,10 @@ src/
 - 后端计划采纳校验与写回接口
 - 前端 `coachChat` 经 `coachBackend` 调用后端聊天接口
 
-当前不覆盖：
+当前不覆盖，留给 V2.5 / Phase 3+：
 
 - AI 教练页真实多会话 UI 和刷新后从后端拉取消息补齐
-这些内容属于 V2.3 Phase 2。
+- 后端上下文压缩、工具调用编排、模型选择、文件上传解析、知识库和周期计划引擎
 
 ## 当前项目结构
 
@@ -434,13 +434,14 @@ CoachTab
 后端计划采纳能力
   -> POST /api/weekly-plan/adopt
       -> 读取当前 weekly_plan_day
-      -> adopt_plan_change() 集中校验 day / changes / action / exerciseName / field / RPE
+      -> adopt_plan_change() 集中校验 day / changes / action / exerciseName / field / 数值字段 / RPE
       -> 成功时仅写回目标 day
       -> 失败时返回原 plan，数据库不变
 ```
 
 错误边界：SSE 中任意 DeepSeek 密钥缺失、上游错误或断流都会转成 `event: error`；后端不会写入半截 assistant。前端收到流式错误后会尝试 `/api/chat/reply` 非流式回退。
 后台任务失败或返回空内容时返回 `failed` 与友好 message，不写入 assistant；进程重启后内存任务表清空，旧 task_id 会返回 `not_found`。
+计划采纳仅支持显式 `action: "update"`；`pct / kg / sets / reps / rpe` 会做安全数字转换并拒绝 `NaN / Infinity` 等非有限数值，避免“采纳成功但计划未变”或脏值写入。
 
 ## localStorage 数据结构
 
@@ -591,6 +592,7 @@ CoachTab
 - 每次发送前都重新读取最新上下文
 - DeepSeek API Key 只在后端 `.env` 中读取，前端 bundle 不再包含 `VITE_DEEPSEEK_API_KEY` 或 Authorization 直连逻辑
 - AI 回复解析与训练计划写回分离，保留用户最终确认权；只有点击采纳卡片才调用后端写回接口
+- 采纳接口失败时返回原始 plan 并不提交事务；成功时返回完整 plan，前端用该响应刷新页面状态
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 - AI 教练页历史侧栏若使用 `buildCoachHistoryView()`，其展示 id 需基于原始 `chatHistory` 下标生成，例如 `session-message-12`，保证新增消息后既有历史项 id 稳定可命中
 
