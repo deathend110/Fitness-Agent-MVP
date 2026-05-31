@@ -112,10 +112,19 @@ async def test_chat_session_appends_messages_full_history_and_refreshes_updated_
 
 @pytest.mark.asyncio
 async def test_chat_empty_session_null_suggestion_and_failure_cases(api_client: AsyncClient):
+    default_response = await api_client.get("/api/chat/sessions/default")
+    default_session_id = default_response.json()["id"]
+
     create_response = await api_client.post("/api/chat/sessions", json={})
 
     assert create_response.status_code == 200
     session_id = create_response.json()["id"]
+    assert create_response.json()["title"] == "新对话"
+
+    default_again_response = await api_client.get("/api/chat/sessions/default")
+
+    assert default_again_response.status_code == 200
+    assert default_again_response.json()["id"] == default_session_id
 
     empty_response = await api_client.get(f"/api/chat/sessions/{session_id}/messages")
 

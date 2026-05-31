@@ -16,6 +16,7 @@ from backend.schemas import (
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 DEFAULT_SESSION_TITLE = "默认对话"
+UNTITLED_SESSION_TITLE = "新对话"
 
 
 def build_session_response(session: ChatSession) -> ChatSessionSchema:
@@ -61,7 +62,7 @@ async def create_chat_session(
 ) -> ChatSessionSchema:
     now = utc_now()
     chat_session = ChatSession(
-        title=payload.title or DEFAULT_SESSION_TITLE,
+        title=payload.title or UNTITLED_SESSION_TITLE,
         created_at=now,
         updated_at=now,
     )

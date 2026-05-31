@@ -2,7 +2,7 @@
 
 ## 简介
 
-`backend/` 是 V2.3 Phase 1 新增的本地 Python 后端，负责承接 FitLoop MVP 的非 AI 数据持久化与迁移能力。
+`backend/` 是 V2.3 新增的本地 Python 后端，负责承接 FitLoop MVP 的数据持久化、迁移能力，并逐步承接 AI Agent 相关后端能力。
 
 当前已落地范围：
 
@@ -10,13 +10,15 @@
 - `weeklyPlan` 后端 CRUD
 - `dailyLog` 后端 CRUD
 - `localStorage -> SQLite` 一次性迁移接口
+- `chat` 会话与消息后端 CRUD
+- DeepSeek 客户端与 `---JSON---` 响应解析基础模块
 
 当前仍未落地到后端的内容：
 
-- `chatHistory`
 - DeepSeek 代理与 SSE 流式
 - 后台思考
 - 计划采纳后端化
+- AI 教练页前端切换到后端 chat 接口
 
 这些内容属于 V2.3 Phase 2。
 
@@ -49,17 +51,21 @@ uv sync
 Copy-Item backend\.env.example backend\.env
 ```
 
-当前 Phase 1 重点字段：
+当前重点字段：
 
 - `DATABASE_URL`
 - `CORS_ORIGINS`
 - `DATA_DIR`
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_BASE_URL`
+- `DEFAULT_MODEL`
+- `DEEPSEEK_TIMEOUT_SECONDS`
 
 说明：
 
 - 数据库存放在 `backend/data/`
 - `backend/.env` 不应提交到仓库
-- DeepSeek 相关键位已预留，但 Phase 1 还未使用
+- 后端 Agent 模块只从 `backend/.env` 读取 DeepSeek API Key；前端旧直连路径将在 Task 9 移除
 
 ## 启动方式
 
@@ -110,6 +116,22 @@ uv run python -m alembic upgrade head
 - `GET /api/daily-log?from=YYYY-MM-DD&to=YYYY-MM-DD`
 - `PUT /api/daily-log/{date}`
 
+### 聊天存储
+
+- `GET /api/chat/sessions`
+- `POST /api/chat/sessions`
+- `GET /api/chat/sessions/default`
+- `GET /api/chat/sessions/{id}/messages`
+- `POST /api/chat/sessions/{id}/messages`
+
+说明：
+
+- `GET /api/chat/sessions/default` 会获取或创建“默认对话”，用于承接旧版单条 `chatHistory`
+- `POST /api/chat/sessions` 未传标题时会创建“新对话”，不会占用默认会话语义
+- 消息读取全量返回，不做 20 条裁剪
+- 追加消息仅负责存储 `role / content / suggestion`，不触发 DeepSeek 请求
+- `suggestion` 为可空 JSON，用于后续保存 AI 结构化建议
+
 ### localStorage 迁移
 
 - `POST /api/migrate/import`
@@ -131,7 +153,7 @@ uv run python -m alembic upgrade head
 迁移行为说明：
 
 - `profile / weeklyPlan / dailyLog` 会幂等写入 SQLite
-- `chatHistory` 当前只接收不入库
+- 旧版导入接口中的 `chatHistory` 当前仍只接收不入库，后续会单独接入 chat 表迁移
 - 响应中的 `skipped.chatHistory` 会明确说明这一点
 
 ## 数据目录
@@ -163,4 +185,10 @@ Phase 1 汇总测试：
 
 ```powershell
 uv run python -m pytest backend\tests\test_health.py backend\tests\test_models.py backend\tests\test_crud_api.py backend\tests\test_migrate.py
+```
+
+聊天存储定向测试：
+
+```powershell
+uv run pytest backend\tests\test_chat_store.py
 ```

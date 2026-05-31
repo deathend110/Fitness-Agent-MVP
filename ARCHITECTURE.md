@@ -1,15 +1,16 @@
 ﻿# FitLoop MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 Phase 1 后端基建、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 Task 8 聊天存储、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
 
-## V2.3 Phase 1 后端化总览
+## V2.3 后端化总览
 
 当前项目已经从“纯前端 + localStorage”演进为“前端 + 本地 Python 后端”的双层结构：
 
 - 前端继续负责 UI、交互、页面状态组织
 - 本地 FastAPI 后端负责 `profile / weeklyPlan / dailyLog` 的持久化
+- 本地 FastAPI 后端已提供 `chat_session / chat_message` 的存储接口
 - SQLite 作为本地结构化存储
-- `chatHistory` 当前仍只保留在 localStorage，等待 Phase 2 再后移
+- AI 教练页前端仍暂用 `fitloop_chatHistory`，等待 Task 9 切换到后端聊天接口与 SSE
 
 ### 当前数据源分工
 
@@ -17,7 +18,9 @@
   - 主数据源：后端 SQLite
   - 本地缓存：浏览器 localStorage
 - `chatHistory`
-  - 当前唯一数据源：浏览器 localStorage
+  - 后端能力：`chat_session / chat_message` 已支持默认会话、全量消息读取和 `suggestion` JSON 存储
+  - 前端现状：AI 教练页仍使用浏览器 `localStorage`
+  - 切换计划：Task 9 将前端 `coachChat` 改接后端 chat/SSE
 
 ### 当前新增目录
 
@@ -25,10 +28,14 @@
 backend/
   __init__.py
   api/
+    chat.py
     daily_log.py
     migrate.py
     profile.py
     weekly_plan.py
+  agent/
+    deepseek_client.py
+    response_parser.py
   db/
     database.py
     models.py
@@ -38,6 +45,7 @@ backend/
     test_health.py
     test_models.py
     test_crud_api.py
+    test_chat_store.py
     test_migrate.py
   config.py
   main.py
@@ -63,19 +71,21 @@ src/
 
 ### 当前阶段边界
 
-Phase 1 只覆盖：
+当前已覆盖：
 
 - 非 AI 主数据 CRUD
 - localStorage 到 SQLite 的一次性迁移
 - 后端不可用时的降级提示
+- DeepSeek 客户端与 AI 响应解析的后端基础模块
+- 聊天会话与消息的后端全量存储 CRUD
 
 当前不覆盖：
 
-- DeepSeek 后端代理
+- AI 教练页前端切换到后端聊天接口
+- DeepSeek 后端代理 API
 - SSE 流式
 - 后台思考
 - 计划采纳后端化
-- `chatHistory` 入库
 
 这些内容属于 V2.3 Phase 2。
 
@@ -157,6 +167,16 @@ docs/
   - 负责加载和持久化顶层状态
   - 统一管理 `profile / weeklyPlan / dailyLog / chatHistory`
   - 负责应用级标题区、导航切换和页面外壳视觉节奏
+  - 当前 `profile / weeklyPlan / dailyLog` 已后端优先；`chatHistory` 前端切源留给 Task 9
+
+- `backend/api/chat.py`
+  - 负责聊天会话与消息的后端 CRUD
+  - 提供会话列表、创建会话、获取或创建默认会话、追加消息、全量读取消息
+  - 只做存储，不触发 DeepSeek 调用，避免提前吞并 SSE 与后台思考职责
+
+- `backend/db/models.py`
+  - 定义 `Profile / WeeklyPlanDay / DailyLog / ChatSession / ChatMessage`
+  - `ChatMessage.suggestion` 以 JSON 可空列保存结构化建议，便于后续 Task 9/11 复用
 
 - `src/tabs/CoachTab.jsx`
   - 负责 AI 教练页状态协调
@@ -355,6 +375,22 @@ CoachTab
   -> 将消息追加到 chatHistory
 ```
 
+### 6. 后端聊天存储流
+
+```text
+Task 9 之前的后端可用能力
+  -> GET /api/chat/sessions/default
+      -> 获取或创建“默认对话”
+  -> POST /api/chat/sessions/{id}/messages
+      -> 追加 user / assistant / system 消息
+      -> 可选保存 suggestion JSON
+      -> 同步刷新 ChatSession.updated_at
+  -> GET /api/chat/sessions/{id}/messages
+      -> 按 created_at / id 正序全量返回，不做 20 条裁剪
+```
+
+这条流当前只作为后端能力存在；AI 教练页正式使用它要等 Task 9 前端切源。
+
 ## localStorage 数据结构
 
 ### `fitloop_profile`
@@ -420,6 +456,8 @@ Task 6 的复杂指标不单独持久化，而是运行时根据 `profile + week
 
 ### `fitloop_chatHistory`
 
+当前 AI 教练页前端仍使用该 key；V2.3 Phase 2 Task 8 已提供后端 chat 存储接口，但前端尚未切换。
+
 只持久化：
 
 - `role`
@@ -433,6 +471,31 @@ AI 教练页的消息展示补充约束：
 - `message.suggestionCard`：由 `buildAdoptCardModel()` 派生的展示模型，只负责渲染采纳卡片
 - 采纳 / 忽略回调必须继续传递 `message.suggestion`，不能把 `suggestionCard` 冒充为领域 suggestion
 - 结构化建议不会写回 `fitloop_chatHistory`，避免 localStorage 中混入展示态和易失业务态
+
+### 后端 `chat_session / chat_message`
+
+Task 8 新增的后端聊天表：
+
+- `chat_session`
+  - `id`
+  - `title`
+  - `created_at`
+  - `updated_at`
+- `chat_message`
+  - `id`
+  - `session_id`
+  - `role`
+  - `content`
+  - `suggestion`
+  - `created_at`
+
+设计约束：
+
+- 默认会话标题为“默认对话”，用于承接旧版单条 `chatHistory`
+- 普通创建会话未传标题时使用“新对话”，避免和默认会话语义混淆
+- 消息读取必须全量返回，不沿用前端上下文窗口的 20 条裁剪
+- `suggestion` 允许为空；非空时保存 AI 结构化建议原始 JSON
+- 新增消息时刷新会话 `updated_at`，供后续真实会话列表按最近对话排序
 
 ### `fitloop_storageVersion`
 
@@ -704,6 +767,6 @@ tests/
 - AI 教练页已重构为更接近主流聊天产品的布局。
 - 页面内部改为左侧历史侧栏 + 中央主聊天区，不再保留旧版三栏工具面板。
 - 空状态与已对话状态分别使用欢迎页建议问题与消息流式输入区。
-- 顶部已移除“上下文”按钮，新建对话只清空当前 `chatHistory`，不扩展真实多会话存储。
+- 顶部已移除“上下文”按钮；前端新建对话当前仍只清空 `chatHistory`，后端真实会话存储已在 V2.3 Phase 2 Task 8 落地，前端接入留给 Task 9 之后。
 - 本轮仅重排 UI，不改变 DeepSeek 接口、上下文注入和采纳链路。
 - 版本总结见 `task/V2/V2 开发完成总结.md`。
