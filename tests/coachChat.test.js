@@ -47,6 +47,23 @@ test('requestCoachReply 会把用户输入交给后端 Agent，不再构建 syst
   })
 })
 
+test('requestCoachReply 会保留模型和 thinking 配置', async () => {
+  await requestCoachReply(
+    {
+      model: 'deepseek-v4-pro',
+      thinking: { enabled: true, budget: 'max' },
+      userInput: '深入分析训练计划',
+    },
+    {
+      requestImpl: async (payload) => {
+        assert.equal(payload.model, 'deepseek-v4-pro')
+        assert.deepEqual(payload.thinking, { enabled: true, budget: 'max' })
+        return { text: 'ok', suggestion: null }
+      },
+    },
+  )
+})
+
 test('requestCoachReply 在 AI 返回合法 JSON 建议时保留 suggestion 结构', async () => {
   const reply = await requestCoachReply(
     {

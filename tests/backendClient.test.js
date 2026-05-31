@@ -42,6 +42,7 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
   })
   await client.commitPlanChange({ proposalId: 'proposal-1' })
   await client.updateDailyLogEntry('2026-05-31', { tdeeManual: 2600 })
+  await client.getModels()
 
   assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/profile')
   assert.equal(requests[0].options.method, 'GET')
@@ -65,6 +66,8 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
   assert.equal(requests[5].url, 'http://127.0.0.1:8000/api/daily-log/2026-05-31')
   assert.equal(requests[5].options.method, 'PUT')
   assert.deepEqual(JSON.parse(requests[5].options.body), { tdeeManual: 2600 })
+  assert.equal(requests[6].url, 'http://127.0.0.1:8000/api/models')
+  assert.equal(requests[6].options.method, 'GET')
 })
 
 test('createBackendClient 会把 HTTP 错误归一成可展示异常', async () => {

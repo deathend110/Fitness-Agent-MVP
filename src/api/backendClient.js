@@ -159,6 +159,9 @@ export function createBackendClient(options = {}) {
     updateDailyLogEntry(date, payload, { signal } = {}) {
       return request(`/daily-log/${date}`, { method: 'PUT', body: payload, signal })
     },
+    getModels({ signal } = {}) {
+      return request('/models', { signal })
+    },
   }
 }
 

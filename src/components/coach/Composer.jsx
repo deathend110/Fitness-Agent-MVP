@@ -1,13 +1,19 @@
 import { useEffect, useRef } from 'react'
+import ModelSelector from './ModelSelector.jsx'
 
 function Composer({
   draft = '',
   errorMessage = '',
   helperText = 'AI 教练基于你的本地数据作答，不上传到服务器',
   isSending = false,
+  modelOptions = [],
   onDraftChange,
+  onModelChange,
   onSubmit,
+  onThinkingChange,
   placeholder = 'Ask RepMind...',
+  selectedModel = '',
+  thinking = { enabled: false, budget: 'auto' },
 }) {
   const textareaRef = useRef(null)
 
@@ -46,10 +52,14 @@ function Composer({
         />
 
         <div className="flex items-center justify-between gap-3 px-3 pb-3">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-fitloop-line bg-fitloop-canvas px-2.5 py-1 text-xs font-medium text-slate-500">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-fitloop-orange" />
-            <span>deepseek-v4-flash</span>
-          </div>
+          <ModelSelector
+            disabled={isSending}
+            models={modelOptions}
+            onModelChange={onModelChange}
+            onThinkingChange={onThinkingChange}
+            selectedModel={selectedModel}
+            thinking={thinking}
+          />
 
           <div className="flex items-center gap-1.5">
             <button

@@ -215,6 +215,31 @@ class DeepSeekClient:
         if usage is not None:
             yield DeepSeekStreamEvent(usage=usage)
 
+    async def list_models(self) -> list[dict[str, Any]]:
+        self._assert_api_key()
+
+        try:
+            async with self.client_factory(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/models",
+                    headers=self._build_headers(),
+                )
+        except httpx.HTTPError as exc:
+            raise DeepSeekClientError(
+                f"DeepSeek 模型列表请求失败：{exc}",
+                code="network_error",
+            ) from exc
+
+        self._raise_for_error_response(response)
+        payload = self._read_json_payload(response)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, list):
+            raise DeepSeekClientError(
+                "DeepSeek 模型列表响应格式异常。",
+                code="invalid_response",
+            )
+        return [item for item in data if isinstance(item, dict)]
+
     def _assert_api_key(self) -> None:
         if self.api_key:
             return

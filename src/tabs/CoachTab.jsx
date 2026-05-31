@@ -85,6 +85,11 @@ function getBackendSessionId(sessionId) {
 }
 
 const BACKGROUND_TASK_STORAGE_KEY = 'fitloop:coach-background-task'
+const FALLBACK_MODEL_CONFIG = {
+  defaultModel: 'deepseek-v4-flash',
+  models: [{ id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', supportsThinking: true }],
+  thinking: { enabled: false, budget: 'auto', options: ['off', 'auto', 'max'] },
+}
 
 function CoachTab({
   chatHistory,
@@ -99,6 +104,12 @@ function CoachTab({
   const [errorMessage, setErrorMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
+  const [modelConfig, setModelConfig] = useState(FALLBACK_MODEL_CONFIG)
+  const [selectedModel, setSelectedModel] = useState(FALLBACK_MODEL_CONFIG.defaultModel)
+  const [thinking, setThinking] = useState({
+    enabled: FALLBACK_MODEL_CONFIG.thinking.enabled,
+    budget: FALLBACK_MODEL_CONFIG.thinking.budget,
+  })
   const [streamingText, setStreamingText] = useState('')
   const activeRequestAbortRef = useRef(null)
   const backgroundFallbackTriggeredRef = useRef(false)
@@ -166,6 +177,34 @@ function CoachTab({
     setMessageMeta((currentMeta) => mergeMessageMeta(chatHistory, currentMeta))
     chatHistoryRef.current = chatHistory
   }, [chatHistory])
+
+  useEffect(() => {
+    let ignore = false
+    const client = createBackendClient()
+
+    client
+      .getModels()
+      .then((config) => {
+        if (ignore) {
+          return
+        }
+        setModelConfig(config)
+        setSelectedModel(config.defaultModel || FALLBACK_MODEL_CONFIG.defaultModel)
+        setThinking({
+          enabled: Boolean(config.thinking?.enabled),
+          budget: config.thinking?.budget || 'auto',
+        })
+      })
+      .catch(() => {
+        if (!ignore) {
+          setModelConfig(FALLBACK_MODEL_CONFIG)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   useEffect(() => {
     let pollTimer = null
@@ -437,6 +476,8 @@ function CoachTab({
       profile,
       sessionId: getBackendSessionId(activeSessionId),
       sourceUserIndex: nextHistory.length - 1,
+      model: selectedModel,
+      thinking,
       userInput,
       weeklyPlan,
     }
@@ -504,8 +545,13 @@ function CoachTab({
           draft={draft}
           errorMessage={errorMessage}
           isSending={isSending}
+          modelOptions={modelConfig.models}
           onDraftChange={setDraft}
+          onModelChange={setSelectedModel}
           onSubmit={handleSubmit}
+          onThinkingChange={setThinking}
+          selectedModel={selectedModel}
+          thinking={thinking}
         />
       }
       messages={
@@ -529,7 +575,9 @@ function CoachTab({
       }
       topbar={
         <ChatTopbar
-          modelLabel="DeepSeek v4"
+          modelLabel={
+            modelConfig.models.find((model) => model.id === selectedModel)?.label || selectedModel || 'DeepSeek'
+          }
           onClear={handleNewChat}
           onExport={handleExportConversation}
           title={activeHistoryItem?.isPlaceholder ? '新的对话' : activeHistoryItem?.title || '新的对话'}
