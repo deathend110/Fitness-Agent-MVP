@@ -2,143 +2,59 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  deepSeekDefaults,
   getDeepSeekApiKeyStatus,
   requestDeepSeekChat,
   streamDeepSeekChat,
 } from '../src/api/deepseek.js'
 
-function createSseBody(chunks) {
-  const encoder = new TextEncoder()
-
-  return new ReadableStream({
-    start(controller) {
-      chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)))
-      controller.close()
-    },
-  })
-}
-
-test('getDeepSeekApiKeyStatus 在未配置 API Key 时返回明确错误提示', () => {
+test('getDeepSeekApiKeyStatus 提示密钥已迁移到后端', () => {
   const status = getDeepSeekApiKeyStatus({})
 
-  assert.equal(status.hasKey, false)
-  assert.match(status.message, /VITE_DEEPSEEK_API_KEY/)
+  assert.equal(status.hasKey, true)
+  assert.match(status.message, /后端/)
 })
 
-test('getDeepSeekApiKeyStatus 在已配置 API Key 时返回可调用状态', () => {
-  const status = getDeepSeekApiKeyStatus({
-    VITE_DEEPSEEK_API_KEY: 'sk-test',
+test('requestDeepSeekChat 通过后端代理返回文本，兼容旧调用方', async () => {
+  const content = await requestDeepSeekChat([{ role: 'user', content: '你好' }], {
+    requestImpl: async (messages) => {
+      assert.deepEqual(messages, [{ role: 'user', content: '你好' }])
+      return {
+        text: '今天建议降低一点训练量。',
+        suggestion: null,
+      }
+    },
   })
 
-  assert.equal(status.hasKey, true)
-  assert.match(status.message, /已配置/)
+  assert.equal(content, '今天建议降低一点训练量。')
 })
 
-test('requestDeepSeekChat 在缺少 API Key 时抛出可展示错误', async () => {
-  await assert.rejects(
-    () => requestDeepSeekChat([{ role: 'user', content: '你好' }], { env: {} }),
-    (error) => {
-      assert.match(error.message, /VITE_DEEPSEEK_API_KEY/)
-      return true
-    },
-  )
-})
-
-test('requestDeepSeekChat 在网络失败时抛出可展示错误', async () => {
-  await assert.rejects(
-    () =>
-      requestDeepSeekChat(
-        [{ role: 'user', content: '你好' }],
-        {
-          env: { VITE_DEEPSEEK_API_KEY: 'sk-test' },
-          fetchImpl: async () => {
-            throw new Error('socket hang up')
-          },
-        },
-      ),
-    (error) => {
-      assert.match(error.message, /网络连接失败/)
-      assert.match(error.message, /socket hang up/)
-      return true
-    },
-  )
-})
-
-test('requestDeepSeekChat 在非 2xx 响应时抛出带状态码的错误', async () => {
-  await assert.rejects(
-    () =>
-      requestDeepSeekChat(
-        [{ role: 'user', content: '你好' }],
-        {
-          env: { VITE_DEEPSEEK_API_KEY: 'sk-test' },
-          fetchImpl: async () => ({
-            ok: false,
-            status: 401,
-            json: async () => ({
-              error: {
-                message: 'Authentication failed',
-              },
-            }),
-          }),
-        },
-      ),
-    (error) => {
-      assert.match(error.message, /401/)
-      assert.match(error.message, /API Key/)
-      assert.match(error.message, /Authentication failed/)
-      return true
-    },
-  )
-})
-
-test('requestDeepSeekChat 在成功时返回首条消息 content', async () => {
-  const content = await requestDeepSeekChat(
-    [{ role: 'user', content: '给我今天的训练建议' }],
-    {
-      env: { VITE_DEEPSEEK_API_KEY: 'sk-test' },
-      fetchImpl: async () => ({
-        ok: true,
-        json: async () => ({
-          choices: [
-            {
-              message: {
-                content: '今天建议把深蹲降到 70%。',
-              },
-            },
-          ],
-        }),
-      }),
-    },
-  )
-
-  assert.equal(content, '今天建议把深蹲降到 70%。')
-})
-
-test('streamDeepSeekChat 会按 SSE 增量拼接文本并回调 onDelta', async () => {
+test('streamDeepSeekChat 通过后端 SSE 代理回调增量文本，兼容旧调用方', async () => {
   const deltas = []
 
-  const content = await streamDeepSeekChat(
-    [{ role: 'user', content: '给我今天的训练建议' }],
-    {
-      env: { VITE_DEEPSEEK_API_KEY: 'sk-test' },
-      fetchImpl: async () => ({
-        ok: true,
-        body: createSseBody([
-          ': keep-alive\n\n',
-          'data: {"choices":[{"delta":{"content":"先把"}}]}\n\n',
-          'data: {"choices":[{"delta":{"content":"周一主项降一点。"}}]}\n\n',
-          'data: [DONE]\n\n',
-        ]),
-      }),
-      onDelta: (delta, fullText) => {
-        deltas.push({ delta, fullText })
-      },
+  const content = await streamDeepSeekChat([{ role: 'user', content: '你好' }], {
+    streamImpl: async (messages, { onDelta }) => {
+      assert.deepEqual(messages, [{ role: 'user', content: '你好' }])
+      onDelta('今天', '今天')
+      onDelta('轻一点。', '今天轻一点。')
+      return {
+        text: '今天轻一点。',
+        suggestion: null,
+      }
     },
-  )
+    onDelta: (delta, fullText) => {
+      deltas.push({ delta, fullText })
+    },
+  })
 
-  assert.equal(content, '先把周一主项降一点。')
+  assert.equal(content, '今天轻一点。')
   assert.deepEqual(deltas, [
-    { delta: '先把', fullText: '先把' },
-    { delta: '周一主项降一点。', fullText: '先把周一主项降一点。' },
+    { delta: '今天', fullText: '今天' },
+    { delta: '轻一点。', fullText: '今天轻一点。' },
   ])
+})
+
+test('deepSeekDefaults 不再暴露前端密钥环境名或 DeepSeek 直连地址', () => {
+  assert.equal(deepSeekDefaults.baseUrl, 'http://127.0.0.1:8000/api')
+  assert.equal('apiKeyEnvName' in deepSeekDefaults, false)
 })

@@ -12,13 +12,13 @@
 - `localStorage -> SQLite` 一次性迁移接口
 - `chat` 会话与消息后端 CRUD
 - DeepSeek 客户端与 `---JSON---` 响应解析基础模块
+- DeepSeek 后端代理、SSE 流式事件和非流式回退接口
 
 当前仍未落地到后端的内容：
 
-- DeepSeek 代理与 SSE 流式
 - 后台思考
 - 计划采纳后端化
-- AI 教练页前端切换到后端 chat 接口
+- AI 教练页真实多会话 UI
 
 这些内容属于 V2.3 Phase 2。
 
@@ -65,7 +65,7 @@ Copy-Item backend\.env.example backend\.env
 
 - 数据库存放在 `backend/data/`
 - `backend/.env` 不应提交到仓库
-- 后端 Agent 模块只从 `backend/.env` 读取 DeepSeek API Key；前端旧直连路径将在 Task 9 移除
+- 后端 Agent 模块只从 `backend/.env` 读取 DeepSeek API Key；前端不再读取或打包 DeepSeek Key
 
 ## 启动方式
 
@@ -123,13 +123,18 @@ uv run python -m alembic upgrade head
 - `GET /api/chat/sessions/default`
 - `GET /api/chat/sessions/{id}/messages`
 - `POST /api/chat/sessions/{id}/messages`
+- `GET /api/chat/stream`
+- `POST /api/chat/reply`
 
 说明：
 
 - `GET /api/chat/sessions/default` 会获取或创建“默认对话”，用于承接旧版单条 `chatHistory`
 - `POST /api/chat/sessions` 未传标题时会创建“新对话”，不会占用默认会话语义
 - 消息读取全量返回，不做 20 条裁剪
-- 追加消息仅负责存储 `role / content / suggestion`，不触发 DeepSeek 请求
+- `GET /api/chat/stream` 接收 `messages=<JSON>`、可选 `session_id / model`，返回 `text/event-stream`
+- SSE 事件格式为 `event: delta / suggestion / done / error`，`data` 始终是 JSON
+- `POST /api/chat/reply` 接收 `{sessionId?, messages, model?}`，用于前端流式失败后的非流式回退
+- 流式和非流式请求都只在完整成功后一起写入本轮 user + assistant，错误时不写半截 assistant
 - `suggestion` 为可空 JSON，用于后续保存 AI 结构化建议
 
 ### localStorage 迁移
@@ -191,4 +196,10 @@ uv run python -m pytest backend\tests\test_health.py backend\tests\test_models.p
 
 ```powershell
 uv run pytest backend\tests\test_chat_store.py
+```
+
+聊天 SSE 定向测试：
+
+```powershell
+uv run pytest backend\tests\test_chat_stream.py
 ```

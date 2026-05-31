@@ -71,6 +71,11 @@ function buildConversationExportText(messages = []) {
     .join('\n\n')
 }
 
+function getBackendSessionId(sessionId) {
+  // 当前侧栏仍是本地历史生成的临时 id；只有后续接入真实会话列表后才把数字 sessionId 传给后端。
+  return Number.isInteger(sessionId) ? sessionId : null
+}
+
 function CoachTab({
   chatHistory,
   dailyLog,
@@ -252,6 +257,7 @@ function CoachTab({
       chatHistory,
       dailyLog,
       profile,
+      sessionId: getBackendSessionId(activeSessionId),
       userInput,
       weeklyPlan,
     }

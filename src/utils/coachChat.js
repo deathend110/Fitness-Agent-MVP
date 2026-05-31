@@ -1,5 +1,4 @@
-import { requestDeepSeekChat, streamDeepSeekChat } from '../api/deepseek.js'
-import { parseAiResponse } from './aiResponse.js'
+import { requestBackendCoachReply, streamBackendCoachReply } from '../api/coachBackend.js'
 import { buildSystemPrompt } from './prompt.js'
 
 function buildCoachMessages({ chatHistory = [], dailyLog = {}, profile = {}, userInput = '', weeklyPlan = {} }, buildPromptImpl) {
@@ -13,36 +12,34 @@ function buildCoachMessages({ chatHistory = [], dailyLog = {}, profile = {}, use
 }
 
 export async function requestCoachReply(
-  { chatHistory = [], dailyLog = {}, profile = {}, userInput = '', weeklyPlan = {} },
-  { buildPromptImpl = buildSystemPrompt, requestImpl = requestDeepSeekChat } = {},
+  { chatHistory = [], dailyLog = {}, profile = {}, sessionId = null, userInput = '', weeklyPlan = {} },
+  { buildPromptImpl = buildSystemPrompt, requestImpl = requestBackendCoachReply } = {},
 ) {
   const messages = buildCoachMessages(
     { chatHistory, dailyLog, profile, userInput, weeklyPlan },
     buildPromptImpl,
   )
-  const content = await requestImpl(messages)
 
-  return parseAiResponse(content)
+  return requestImpl(messages, { sessionId })
 }
 
-// 流式模式下每拿到一段新文本就往上抛，让页面能实时刷新回复内容。
+// 后端已完成 DeepSeek 调用、SSE 转译和 JSON 建议解析；前端只负责构建上下文并展示增量文本。
 export async function requestCoachReplyStream(
-  { chatHistory = [], dailyLog = {}, profile = {}, userInput = '', weeklyPlan = {} },
+  { chatHistory = [], dailyLog = {}, profile = {}, sessionId = null, userInput = '', weeklyPlan = {} },
   {
     buildPromptImpl = buildSystemPrompt,
     onText,
-    streamImpl = streamDeepSeekChat,
+    streamImpl = streamBackendCoachReply,
   } = {},
 ) {
   const messages = buildCoachMessages(
     { chatHistory, dailyLog, profile, userInput, weeklyPlan },
     buildPromptImpl,
   )
-  const content = await streamImpl(messages, {
+  return streamImpl(messages, {
+    sessionId,
     onDelta: (_delta, fullText) => {
       onText?.(fullText)
     },
   })
-
-  return parseAiResponse(content)
 }

@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
+from backend.agent.deepseek_client import DeepSeekClientError
+from backend.api import chat as chat_api
+from backend.db.database import create_engine_and_session_factory, get_db_session
+from backend.db.models import Base
+from backend.main import app
+
+pytestmark = [
+    pytest.mark.filterwarnings(
+        "error::pydantic.warnings.UnsupportedFieldAttributeWarning"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning"
+    ),
+]
+
+
+class FakeDeepSeekClient:
+    def __init__(
+        self,
+        chunks: list[str] | None = None,
+        *,
+        error: DeepSeekClientError | None = None,
+    ) -> None:
+        self.chunks = chunks or []
+        self.error = error
+
+    async def stream_chat(self, *, messages: list[dict[str, Any]], model: str) -> AsyncIterator[str]:
+        del messages, model
+        if self.error is not None:
+            raise self.error
+
+        for chunk in self.chunks:
+            yield chunk
+
+    async def request_chat(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        stream: bool = False,
+    ) -> str:
+        del messages, model, stream
+        if self.error is not None:
+            raise self.error
+        return "".join(self.chunks)
+
+
+@pytest_asyncio.fixture
+async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'chat-stream.db'}"
+    engine, session_factory = create_engine_and_session_factory(database_url)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    async def override_get_db_session() -> AsyncIterator:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_get_db_session
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+    app.dependency_overrides.clear()
+    await engine.dispose()
+
+
+def parse_sse_events(raw_text: str) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+
+    for block in raw_text.strip().split("\n\n"):
+        event_name = ""
+        data = ""
+
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event_name = line.removeprefix("event:").strip()
+            if line.startswith("data:"):
+                data = line.removeprefix("data:").strip()
+
+        if event_name:
+            events.append({"event": event_name, "data": json.loads(data)})
+
+    return events
+
+
+def build_messages(user_content: str = "今天深蹲很累，周五硬拉要改吗？") -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": "SYSTEM_PROMPT"},
+        {"role": "assistant", "content": "先观察疲劳。"},
+        {"role": "user", "content": user_content},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_emits_delta_suggestion_done_and_persists_clean_messages(
+    api_client: AsyncClient,
+):
+    fake_client = FakeDeepSeekClient(
+        [
+            "建议周五硬拉降一点，先保住动作质量。\n",
+            '---JSON---\n{"suggest_plan_update":true,"day":"Friday","summary":"降低硬拉强度"}',
+        ]
+    )
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == [
+        "delta",
+        "delta",
+        "suggestion",
+        "done",
+    ]
+    assert events[0]["data"] == {"text": "建议周五硬拉降一点，先保住动作质量。\n"}
+    assert events[1]["data"] == {
+        "text": '---JSON---\n{"suggest_plan_update":true,"day":"Friday","summary":"降低硬拉强度"}'
+    }
+    assert events[2]["data"] == {
+        "suggestion": {
+            "suggest_plan_update": True,
+            "day": "Friday",
+            "summary": "降低硬拉强度",
+        }
+    }
+    assert events[3]["data"] == {"text": "建议周五硬拉降一点，先保住动作质量。"}
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    stored_messages = messages_response.json()
+
+    assert [(message["role"], message["content"]) for message in stored_messages] == [
+        ("user", "今天深蹲很累，周五硬拉要改吗？"),
+        ("assistant", "建议周五硬拉降一点，先保住动作质量。"),
+    ]
+    assert stored_messages[1]["suggestion"] == events[2]["data"]["suggestion"]
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_emits_error_and_does_not_persist_partial_assistant(
+    api_client: AsyncClient,
+):
+    fake_client = FakeDeepSeekClient(
+        ["半截回复"],
+        error=DeepSeekClientError(
+            "未配置后端 DeepSeek API Key，请在 backend/.env 中设置 DEEPSEEK_API_KEY。",
+            code="missing_api_key",
+        ),
+    )
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == ["error"]
+    assert events[0]["data"]["code"] == "missing_api_key"
+    assert "DeepSeek API Key" in events[0]["data"]["message"]
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+
+    assert messages_response.json() == []
