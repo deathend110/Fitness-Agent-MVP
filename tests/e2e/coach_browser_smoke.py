@@ -54,11 +54,14 @@ WEEKLY_PLAN = {
 UPDATED_WEEKLY_PLAN = {
     **WEEKLY_PLAN,
     "Monday": {
-        **WEEKLY_PLAN["Monday"],
+        "type": "腿日",
         "exercises": [
             {
                 **WEEKLY_PLAN["Monday"]["exercises"][0],
+                "id": "monday-squat-recovery",
                 "sets": 3,
+                "pct": 0.7,
+                "rpe": 7,
                 "note": "浏览器自动化已采纳",
             }
         ],
@@ -78,20 +81,42 @@ def build_chat_history():
     history.append(
         {
             "role": "assistant",
-            "content": "建议先把周一深蹲总量降一组，观察恢复。",
+            "content": "建议把周一改成恢复型腿日，先把疲劳压下来。",
             "suggestion": {
                 "proposalId": "proposal-e2e",
+                "kind": "day_plan_replace",
                 "day": "Monday",
-                "summary": "周一深蹲降低一组，用于验证采纳链路。",
-                "changes": [
-                    {
-                        "action": "update",
-                        "exerciseName": "深蹲",
-                        "field": "sets",
-                        "oldValue": 4,
-                        "newValue": 3,
-                    }
-                ],
+                "summary": "把周一改成恢复型腿日。",
+                "dayPlan": {
+                    "type": "腿日",
+                    "exercises": [
+                        {
+                            "id": "monday-squat-recovery",
+                            "name": "深蹲",
+                            "tier": "main",
+                            "template": {
+                                "loadMode": "percentage",
+                                "ref1RM": "squat",
+                                "setType": "straight",
+                                "sets": 3,
+                                "repsText": "5",
+                            },
+                            "instance": {
+                                "pct": 0.7,
+                                "kg": None,
+                                "rpe": 7,
+                                "note": "浏览器自动化已采纳",
+                            },
+                            "ref1RM": "squat",
+                            "pct": 0.7,
+                            "kg": None,
+                            "sets": 3,
+                            "reps": 5,
+                            "rpe": 7,
+                            "note": "浏览器自动化已采纳",
+                        }
+                    ],
+                },
             },
         }
     )
@@ -290,6 +315,8 @@ def main():
 
         page.get_by_role("button", name="采纳并更新计划").click()
         expect(page.get_by_role("button", name="采纳并更新计划")).not_to_be_visible(timeout=5_000)
+        page.get_by_role("button", name="训练计划").click()
+        expect(page.get_by_text("浏览器自动化已采纳")).to_be_visible(timeout=5_000)
 
         assert commit_calls == [{"proposalId": "proposal-e2e"}], commit_calls
         browser.close()

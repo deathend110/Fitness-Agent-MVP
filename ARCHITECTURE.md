@@ -256,7 +256,7 @@ docs/
 
 - `backend/agent/tool_calling.py`
   - 注册 DeepSeek OpenAI 兼容 tools schema，并用 Pydantic 做二次校验
-  - 当前只开放健身闭环工具：读取档案、周计划、今日日志、轻量指标、搜索 memory、读取上传文件摘要占位
+  - 当前开放健身闭环工具：读取档案、周计划、今日日志、轻量指标、搜索 memory、读取上传文件摘要，以及 `propose_plan_change / propose_day_plan_replace`
   - 工具循环最多 4 轮，超限或参数非法时返回可解释错误并写入 `ToolCallLog`
 
 - `backend/api/memory.py`
@@ -286,10 +286,11 @@ docs/
 - `backend/api/tools.py`
   - 提供 `/api/tools/plan/propose` 与 `/api/tools/plan/commit`
   - proposal 只生成建议卡，不写库；commit 必须来自用户确认路径，并复用计划采纳校验
+  - 当前 proposal 分为 `field_changes` 与 `day_plan_replace` 两类，统一走 `/api/tools/plan/commit` 写回
 
 - `backend/agent/adopt_plan.py`
-  - 负责 AI 计划建议的后端采纳校验、动作字段更新和动作结构归一化
-  - 只支持 `action: "update"`，目标日期、动作名、字段名或 RPE 边界非法时返回失败结果，不写入数据库
+  - 负责 AI 计划建议的后端采纳校验、proposal store、动作字段更新、整日计划替换和动作结构归一化
+  - `field_changes` 继续只支持 `action: "update"`；`day_plan_replace` 支持直接整日覆盖目标日期计划
   - 更新后保留 `template / instance` 与扁平兼容字段，确保后续 AI 建议仍能按字段定位
 
 - `backend/agent/background_worker.py`
@@ -324,6 +325,7 @@ docs/
   - 页面恢复可见且后台任务仍处于 `pending/running` 时，若源 user 消息仍存在，则恢复消息区“正在整理上下文”等待态
   - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
   - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`；proposal 采纳按钮通过 `/api/tools/plan/commit` 写回计划，旧 suggestion 仍兼容 `/api/weekly-plan/adopt`
+  - proposal commit 后通过 `mergeCommittedWeeklyPlan()` 只覆盖后端返回的 7 天计划，保留前端顶层 `weekMeta` 等本地元数据
   - 发送带附件的问题时会先从 `attachedFiles` 生成消息级附件快照，写入本地 `userMessage.attachments`；历史恢复时对旧消息补 `attachments: []` 兼容
 
 - `src/components/coach/CoachLayout.jsx`
@@ -514,12 +516,13 @@ CoachTab
       -> SummaryCompressor 必要时压缩长对话并 StateReinjector 回注当前状态
   -> run_tool_calling_chat()
       -> DeepSeek tools 只读读取档案、计划、日志、指标和 memory
+      -> `propose_plan_change / propose_day_plan_replace` 生成需确认 proposal
       -> 返回文本与 proposal / suggestion
   -> 渲染文本回复与 AdoptCard
   -> 用户点击采纳
   -> POST /api/tools/plan/commit {proposalId} 或兼容 /api/weekly-plan/adopt {day, changes[]}
-  -> 后端校验并写回 WeeklyPlanDay.exercises
-  -> App 使用响应 plan 刷新 weeklyPlan
+  -> 后端校验并写回 WeeklyPlanDay.exercises / 目标日整日计划
+  -> App 使用响应 plan 刷新 weeklyPlan，并保留本地 `weekMeta`
   -> 写回 fitloop_weeklyPlan
 ```
 
@@ -731,6 +734,7 @@ AI 教练页的消息展示补充约束：
 
 - `message.suggestion`：原始领域建议对象，供后端 `/api/weekly-plan/adopt` 等业务链路消费
 - `message.suggestionCard`：由 `buildAdoptCardModel()` 派生的展示模型，只负责渲染采纳卡片
+- `message.suggestion.kind === "day_plan_replace"` 时，卡片会渲染为“单日训练计划预览卡”，展示训练类型与完整动作列表
 - 采纳 / 忽略回调必须继续传递 `message.suggestion`，不能把 `suggestionCard` 冒充为领域 suggestion
 - 采纳卡片展示状态以 `message.suggestion` 为准；本地 `messageMeta` 只承担当前渲染周期的辅助隐藏状态
 
@@ -813,7 +817,7 @@ CoachTab
       -> SummaryCompressor / StateReinjector
   -> run_tool_calling_chat()
       -> ToolRegistry 执行只读工具
-      -> propose_plan_change 生成建议卡，不写库
+      -> propose_plan_change / propose_day_plan_replace 生成建议卡，不写库
   -> DeepSeekClient.stream_chat() / request_chat_with_usage()
   -> parse_ai_response(content)
   -> 保存 ChatMessage(user + assistant)
@@ -832,6 +836,7 @@ CoachTab
 - DeepSeek API Key 只在后端 `.env` 中读取，前端 bundle 不再包含 `VITE_DEEPSEEK_API_KEY` 或 Authorization 直连逻辑
 - AI 回复解析与训练计划写回分离，保留用户最终确认权；只有点击采纳卡片才调用后端写回接口
 - 采纳接口失败时返回原始 plan 并不提交事务；成功时返回完整 plan，前端用该响应刷新页面状态
+- 单日训练计划卡与字段 patch 卡共享同一 proposal store 和 commit 入口，避免前后端出现两套确认协议
 - DeepSeek Context Caching 依赖稳定前缀，`prompt_templates.py` 与 tools schema 不放动态时间戳；真实 hit/miss 由 `UsageRecord` 记录
 - memory 保存用户长期事实，knowledge 保存外部资料或上传文件知识，两者不会混写；单日状态不晋升长期 memory
 - 上传文件只通过 `fileIds` 和摘要进入 Agent，不把本机路径或完整大文件塞进请求
