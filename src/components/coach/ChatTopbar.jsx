@@ -62,13 +62,18 @@ function TopbarIconButton({ ariaLabel, children, onClick, tooltip }) {
         aria-label={ariaLabel}
         className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-fitloop-line/80 bg-white/88 text-slate-500 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-fitloop-orange/35 hover:bg-fitloop-orange/10 hover:text-fitloop-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fitloop-orange/35 focus-visible:ring-offset-2"
         onClick={() => onClick?.()}
-        title={tooltip}
         type="button"
       >
         {children}
       </button>
-      <span className="pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-10 whitespace-nowrap rounded-xl bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium text-white opacity-0 shadow-lg transition duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
-        {tooltip}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 top-[calc(100%+0.7rem)] z-20 origin-top-right -translate-y-1 scale-95 whitespace-nowrap rounded-2xl border border-white/70 bg-white/88 px-3 py-2 text-[11px] font-semibold tracking-[0.01em] text-slate-600 opacity-0 shadow-[0_14px_38px_rgba(15,23,42,0.12),0_2px_10px_rgba(251,146,60,0.10)] ring-1 ring-fitloop-orange/10 backdrop-blur-xl transition duration-200 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100 group-focus-within:opacity-100"
+      >
+        <span className="absolute -top-1.5 right-4 h-3 w-3 rotate-45 rounded-[4px] border-l border-t border-white/70 bg-white/88 ring-1 ring-fitloop-orange/10" />
+        <span className="relative block bg-gradient-to-r from-slate-600 to-slate-500 bg-clip-text text-transparent">
+          {tooltip}
+        </span>
       </span>
     </div>
   )

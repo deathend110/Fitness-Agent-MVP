@@ -166,8 +166,9 @@ test('ChatTopbar 会为右上角操作按钮提供 SVG 图标和 hover 提示', 
   const source = readFileSync('src/components/coach/ChatTopbar.jsx', 'utf-8')
 
   assert.match(source, /tooltip=/)
-  assert.match(source, /title=\{tooltip\}/)
   assert.match(source, /group-hover:opacity-100/)
+  assert.match(source, /backdrop-blur-xl/)
+  assert.match(source, /rotate-45/)
   assert.match(source, /<svg/)
   assert.doesNotMatch(source, /⌫|⇩/)
   assert.match(source, /onOpenModelConfig/)
