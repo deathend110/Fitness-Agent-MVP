@@ -82,6 +82,45 @@ function MarkdownMessage({ content = '' }) {
           )
         }
 
+        if (block.type === 'divider') {
+          return <hr className="border-0 border-t border-fitloop-line/80" key={key} />
+        }
+
+        if (block.type === 'table') {
+          return (
+            <div className="overflow-x-auto rounded-lg border border-fitloop-line/80 bg-white" key={key}>
+              <table className="min-w-full border-collapse text-left text-xs leading-5 text-slate-700">
+                <thead className="bg-slate-50/90">
+                  <tr>
+                    {block.headers.map((header, headerIndex) => (
+                      <th
+                        className={`border-b border-fitloop-line/80 px-3 py-2 font-semibold text-slate-900 ${getTableAlignClass(block.alignments[headerIndex])}`}
+                        key={`${key}-header-${headerIndex}`}
+                      >
+                        <InlineSegments segments={header} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr className="odd:bg-white even:bg-slate-50/40" key={`${key}-row-${rowIndex}`}>
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          className={`border-t border-fitloop-line/60 px-3 py-2 align-top ${getTableAlignClass(block.alignments[cellIndex])}`}
+                          key={`${key}-cell-${rowIndex}-${cellIndex}`}
+                        >
+                          <InlineSegments segments={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+
         return (
           <p className="whitespace-pre-wrap" key={key}>
             <InlineSegments segments={block.children} />
@@ -90,6 +129,16 @@ function MarkdownMessage({ content = '' }) {
       })}
     </div>
   )
+}
+
+function getTableAlignClass(alignment = 'left') {
+  if (alignment === 'center') {
+    return 'text-center'
+  }
+  if (alignment === 'right') {
+    return 'text-right'
+  }
+  return 'text-left'
 }
 
 export default MarkdownMessage

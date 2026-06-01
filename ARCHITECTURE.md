@@ -348,8 +348,8 @@ docs/
 
 - `src/components/coach/MarkdownMessage.jsx` 与 `src/utils/markdownMessage.js`
   - 负责 assistant 回复的安全 Markdown 渲染
-  - 行级解析标题、列表、加粗、行内代码和代码块，不使用 `dangerouslySetInnerHTML`
-  - 危险链接协议会降级为文本，训练表格等复杂 Markdown 当前按等宽文本兜底
+  - 行级解析标题、列表、加粗、行内代码、代码块、表格和分割线，不使用 `dangerouslySetInnerHTML`
+  - 表格单元格继续复用 inline markdown 解析；危险链接协议会降级为文本，避免 assistant 回复把原始 HTML 或脚本注入页面
 
 - `src/components/coach/MessageBubble.jsx`
   - 负责渲染用户消息、AI 消息、流式回复和建议卡挂载位

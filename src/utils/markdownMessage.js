@@ -44,9 +44,15 @@ export function parseMarkdownMessage(markdown = '') {
       continue
     }
 
+    if (isDividerLine(line)) {
+      blocks.push({ type: 'divider' })
+      index += 1
+      continue
+    }
+
     const tableBlock = readTableBlock(lines, index)
     if (tableBlock) {
-      blocks.push({ type: 'code', text: tableBlock.text })
+      blocks.push(tableBlock.block)
       index = tableBlock.nextIndex
       continue
     }
@@ -118,9 +124,11 @@ function isBlockStart(line = '') {
   const trimmed = line.trim()
   return (
     trimmed.startsWith('```') ||
+    isDividerLine(trimmed) ||
     /^#{1,3}\s+/.test(trimmed) ||
     /^[-*]\s+/.test(trimmed) ||
-    /^\d+\.\s+/.test(trimmed)
+    /^\d+\.\s+/.test(trimmed) ||
+    isTableStartCandidate(trimmed)
   )
 }
 
@@ -150,20 +158,83 @@ function readListBlock(lines, startIndex) {
 }
 
 function readTableBlock(lines, startIndex) {
-  if (!lines[startIndex].includes('|')) {
+  if (!isTableStartCandidate(lines[startIndex])) {
     return null
   }
 
-  const tableLines = []
-  let index = startIndex
-  while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
-    tableLines.push(lines[index])
+  const headerCells = splitTableRow(lines[startIndex])
+  const separatorCells = splitTableRow(lines[startIndex + 1] || '')
+
+  if (!headerCells.length || !separatorCells.length || headerCells.length !== separatorCells.length) {
+    return null
+  }
+
+  const alignments = separatorCells.map(parseTableAlignment)
+  if (alignments.some((alignment) => alignment === null)) {
+    return null
+  }
+
+  const rows = []
+  let index = startIndex + 2
+
+  while (index < lines.length) {
+    const currentLine = lines[index]
+    if (!currentLine.trim() || !isTableStartCandidate(currentLine)) {
+      break
+    }
+
+    const rowCells = splitTableRow(currentLine)
+    if (!rowCells.length) {
+      break
+    }
+
+    rows.push(normalizeTableCells(rowCells, headerCells.length).map((cell) => parseInlineMarkdown(cell)))
     index += 1
   }
 
-  if (tableLines.length < 2) {
-    return null
+  return {
+    block: {
+      type: 'table',
+      headers: normalizeTableCells(headerCells, headerCells.length).map((cell) => parseInlineMarkdown(cell)),
+      alignments,
+      rows,
+    },
+    nextIndex: index,
+  }
+}
+
+function isDividerLine(line = '') {
+  return /^([-*_])(?:\s*\1){2,}$/.test(line.trim())
+}
+
+function isTableStartCandidate(line = '') {
+  return line.trim().includes('|')
+}
+
+function splitTableRow(line = '') {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|')) {
+    return []
   }
 
-  return { text: tableLines.join('\n'), nextIndex: index }
+  const normalized = trimmed.replace(/^\|/, '').replace(/\|$/, '')
+  return normalized.split('|').map((cell) => cell.trim())
+}
+
+function parseTableAlignment(cell = '') {
+  const normalized = cell.replace(/\s+/g, '')
+  if (!/^:?-+:?$/.test(normalized)) {
+    return null
+  }
+  if (normalized.startsWith(':') && normalized.endsWith(':')) {
+    return 'center'
+  }
+  if (normalized.endsWith(':')) {
+    return 'right'
+  }
+  return 'left'
+}
+
+function normalizeTableCells(cells = [], targetLength = 0) {
+  return Array.from({ length: targetLength }, (_, index) => cells[index] || '')
 }
