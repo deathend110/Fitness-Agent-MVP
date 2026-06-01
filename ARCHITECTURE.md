@@ -98,6 +98,7 @@ backend/
   requirements.txt
 scripts/
   kill-fitloop.ps1
+  kill-repmind.ps1
 ```
 
 ### 测试导入约定
@@ -123,9 +124,11 @@ scripts/
 
 ### 本地运维脚本
 
-- `scripts/kill-fitloop.ps1`
+- `scripts/kill-repmind.ps1`
   - 负责停止当前仓库关联的 `vite / uvicorn / concurrently / uv` 等本地开发进程。
   - 只匹配命令行中包含当前仓库路径或 `RepMind` 标识的进程，避免误杀其他项目。
+- `scripts/kill-fitloop.ps1`
+  - 兼容旧脚本入口，内部直接转发到 `kill-repmind.ps1`，避免历史命令或习惯用法失效。
 
 ### 当前新增前端接口层
 
