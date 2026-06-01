@@ -142,7 +142,7 @@ def main():
         page.get_by_role("button", name="AI 教练").click()
 
         expect(page.get_by_text(USER_MESSAGE)).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("正在整理上下文...")).to_be_visible(timeout=10_000)
+        expect(page.get_by_text("思考中")).to_be_visible(timeout=10_000)
         browser.close()
 
 

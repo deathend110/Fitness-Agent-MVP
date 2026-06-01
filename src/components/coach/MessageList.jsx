@@ -72,7 +72,7 @@ function MessageList({
             isStreaming
             message={{
               role: 'assistant',
-              content: streamingText || '正在整理上下文...',
+              content: streamingText || '思考中',
             }}
           />
         ) : null}

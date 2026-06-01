@@ -32,6 +32,13 @@ function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggest
   const handleDismissSuggestion = rawSuggestion
     ? () => onDismissSuggestion?.(rawSuggestion)
     : undefined
+  const bubbleClassName = `max-w-[600px] border text-sm text-slate-800 ${
+    isStreaming && !isUser
+      ? 'rounded-xl border-fitloop-line/80 bg-white px-3 py-2 leading-6 shadow-sm'
+      : isUser
+        ? 'rounded-2xl border-fitloop-orange/20 bg-fitloop-orange/10 px-4 py-3 leading-7'
+        : 'rounded-2xl border-fitloop-line bg-fitloop-canvas px-4 py-3 leading-7'
+  }`
 
   return (
     <article className={`group flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -64,13 +71,7 @@ function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggest
           </div>
         ) : null}
 
-        <div
-          className={`max-w-[600px] rounded-2xl border px-4 py-3 text-sm leading-7 text-slate-800 ${
-            isUser
-              ? 'border-fitloop-orange/20 bg-fitloop-orange/10'
-              : 'border-fitloop-line bg-fitloop-canvas'
-          }`}
-        >
+        <div className={bubbleClassName}>
           {isUser ? (
             <p className="whitespace-pre-wrap">
               {message.content}

@@ -296,7 +296,7 @@ def main():
         page.get_by_role("button", name="AI 教练").click()
 
         expect(page.get_by_text(USER_MESSAGE).first).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("正在整理上下文...")).to_be_visible(timeout=10_000)
+        expect(page.get_by_text("思考中")).to_be_visible(timeout=10_000)
         expect(page.get_by_role("button", name="采纳并更新计划")).to_be_visible()
         coach_scroll = page.locator('main > div[style*="scrollbar-gutter"]')
         expect(coach_scroll).to_be_visible()
@@ -307,7 +307,7 @@ def main():
         page.get_by_role("button", name="我的档案").click()
         page.get_by_role("button", name="AI 教练").click()
 
-        expect(page.get_by_text("正在整理上下文...")).to_be_visible(timeout=10_000)
+        expect(page.get_by_text("思考中")).to_be_visible(timeout=10_000)
         expect(page.get_by_role("button", name="采纳并更新计划")).to_be_visible()
         page.wait_for_function(
             "() => { const el = document.querySelector('main > div[style*=\"scrollbar-gutter\"]'); return !!el && el.scrollTop > 0; }"
