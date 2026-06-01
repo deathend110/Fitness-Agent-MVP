@@ -76,7 +76,13 @@ async def test_lists_models_from_gemini_models_endpoint() -> None:
         async def __aexit__(self, exc_type, exc, tb) -> bool:
             return False
 
-        async def get(self, url: str, *, headers: dict[str, str]):
+        async def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str] | None = None,
+            params: dict[str, str] | None = None,
+        ):
             class Response:
                 status_code = 200
                 is_success = True
@@ -115,6 +121,48 @@ async def test_lists_models_from_gemini_models_endpoint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_normalizes_official_gemini_base_url_and_uses_query_api_key() -> None:
+    request_snapshot: dict[str, object] = {}
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str] | None = None,
+            params: dict[str, str] | None = None,
+        ):
+            request_snapshot["url"] = url
+            request_snapshot["headers"] = headers or {}
+            request_snapshot["params"] = params or {}
+
+            class Response:
+                status_code = 200
+                is_success = True
+
+                def json(self) -> dict[str, list[dict[str, object]]]:
+                    return {"models": []}
+
+            return Response()
+
+    provider = GeminiNativeProvider(client_factory=lambda **_: FakeClient())
+    await provider.list_remote_models(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com",
+    )
+
+    assert request_snapshot["url"] == "https://generativelanguage.googleapis.com/v1beta/models"
+    assert request_snapshot["params"] == {"key": "AIza-test"}
+    assert request_snapshot["headers"] == {}
+
+
+@pytest.mark.asyncio
 async def test_list_remote_models_maps_http_error_to_provider_adapter_error() -> None:
     class FakeClient:
         async def __aenter__(self) -> "FakeClient":
@@ -123,7 +171,13 @@ async def test_list_remote_models_maps_http_error_to_provider_adapter_error() ->
         async def __aexit__(self, exc_type, exc, tb) -> bool:
             return False
 
-        async def get(self, url: str, *, headers: dict[str, str]):
+        async def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str] | None = None,
+            params: dict[str, str] | None = None,
+        ):
             class Response:
                 status_code = 403
                 is_success = False

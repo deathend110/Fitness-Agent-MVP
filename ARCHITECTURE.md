@@ -670,6 +670,8 @@ FileAttachmentTray
 ```text
 Settings / backend/.env
   -> MODEL_PROVIDER_CONFIG_PATH
+  -> HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY
+      -> backend/config.py 同步回进程环境，供 httpx 访问 Gemini 等海外模型时复用
   -> backend/model_config/service.py
       -> 优先读取 backend/config/model_providers.json
       -> 缺失时按 deepseek_* 旧字段 bootstrap 首份 JSON

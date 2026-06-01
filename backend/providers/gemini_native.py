@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
 from backend.providers.base import ProviderAdapter, ProviderAdapterError
+
+DEFAULT_GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+OFFICIAL_GEMINI_API_HOST = "generativelanguage.googleapis.com"
 
 
 class GeminiNativeProvider(ProviderAdapter):
@@ -14,15 +18,16 @@ class GeminiNativeProvider(ProviderAdapter):
         super().__init__(client_factory=client_factory)
 
     async def list_remote_models(self, *, api_key: str, base_url: str) -> list[dict[str, Any]]:
+        normalized_base_url = self._normalize_base_url(base_url)
         try:
             async with self.client_factory() as client:
                 response = await client.get(
-                    f"{base_url.rstrip('/')}/models",
-                    headers={"x-goog-api-key": api_key},
+                    f"{normalized_base_url}/models",
+                    params={"key": api_key},
                 )
         except httpx.HTTPError as exc:
             raise ProviderAdapterError(
-                f"Gemini 模型列表请求失败：{exc}",
+                f"Gemini 模型列表请求失败（{exc.__class__.__name__}）：{exc}",
                 code="network_error",
             ) from exc
 
@@ -53,6 +58,16 @@ class GeminiNativeProvider(ProviderAdapter):
                 }
             )
         return discovered
+
+    def _normalize_base_url(self, base_url: str) -> str:
+        normalized = str(base_url or "").strip().rstrip("/")
+        if not normalized:
+            return DEFAULT_GEMINI_API_BASE_URL
+
+        parsed = urlparse(normalized)
+        if parsed.netloc == OFFICIAL_GEMINI_API_HOST and parsed.path.rstrip("/") in {"", "/"}:
+            return DEFAULT_GEMINI_API_BASE_URL
+        return normalized
 
     def build_tool_schema(self, tools: list[dict[str, Any]]) -> dict[str, Any]:
         return {

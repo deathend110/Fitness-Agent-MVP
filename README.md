@@ -106,6 +106,8 @@ VITE_API_BASE_URL=http://127.0.0.1:8000/api
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db
 MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
+HTTP_PROXY=
+HTTPS_PROXY=
 ```
 
 配置说明：
@@ -117,6 +119,7 @@ MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
 - `GET /api/models` 现在返回带 `provider::remoteModel` 形式的 `modelRef`，聊天、草稿和后台任务会统一按这个引用解析真实模型
 - `GET/PUT /api/model-config` 会读取和保存脱敏后的多供应商模型配置；保存后后端会立即刷新运行时缓存，不需要重启服务
 - `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表
+- 如果本机访问 Gemini 依赖代理，请把 `HTTP_PROXY` / `HTTPS_PROXY` 写入 `backend/.env`；后端启动时会自动同步到运行进程，避免只在某个终端窗口里临时设代理导致 Gemini 连不上
 - 保存模型配置时会保留真实 `apiKey`，但返回给前端的是脱敏预览值
 - 未配置 API Key 时，除 AI 教练外的大部分本地功能仍可使用
 - 不要提交真实 API Key

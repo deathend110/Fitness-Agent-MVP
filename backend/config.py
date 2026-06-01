@@ -1,3 +1,5 @@
+import os
+from collections.abc import MutableMapping
 from functools import lru_cache
 from pathlib import Path
 
@@ -7,6 +9,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_DIR = Path(__file__).resolve().parent
+PROXY_ENV_FIELD_MAP = {
+    "http_proxy": "HTTP_PROXY",
+    "https_proxy": "HTTPS_PROXY",
+    "all_proxy": "ALL_PROXY",
+    "no_proxy": "NO_PROXY",
+}
 
 
 def resolve_backend_relative_path(raw_path: str) -> str:
@@ -74,6 +82,12 @@ class Settings(BaseSettings):
     default_thinking_enabled: bool = False
     default_thinking_budget: str = "auto"
     deepseek_timeout_seconds: float = 30.0
+    # Gemini 等海外模型在部分网络环境下必须经过代理，这里显式接入 backend/.env，
+    # 避免只在启动终端里临时设置代理时，后端重启或换启动方式后又悄悄失效。
+    http_proxy: str = ""
+    https_proxy: str = ""
+    all_proxy: str = ""
+    no_proxy: str = ""
 
     @model_validator(mode="after")
     def normalize_local_paths(self) -> "Settings":
@@ -88,10 +102,30 @@ class Settings(BaseSettings):
         return self
 
 
+def apply_runtime_proxy_environment(
+    settings: Settings,
+    env: MutableMapping[str, str] | None = None,
+) -> dict[str, str]:
+    """把 settings 中声明的代理同步回进程环境，确保 httpx 等库能稳定读取。"""
+
+    target_env = env if env is not None else os.environ
+    applied: dict[str, str] = {}
+    for field_name, env_name in PROXY_ENV_FIELD_MAP.items():
+        raw_value = getattr(settings, field_name, "")
+        proxy_value = str(raw_value or "").strip()
+        if not proxy_value:
+            continue
+        target_env[env_name] = proxy_value
+        target_env[env_name.lower()] = proxy_value
+        applied[env_name] = proxy_value
+    return applied
+
+
 @lru_cache
 def get_settings() -> Settings:
     # 缓存配置对象，避免应用启动后重复读取环境变量。
     settings = Settings()
+    apply_runtime_proxy_environment(settings)
     Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.model_provider_config_path).parent.mkdir(parents=True, exist_ok=True)
