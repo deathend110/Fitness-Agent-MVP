@@ -4,6 +4,7 @@ import ChatSidebar from '../components/coach/ChatSidebar.jsx'
 import ChatTopbar from '../components/coach/ChatTopbar.jsx'
 import Composer from '../components/coach/Composer.jsx'
 import MessageList from '../components/coach/MessageList.jsx'
+import ModelConfigDialog from '../components/coach/ModelConfigDialog.jsx'
 import { createBackendClient } from '../api/backendClient.js'
 import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import {
@@ -30,6 +31,7 @@ import {
   getCoachEmptyQuestionView,
   getVisibleStreamText,
 } from '../utils/coachView.js'
+import { buildModelRuntimeView, buildProviderConfigView } from '../utils/modelConfigView.js'
 
 function getActiveHistoryItem(historyView, activeSessionId) {
   const items = historyView.groups.flatMap((group) => group.items)
@@ -148,10 +150,51 @@ function hasPendingBackgroundTaskForSession(messages = [], sessionId) {
 
 const BACKGROUND_TASK_STORAGE_KEY = 'fitloop:coach-background-task'
 const ACTIVE_COACH_SESSION_STORAGE_KEY = 'fitloop:coach-active-session-id'
-const FALLBACK_MODEL_CONFIG = {
-  defaultModel: 'deepseek-v4-flash',
-  models: [{ id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', supportsThinking: true }],
+const FALLBACK_MODEL_CONFIG = buildModelRuntimeView({
+  defaultModelRef: 'provider_deepseek_default::deepseek-v4-flash',
+  models: [
+    {
+      id: 'provider_deepseek_default::deepseek-v4-flash',
+      label: 'DeepSeek 默认账号 / DeepSeek V4 Flash',
+      providerId: 'provider_deepseek_default',
+      providerType: 'openai_compatible',
+      providerLabel: 'DeepSeek 默认账号',
+      remoteModelId: 'deepseek-v4-flash',
+      supportsThinking: true,
+      thinking: {
+        supported: true,
+        canDisable: true,
+        defaultEnabled: false,
+        intensityOptions: [
+          { id: 'standard', label: '标准' },
+          { id: 'deep', label: '深入' },
+        ],
+        defaultIntensity: 'standard',
+      },
+    },
+  ],
   thinking: { enabled: false, budget: 'auto', options: ['off', 'auto', 'max'] },
+})
+
+function resolveThinkingState(models = [], selectedModel, thinking) {
+  const activeModel = models.find((model) => model.id === selectedModel) || models[0] || null
+  const capability = activeModel?.thinking
+
+  if (!capability?.supported) {
+    return { enabled: false, budget: 'auto' }
+  }
+
+  const nextBudget = thinking?.budget || capability.defaultIntensity || 'standard'
+  const nextEnabled = capability.canDisable === false
+    ? true
+    : typeof thinking?.enabled === 'boolean'
+      ? thinking.enabled
+      : Boolean(capability.defaultEnabled)
+
+  return {
+    enabled: nextEnabled,
+    budget: nextBudget,
+  }
 }
 
 function CoachTab({
@@ -167,10 +210,16 @@ function CoachTab({
   const [draft, setDraft] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [isBackgroundThinking, setIsBackgroundThinking] = useState(false)
+  const [isModelConfigOpen, setIsModelConfigOpen] = useState(false)
+  const [isModelConfigSaving, setIsModelConfigSaving] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
   const [modelConfig, setModelConfig] = useState(FALLBACK_MODEL_CONFIG)
+  const [modelConfigDraft, setModelConfigDraft] = useState(() =>
+    buildProviderConfigView({ version: 1, defaultModelRef: FALLBACK_MODEL_CONFIG.defaultModelRef, providers: [] }),
+  )
+  const [modelConfigError, setModelConfigError] = useState('')
   const [sessions, setSessions] = useState([])
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODEL_CONFIG.defaultModel)
   const [thinking, setThinking] = useState({
@@ -264,7 +313,7 @@ function CoachTab({
           return
         }
         // 当前选择由 draft 接口统一恢复；模型列表只更新可选项，避免慢回包覆盖用户草稿。
-        setModelConfig(config)
+        setModelConfig(buildModelRuntimeView(config))
       })
       .catch(() => {
         if (!ignore) {
@@ -276,6 +325,17 @@ function CoachTab({
       ignore = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!modelConfig.models.some((model) => model.id === selectedModel)) {
+      const nextSelectedModel = modelConfig.defaultModelRef || modelConfig.defaultModel || ''
+      setSelectedModel(nextSelectedModel)
+      setThinking((current) => resolveThinkingState(modelConfig.models, nextSelectedModel, current))
+      return
+    }
+
+    setThinking((current) => resolveThinkingState(modelConfig.models, selectedModel, current))
+  }, [modelConfig, selectedModel])
 
   const loadSessionContent = useCallback(
     async (sessionId) => {
@@ -325,20 +385,14 @@ function CoachTab({
       onChatHistoryChange(nextHistory)
       setIsBackgroundThinking(hasPendingBackgroundTaskForSession(nextHistory, sessionId))
       setDraft(draftPayload?.content || '')
-      setSelectedModel(draftPayload?.model || FALLBACK_MODEL_CONFIG.defaultModel)
-      setThinking(
-        draftPayload?.thinking && Object.keys(draftPayload.thinking).length
-          ? draftPayload.thinking
-          : {
-              enabled: FALLBACK_MODEL_CONFIG.thinking.enabled,
-              budget: FALLBACK_MODEL_CONFIG.thinking.budget,
-            },
-      )
+      const nextSelectedModel = draftPayload?.model || modelConfig.defaultModelRef || modelConfig.defaultModel
+      setSelectedModel(nextSelectedModel)
+      setThinking(resolveThinkingState(modelConfig.models, nextSelectedModel, draftPayload?.thinking))
       setAttachedFiles(attachedFilesResult.filter(Boolean))
       draftHydratedRef.current = true
       return sessionId
     },
-    [onChatHistoryChange],
+    [modelConfig, onChatHistoryChange],
   )
 
   const refreshSessions = useCallback(
@@ -640,6 +694,49 @@ function CoachTab({
     }
   }
 
+  function handleModelChange(nextModelId) {
+    setSelectedModel(nextModelId)
+    setThinking((current) => resolveThinkingState(modelConfig.models, nextModelId, current))
+  }
+
+  async function handleOpenModelConfig() {
+    setModelConfigError('')
+    setIsModelConfigOpen(true)
+
+    try {
+      const client = createBackendClient()
+      const config = await client.getModelConfig()
+      setModelConfigDraft(buildProviderConfigView(config))
+    } catch (error) {
+      setModelConfigError(error?.message || '读取模型配置失败，请稍后重试。')
+    }
+  }
+
+  async function handleSaveModelConfig(nextConfig) {
+    const client = createBackendClient()
+    setIsModelConfigSaving(true)
+    setModelConfigError('')
+
+    try {
+      const savedConfig = await client.saveModelConfig(nextConfig)
+      const runtimeConfig = buildModelRuntimeView(await client.getModels())
+      const nextSelectedModel = runtimeConfig.models.some((model) => model.id === selectedModel)
+        ? selectedModel
+        : runtimeConfig.defaultModelRef || runtimeConfig.defaultModel
+
+      setModelConfigDraft(buildProviderConfigView(savedConfig))
+      setModelConfig(runtimeConfig)
+      setSelectedModel(nextSelectedModel)
+      setThinking((current) => resolveThinkingState(runtimeConfig.models, nextSelectedModel, current))
+      setIsModelConfigOpen(false)
+      setErrorMessage('')
+    } catch (error) {
+      setModelConfigError(error?.message || '保存模型配置失败，请稍后重试。')
+    } finally {
+      setIsModelConfigSaving(false)
+    }
+  }
+
   async function handleSelectSession(sessionId) {
     if (isSending || !Number.isInteger(sessionId)) {
       return
@@ -879,7 +976,7 @@ function CoachTab({
           modelOptions={modelConfig.models}
           onDraftChange={setDraft}
           onFilesSelected={handleFilesSelected}
-          onModelChange={setSelectedModel}
+          onModelChange={handleModelChange}
           onRemoveFile={(fileId) =>
             setAttachedFiles((current) => current.filter((file) => file.id !== fileId))
           }
@@ -916,10 +1013,20 @@ function CoachTab({
           }
           onClear={handleNewChat}
           onExport={handleExportConversation}
+          onOpenModelConfig={handleOpenModelConfig}
           title={activeHistoryItem?.isPlaceholder ? '新的对话' : activeHistoryItem?.title || '新的对话'}
         />
       }
-    />
+    >
+      <ModelConfigDialog
+        errorMessage={modelConfigError}
+        onClose={() => setIsModelConfigOpen(false)}
+        onSave={handleSaveModelConfig}
+        open={isModelConfigOpen}
+        saving={isModelConfigSaving}
+        value={modelConfigDraft}
+      />
+    </CoachLayout>
   )
 }
 

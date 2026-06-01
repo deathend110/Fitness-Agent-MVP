@@ -178,7 +178,10 @@ src/
       MarkdownMessage.jsx
       MessageBubble.jsx
       MessageList.jsx
+      ModelConfigDialog.jsx
       ModelSelector.jsx
+      ProviderConfigEditor.jsx
+      ProviderModelPicker.jsx
     plan-grid/
       PlanWeekGrid.jsx
       PlanWeekGridColumn.jsx
@@ -206,6 +209,7 @@ src/
     defaultData.js
     exerciseForm.js
     markdownMessage.js
+    modelConfigView.js
     planExerciseCard.js
     planHeader.js
     planLayout.js
@@ -348,6 +352,7 @@ docs/
   - 负责 AI 教练页状态协调
   - 继续管理 `sessions / activeSessionId / draft / errorMessage / isSending / streamingText`
   - 负责发送、流式回退、建议采纳 / 忽略、新建对话和真实会话选中态
+  - 现在同时协调模型运行时列表、模型设置弹窗、配置保存后的模型热刷新，以及会话草稿里的 `modelRef`
   - 首次进入会加载后端会话列表，优先恢复 `fitloop:coach-active-session-id`，否则打开最近会话
   - 新建对话会调用 `POST /api/chat/sessions` 创建真实后端会话，旧会话不会被清空
   - 切换会话会调用 `GET /api/chat/sessions/{id}/messages` 和 `GET /api/chat/sessions/{id}/draft` 恢复消息与草稿
@@ -369,7 +374,7 @@ docs/
   - 当前消费 `buildCoachSessionView()` 生成的真实会话展示模型
 
 - `src/components/coach/ChatTopbar.jsx`
-  - 负责渲染当前对话标题、模型 badge、新建和导出操作
+  - 负责渲染当前对话标题、模型 badge、新建、导出和模型设置入口
   - 顶部不再承载“上下文”切换
 
 - `src/components/coach/MessageList.jsx`
@@ -392,6 +397,18 @@ docs/
 - `src/components/coach/ModelSelector.jsx`
   - 负责模型下拉和 thinking 开关/强度控制
   - 只消费后端 `/api/models` 返回的模型能力，不在前端自行推断支持情况
+  - 新版会优先读取模型级 `thinking` 能力和强度选项，兼容不同 provider 的默认思考设置
+
+- `src/components/coach/ModelConfigDialog.jsx`
+  - 负责模型设置弹窗，承接 provider 列表编辑、默认模型选择和保存动作
+  - 当前版本支持在页面内维护多 provider 的基础字段和 selectedModels 列表
+
+- `src/components/coach/ProviderConfigEditor.jsx` 与 `src/components/coach/ProviderModelPicker.jsx`
+  - 把单个 provider 的字段编辑与模型列表维护拆开，避免 `CoachTab` 直接承担大表单逻辑
+
+- `src/utils/modelConfigView.js`
+  - 负责把后端模型运行时返回值与脱敏配置文档映射成前端可直接消费的视图模型
+  - 统一生成 `modelRef`、provider 标签、默认模型下拉项与模型级 thinking 能力
 
 - `src/components/coach/FileAttachmentTray.jsx`
   - 负责文件选择、上传状态、附件 chip 和删除交互

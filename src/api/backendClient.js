@@ -187,6 +187,18 @@ export function createBackendClient(options = {}) {
     getModels({ signal } = {}) {
       return request('/models', { signal })
     },
+    getModelConfig({ signal } = {}) {
+      return request('/model-config', { signal })
+    },
+    saveModelConfig(payload, { signal } = {}) {
+      return request('/model-config', { method: 'PUT', body: payload, signal })
+    },
+    testProviderConnection(payload, { signal } = {}) {
+      return request('/model-config/providers/test', { method: 'POST', body: payload, signal })
+    },
+    discoverProviderModels(payload, { signal } = {}) {
+      return request('/model-config/providers/discover-models', { method: 'POST', body: payload, signal })
+    },
     getDailyMetricsSummary(query = {}, { signal } = {}) {
       return request('/metrics/daily-summary', { query, signal })
     },

@@ -7,9 +7,21 @@ function ModelSelector({
   thinking = { enabled: false, budget: 'auto' },
 }) {
   const activeModel = models.find((model) => model.id === selectedModel) || models[0] || null
-  const supportsThinking = Boolean(activeModel?.supportsThinking)
-  const thinkingEnabled = Boolean(thinking?.enabled && supportsThinking)
-  const thinkingBudget = thinking?.budget || 'auto'
+  const thinkingCapability = activeModel?.thinking || {
+    supported: Boolean(activeModel?.supportsThinking),
+    canDisable: true,
+    defaultEnabled: false,
+    intensityOptions: [],
+    defaultIntensity: 'auto',
+  }
+  const supportsThinking = Boolean(thinkingCapability.supported)
+  const canDisableThinking = Boolean(thinkingCapability.canDisable ?? true)
+  const thinkingEnabled = supportsThinking
+    ? canDisableThinking
+      ? Boolean(thinking?.enabled)
+      : true
+    : false
+  const thinkingBudget = thinking?.budget || thinkingCapability.defaultIntensity || 'auto'
 
   function updateThinking(nextPatch) {
     onThinkingChange?.({
@@ -40,16 +52,20 @@ function ModelSelector({
 
       {supportsThinking ? (
         <div className="inline-flex h-8 items-center gap-2 rounded-md border border-fitloop-line bg-fitloop-canvas px-2">
-          <label className="inline-flex items-center gap-1">
-            <input
-              checked={thinkingEnabled}
-              className="h-3.5 w-3.5 accent-fitloop-orange"
-              disabled={disabled}
-              onChange={(event) => updateThinking({ enabled: event.target.checked })}
-              type="checkbox"
-            />
-            <span>思考</span>
-          </label>
+          {canDisableThinking ? (
+            <label className="inline-flex items-center gap-1">
+              <input
+                checked={thinkingEnabled}
+                className="h-3.5 w-3.5 accent-fitloop-orange"
+                disabled={disabled}
+                onChange={(event) => updateThinking({ enabled: event.target.checked })}
+                type="checkbox"
+              />
+              <span>思考</span>
+            </label>
+          ) : (
+            <span className="inline-flex items-center gap-1 font-medium text-slate-600">思考</span>
+          )}
           {thinkingEnabled ? (
             <select
               aria-label="思考强度"
@@ -58,8 +74,18 @@ function ModelSelector({
               onChange={(event) => updateThinking({ budget: event.target.value })}
               value={thinkingBudget}
             >
-              <option value="auto">auto</option>
-              <option value="max">max</option>
+              {thinkingCapability.intensityOptions.length ? (
+                thinkingCapability.intensityOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label || option.id}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="auto">auto</option>
+                  <option value="max">max</option>
+                </>
+              )}
             </select>
           ) : null}
         </div>

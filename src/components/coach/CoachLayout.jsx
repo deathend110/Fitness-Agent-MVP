@@ -1,6 +1,6 @@
-function CoachLayout({ sidebar, topbar, messages, composer }) {
+function CoachLayout({ sidebar, topbar, messages, composer, children = null }) {
   return (
-    <div className="flex h-full overflow-hidden bg-fitloop-canvas">
+    <div className="relative flex h-full overflow-hidden bg-fitloop-canvas">
       <aside className="hidden h-full w-[230px] shrink-0 overflow-hidden border-r border-fitloop-line bg-[#f0f3fd] lg:flex lg:flex-col">
         {sidebar}
       </aside>
@@ -20,6 +20,7 @@ function CoachLayout({ sidebar, topbar, messages, composer }) {
           {composer}
         </footer>
       </section>
+      {children}
     </div>
   )
 }

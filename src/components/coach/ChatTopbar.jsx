@@ -36,6 +36,25 @@ function ExportChatIcon() {
   )
 }
 
+function SettingsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="m10.7 4.5.4-1.1a1 1 0 0 1 1.9 0l.4 1.1a1 1 0 0 0 .9.6l1.1.1a1 1 0 0 1 .6 1.7l-.8.8a1 1 0 0 0-.3 1l.2 1.1a1 1 0 0 1-1.5 1l-.9-.5a1 1 0 0 0-1 0l-.9.5a1 1 0 0 1-1.5-1l.2-1.1a1 1 0 0 0-.3-1l-.8-.8a1 1 0 0 1 .6-1.7l1.1-.1a1 1 0 0 0 .9-.6ZM12 9.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2ZM5 14.6l.7-.4a1 1 0 0 1 1 0l.7.4a1 1 0 0 0 1.5-1.1l-.2-.8a1 1 0 0 1 .3-1l.6-.6a1 1 0 0 0-.6-1.7l-.8-.1a1 1 0 0 1-.8-.6l-.3-.8a1 1 0 0 0-1.9 0l-.3.8a1 1 0 0 1-.8.6l-.8.1a1 1 0 0 0-.6 1.7l.6.6a1 1 0 0 1 .3 1l-.2.8A1 1 0 0 0 5 14.6Zm13.3-.4.7.4a1 1 0 0 0 1.5-1.1l-.2-.8a1 1 0 0 1 .3-1l.6-.6a1 1 0 0 0-.6-1.7l-.8-.1a1 1 0 0 1-.8-.6l-.3-.8a1 1 0 0 0-1.9 0l-.3.8a1 1 0 0 1-.8.6l-.8.1a1 1 0 0 0-.6 1.7l.6.6a1 1 0 0 1 .3 1l-.2.8a1 1 0 0 0 1.5 1.1l.7-.4a1 1 0 0 1 1 0ZM12 19.5a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.4"
+      />
+    </svg>
+  )
+}
+
 function TopbarIconButton({ ariaLabel, children, onClick, tooltip }) {
   return (
     <div className="group relative">
@@ -57,6 +76,7 @@ function TopbarIconButton({ ariaLabel, children, onClick, tooltip }) {
 
 function ChatTopbar({
   modelLabel = 'DeepSeek v4',
+  onOpenModelConfig,
   title = '新的对话',
   onClear,
   onExport,
@@ -74,6 +94,13 @@ function ChatTopbar({
       </div>
 
       <div className="flex items-center gap-2">
+        <TopbarIconButton
+          ariaLabel="模型设置"
+          onClick={onOpenModelConfig}
+          tooltip="配置模型供应商与可用模型"
+        >
+          <SettingsIcon />
+        </TopbarIconButton>
         <TopbarIconButton
           ariaLabel="清除对话"
           onClick={onClear}
