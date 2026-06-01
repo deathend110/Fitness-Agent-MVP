@@ -1,8 +1,8 @@
-# FitLoop MVP 最终验收记录
+# RepMind MVP 最终验收记录
 
 ## 1. 验收范围
 
-本文档记录 RepMind / FitLoop MVP 在 Sprint 6 完成后的最终验收结果，覆盖：
+本文档记录 RepMind MVP 在 Sprint 6 完成后的最终验收结果，覆盖：
 
 - 自动化单元测试与构建验证
 - Task 7.1 核心成功路径验收

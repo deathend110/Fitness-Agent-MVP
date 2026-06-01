@@ -16,7 +16,7 @@ def test_stable_system_prompt_does_not_change_between_user_inputs() -> None:
     )
 
     assert first.messages[0] == second.messages[0]
-    assert "FitLoop" in first.messages[0]["content"]
+    assert "RepMind" in first.messages[0]["content"]
     assert "当前时间" not in first.messages[0]["content"]
     assert "今天深蹲" not in first.messages[0]["content"]
 

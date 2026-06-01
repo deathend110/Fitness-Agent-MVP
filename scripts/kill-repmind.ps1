@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $processNames = @('node.exe', 'python.exe', 'pythonw.exe', 'uv.exe')
 $matchPatterns = @(
-    '*Fitness Agent MVP*',
+    '*RepMind*',
     "*$projectRoot*"
 )
 
@@ -41,11 +41,11 @@ function Get-ProjectProcesses {
 $projectProcesses = @(Get-ProjectProcesses)
 
 if (-not $projectProcesses.Count) {
-    Write-Host 'No FitLoop node/python/uv processes were found.'
+    Write-Host 'No RepMind node/python/uv processes were found.'
     exit 0
 }
 
-Write-Host 'Stopping these FitLoop-related processes:'
+Write-Host 'Stopping these RepMind-related processes:'
 $projectProcesses |
     Select-Object ProcessId, Name, CommandLine |
     Format-Table -AutoSize
@@ -73,7 +73,7 @@ if ($remainingProcesses.Count) {
 }
 
 if ($stoppedIds.Count) {
-    Write-Host "Stopped $($stoppedIds.Count) FitLoop-related process(es)."
+    Write-Host "Stopped $($stoppedIds.Count) RepMind-related process(es)."
     exit 0
 }
 

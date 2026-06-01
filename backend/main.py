@@ -44,7 +44,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     set_provider_runtime(None)
 
 
-app = FastAPI(title="FitLoop Backend", lifespan=lifespan)
+app = FastAPI(title="RepMind Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

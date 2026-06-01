@@ -85,7 +85,7 @@
 
 - **估时**：45 分钟
 - **依赖**：Task 4.5
-- **目标**：完成 FitLoop MVP 的核心闭环。
+- **目标**：完成 RepMind MVP 的核心闭环。
 - **主要操作**：
   - 在 `CoachTab.jsx` 或独立工具函数中实现 `adoptPlanChange(day, changes)`。
   - 从 `fitloop_weeklyPlan` 找到目标日期和动作。

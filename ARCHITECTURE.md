@@ -1,4 +1,4 @@
-﻿# FitLoop MVP 架构说明
+﻿# RepMind MVP 架构说明
 
 本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 聊天代理与后台思考、Phase 3 后端 Agent 上下文编排、Phase 4 文件体验与模型配置、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
 
@@ -125,7 +125,7 @@ scripts/
 
 - `scripts/kill-fitloop.ps1`
   - 负责停止当前仓库关联的 `vite / uvicorn / concurrently / uv` 等本地开发进程。
-  - 只匹配命令行中包含当前仓库路径或 `Fitness Agent MVP` 标识的进程，避免误杀其他项目。
+  - 只匹配命令行中包含当前仓库路径或 `RepMind` 标识的进程，避免误杀其他项目。
 
 ### 当前新增前端接口层
 

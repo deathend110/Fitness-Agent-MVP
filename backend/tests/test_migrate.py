@@ -36,7 +36,7 @@ async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
 
 def build_backup_payload() -> dict:
     return {
-        "app": "fitloop-mvp",
+        "app": "repmind-mvp",
         "version": 1,
         "exportedAt": "2026-05-31T11:30:00.000Z",
         "profile": {

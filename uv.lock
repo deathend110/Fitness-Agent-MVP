@@ -104,7 +104,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fitloop-mvp"
+name = "repmind-mvp"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

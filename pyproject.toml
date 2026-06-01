@@ -1,7 +1,7 @@
 [project]
-name = "fitloop-mvp"
+name = "repmind-mvp"
 version = "0.1.0"
-description = "FitLoop MVP 的本地 Python 依赖管理配置"
+description = "RepMind MVP 的本地 Python 依赖管理配置"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

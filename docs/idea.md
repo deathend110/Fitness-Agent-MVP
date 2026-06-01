@@ -1,4 +1,4 @@
-# idea.md — FitLoop
+# idea.md — RepMind
 
 ## 一句话问题
 

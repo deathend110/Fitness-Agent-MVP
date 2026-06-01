@@ -8,7 +8,7 @@ function assertObject(value, fieldName) {
 
 export function buildBackupPayload(appState, exportedAt = new Date().toISOString()) {
   return {
-    app: 'fitloop-mvp',
+    app: 'repmind-mvp',
     version: 1,
     exportedAt,
     profile: appState.profile,
@@ -19,7 +19,7 @@ export function buildBackupPayload(appState, exportedAt = new Date().toISOString
 }
 
 export function buildBackupFilename(exportedAt = new Date().toISOString()) {
-  return `fitloop-backup-${exportedAt.slice(0, 10)}.json`
+  return `repmind-backup-${exportedAt.slice(0, 10)}.json`
 }
 
 // 导入前只做最小字段校验，避免把明显错误的 JSON 覆盖到当前本地数据。

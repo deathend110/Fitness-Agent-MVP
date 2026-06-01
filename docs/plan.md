@@ -1,4 +1,4 @@
-# plan.md — FitLoop
+# plan.md — RepMind
 
 > 把"准备怎么做"说清楚：技术方案 | 目录结构 | 数据/API 草图 | 风险
 

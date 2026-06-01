@@ -17,7 +17,7 @@ test('buildBackupPayload 会打包四类本地数据并附带导出元信息', (
     '2026-05-30T09:00:00.000Z',
   )
 
-  assert.equal(payload.app, 'fitloop-mvp')
+  assert.equal(payload.app, 'repmind-mvp')
   assert.equal(payload.version, 1)
   assert.equal(payload.exportedAt, '2026-05-30T09:00:00.000Z')
   assert.deepEqual(payload.profile, { basic: { name: '小林' } })
@@ -35,7 +35,7 @@ test('parseBackupJson 会拒绝缺少必要字段的备份文件', () => {
 
 test('parseBackupJson 会在结构合法时返回可直接写回本地的数据', () => {
   const nextData = parseBackupJson(`{
-    "app": "fitloop-mvp",
+    "app": "repmind-mvp",
     "version": 1,
     "exportedAt": "2026-05-30T09:00:00.000Z",
     "profile": { "basic": { "name": "小林" } },
@@ -53,5 +53,5 @@ test('parseBackupJson 会在结构合法时返回可直接写回本地的数据'
 })
 
 test('buildBackupFilename 会输出带日期的 json 文件名', () => {
-  assert.equal(buildBackupFilename('2026-05-30T09:00:00.000Z'), 'fitloop-backup-2026-05-30.json')
+  assert.equal(buildBackupFilename('2026-05-30T09:00:00.000Z'), 'repmind-backup-2026-05-30.json')
 })

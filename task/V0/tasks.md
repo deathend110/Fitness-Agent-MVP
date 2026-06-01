@@ -1,4 +1,4 @@
-# tasks.md - FitLoop
+# tasks.md - RepMind
 
 > 把“先做什么、后做什么”说清楚：30-60 分钟小任务 | 依赖顺序 | 完成信号
 
@@ -55,7 +55,7 @@
 - **完成信号**：
   - `npm install` 成功。
   - `npm run dev` 能启动本地页面。
-  - 页面显示 FitLoop 初始界面。
+  - 页面显示 RepMind 初始界面。
 - **验证方式**：
   - 浏览器打开本地地址，确认无白屏。
   - 检查 `.env` 已被 `.gitignore` 忽略。
@@ -339,7 +339,7 @@
 
 - **估时**：45 分钟
 - **依赖**：Task 4.5
-- **目标**：完成 FitLoop MVP 的核心闭环。
+- **目标**：完成 RepMind MVP 的核心闭环。
 - **主要操作**：
   - 在 `CoachTab.jsx` 或独立工具函数中实现 `adoptPlanChange(day, changes)`。
   - 从 `fitloop_weeklyPlan` 找到目标日期和动作。

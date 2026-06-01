@@ -1,6 +1,6 @@
-# FitLoop MVP
+# RepMind MVP
 
-FitLoop MVP 是一个本地运行的 AI 健身教练与训练记录应用，用于课程设计中的 Agent-based MVP 展示。项目当前聚焦一条最小但完整的核心闭环：
+RepMind MVP 是一个本地运行的 AI 健身教练与训练记录应用，用于课程设计中的 Agent-based MVP 展示。项目当前聚焦一条最小但完整的核心闭环：
 
 用户档案 -> 训练计划 -> 今日日志 -> AI 教练上下文注入 -> AI 建议 -> 一键采纳并写回训练计划
 
@@ -98,7 +98,7 @@ http://localhost:5173/
 
 - 后端首次启动会自动在 `backend/data/repmind.db` 创建 SQLite 表
 - 浏览器端默认通过 `VITE_API_BASE_URL` 访问本地后端
-- `npm run stop:all` 会调用 `scripts/kill-fitloop.ps1`，只停止命令行中包含当前仓库路径的 `node/python/uv` 相关进程
+- `npm run stop:all` 会调用 `scripts/kill-repmind.ps1`，只停止命令行中包含当前仓库路径的 `node/python/uv` 相关进程
 
 ## API Key 配置
 

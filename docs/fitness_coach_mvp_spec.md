@@ -1,4 +1,4 @@
-# FitLoop MVP — AI 健身顾问项目规划文档
+# RepMind MVP — AI 健身顾问项目规划文档
 
 > 本文档用于指导 AI Agent 完成代码实现。请严格按照数据结构、功能描述和优先级顺序开发。
 
@@ -218,7 +218,7 @@ const delta = todayKcal - TDEE
 
 ```
 ┌────────────────────────────────────────────────────┐
-│  FitLoop                          [我的档案][训练计划][今日日志][AI教练]  │
+│  RepMind                          [我的档案][训练计划][今日日志][AI教练]  │
 └────────────────────────────────────────────────────┘
 ```
 
@@ -698,4 +698,4 @@ README.md 至少包含：
 
 ---
 
-*文档版本：v1.2 | 项目代号：FitLoop | 更新记录：修正 API 为 DeepSeek 原生格式；收敛 MVP 边界（去除 TDEE 看板，trainingNotes 替代 completedExercises）*
+*文档版本：v1.2 | 项目代号：RepMind | 更新记录：修正 API 为 DeepSeek 原生格式；收敛 MVP 边界（去除 TDEE 看板，trainingNotes 替代 completedExercises）*
