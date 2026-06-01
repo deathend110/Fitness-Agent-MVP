@@ -75,7 +75,7 @@ class GeminiNativeProvider(ProviderAdapter):
                 {
                     "name": tool["name"],
                     "description": tool["description"],
-                    "parameters": tool["parameters"],
+                    "parameters": self._sanitize_schema_for_gemini(tool["parameters"]),
                 }
                 for tool in tools
             ]
@@ -114,7 +114,10 @@ class GeminiNativeProvider(ProviderAdapter):
                     "toolName": name,
                     "callId": str(function_call.get("id") or f"{name}-{index}"),
                     "arguments": dict(arguments) if isinstance(arguments, dict) else {},
-                    "rawProviderPayload": part,
+                    "rawProviderPayload": {
+                        "modelContent": content,
+                        "functionCallPart": part,
+                    },
                 }
             )
         return normalized_calls
@@ -125,12 +128,27 @@ class GeminiNativeProvider(ProviderAdapter):
         tool_call: dict[str, Any],
         tool_result: Any,
     ) -> list[dict[str, Any]]:
-        return messages + [
+        updated_messages = list(messages)
+        raw_payload = tool_call.get("rawProviderPayload")
+        model_content = raw_payload.get("modelContent") if isinstance(raw_payload, dict) else None
+        if isinstance(model_content, dict) and not self._has_matching_trailing_model_content(
+            updated_messages,
+            model_content,
+        ):
+            updated_messages.append(
+                {
+                    "role": "model",
+                    "parts": model_content.get("parts", []),
+                }
+            )
+
+        return updated_messages + [
             {
-                "role": "tool",
+                "role": "user",
                 "parts": [
                     {
                         "functionResponse": {
+                            "id": tool_call["callId"],
                             "name": tool_call["toolName"],
                             "response": {"result": tool_result},
                         }
@@ -138,6 +156,30 @@ class GeminiNativeProvider(ProviderAdapter):
                 ],
             }
         ]
+
+    @staticmethod
+    def _has_matching_trailing_model_content(
+        messages: list[dict[str, Any]],
+        model_content: dict[str, Any],
+    ) -> bool:
+        index = len(messages) - 1
+        while index >= 0 and messages[index].get("parts") and messages[index].get("role") == "user":
+            parts = messages[index].get("parts")
+            if (
+                isinstance(parts, list)
+                and parts
+                and isinstance(parts[0], dict)
+                and "functionResponse" in parts[0]
+            ):
+                index -= 1
+                continue
+            break
+
+        if index < 0:
+            return False
+
+        candidate = messages[index]
+        return candidate.get("role") == "model" and candidate.get("parts", []) == model_content.get("parts", [])
 
     def _raise_for_error_response(self, response: Any) -> None:
         if getattr(response, "is_success", False):
@@ -168,3 +210,62 @@ class GeminiNativeProvider(ProviderAdapter):
 
         reason_phrase = getattr(response, "reason_phrase", "")
         return reason_phrase.strip() if isinstance(reason_phrase, str) else ""
+
+    def _sanitize_schema_for_gemini(self, schema: dict[str, Any]) -> dict[str, Any]:
+        defs = schema.get("$defs", {}) if isinstance(schema, dict) else {}
+        sanitized = self._sanitize_schema_node(schema, defs)
+        return sanitized if isinstance(sanitized, dict) else {"type": "object", "properties": {}}
+
+    def _sanitize_schema_node(
+        self,
+        node: Any,
+        defs: dict[str, Any],
+    ) -> Any:
+        if isinstance(node, list):
+            return [self._sanitize_schema_node(item, defs) for item in node]
+
+        if not isinstance(node, dict):
+            return node
+
+        if "$ref" in node:
+            ref_name = str(node["$ref"]).split("/")[-1]
+            resolved = defs.get(ref_name, {})
+            merged = {**resolved, **{key: value for key, value in node.items() if key != "$ref"}}
+            return self._sanitize_schema_node(merged, defs)
+
+        if "anyOf" in node and isinstance(node["anyOf"], list):
+            nullable = any(
+                isinstance(option, dict) and option.get("type") == "null"
+                for option in node["anyOf"]
+            )
+            candidates = [
+                self._sanitize_schema_node(option, defs)
+                for option in node["anyOf"]
+                if not (isinstance(option, dict) and option.get("type") == "null")
+            ]
+            selected = next(
+                (
+                    candidate
+                    for candidate in candidates
+                    if isinstance(candidate, dict) and candidate
+                ),
+                {"type": "string"},
+            )
+            if nullable and isinstance(selected, dict):
+                selected["nullable"] = True
+            return selected
+
+        sanitized: dict[str, Any] = {}
+        for key, value in node.items():
+            if key in {"$defs", "additionalProperties", "title", "default"}:
+                continue
+            sanitized[key] = self._sanitize_schema_node(value, defs)
+
+        if not sanitized:
+            return {}
+
+        if sanitized.get("type") == "object":
+            sanitized.setdefault("properties", {})
+        if sanitized.get("type") == "array" and "items" not in sanitized:
+            sanitized["items"] = {"type": "string"}
+        return sanitized

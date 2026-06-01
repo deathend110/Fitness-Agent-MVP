@@ -73,31 +73,14 @@ class GeminiNativeClient:
                 code="invalid_request",
             )
 
-        self._assert_api_key()
-        payload = self._build_payload(
+        response_payload = await self.generate_content_raw(
             messages=messages,
+            model=model,
             thinking=thinking,
             tools=tools,
             tool_choice=tool_choice,
             reasoning_effort=reasoning_effort,
         )
-
-        try:
-            async with self.client_factory(timeout=self.timeout) as client:
-                response = await client.post(
-                    self._build_url(model),
-                    params={"key": self.api_key},
-                    json=payload,
-                    headers={},
-                )
-        except httpx.HTTPError as exc:
-            raise DeepSeekClientError(
-                f"Gemini 网络请求失败：{exc}",
-                code="network_error",
-            ) from exc
-
-        self._raise_for_error_response(response)
-        response_payload = self._read_json_payload(response)
         content = self._read_text_content(response_payload)
         if not content:
             raise DeepSeekClientError(
@@ -153,6 +136,48 @@ class GeminiNativeClient:
         if result.usage is not None:
             yield DeepSeekStreamEvent(usage=result.usage)
 
+    async def generate_content_raw(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        thinking: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | dict[str, Any] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict[str, Any]:
+        self._assert_api_key()
+        payload = self._build_payload(
+            messages=messages,
+            thinking=thinking,
+            tools=tools,
+            tool_choice=tool_choice,
+            reasoning_effort=reasoning_effort,
+        )
+
+        try:
+            async with self.client_factory(timeout=self.timeout) as client:
+                response = await client.post(
+                    self._build_url(model),
+                    params={"key": self.api_key},
+                    json=payload,
+                    headers={},
+                )
+        except httpx.HTTPError as exc:
+            raise DeepSeekClientError(
+                f"Gemini 网络请求失败：{exc}",
+                code="network_error",
+            ) from exc
+
+        self._raise_for_error_response(response)
+        raw_payload = self._read_json_payload(response)
+        if not isinstance(raw_payload, dict):
+            raise DeepSeekClientError(
+                "Gemini 响应格式异常，请稍后重试。",
+                code="invalid_response",
+            )
+        return raw_payload
+
     def _assert_api_key(self) -> None:
         if self.api_key:
             return
@@ -170,7 +195,7 @@ class GeminiNativeClient:
         *,
         messages: list[dict[str, Any]],
         thinking: dict[str, Any] | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[dict[str, Any]] | dict[str, Any] | None = None,
         tool_choice: str | dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
@@ -179,16 +204,31 @@ class GeminiNativeClient:
 
         for message in messages:
             role = str(message.get("role") or "user")
-            content = self._normalize_message_content(message.get("content"))
-            if not content:
-                continue
             if role == "system":
+                content = self._normalize_message_content(message.get("content"))
+                if not content and isinstance(message.get("parts"), list):
+                    content = self._normalize_parts_text(message.get("parts"))
+                if not content:
+                    continue
                 system_texts.append(content)
                 continue
 
+            raw_parts = message.get("parts")
+            if isinstance(raw_parts, list) and raw_parts:
+                contents.append(
+                    {
+                        "role": "model" if role in {"assistant", "model"} else "user",
+                        "parts": raw_parts,
+                    }
+                )
+                continue
+
+            content = self._normalize_message_content(message.get("content"))
+            if not content:
+                continue
             contents.append(
                 {
-                    "role": "model" if role == "assistant" else "user",
+                    "role": "model" if role in {"assistant", "model"} else "user",
                     "parts": [{"text": content}],
                 }
             )
@@ -199,9 +239,10 @@ class GeminiNativeClient:
         if system_texts:
             payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(system_texts)}]}
         if tools:
-            # 先沿用本地提示词输出的结构化建议能力；Gemini 原生工具调用后续再单独接线，
-            # 当前阶段不能再把 Gemini 模型错误回退给 DeepSeek。
-            payload["tools"] = []
+            if isinstance(tools, dict):
+                payload["tools"] = [tools]
+            else:
+                payload["tools"] = tools
         del thinking, tool_choice, reasoning_effort
         return payload
 
@@ -213,6 +254,13 @@ class GeminiNativeClient:
             text_parts = [item.get("text", "") for item in raw_content if isinstance(item, dict)]
             return "\n".join(part.strip() for part in text_parts if isinstance(part, str) and part.strip())
         return ""
+
+    @staticmethod
+    def _normalize_parts_text(parts: Any) -> str:
+        if not isinstance(parts, list):
+            return ""
+        text_parts = [item.get("text", "") for item in parts if isinstance(item, dict)]
+        return "\n".join(part.strip() for part in text_parts if isinstance(part, str) and part.strip())
 
     @staticmethod
     def _read_text_content(response_payload: Any) -> str:

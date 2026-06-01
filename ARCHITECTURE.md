@@ -262,7 +262,8 @@ docs/
 - `backend/agent/chat_session.py`
   - 定义 `build_agent_request()` 后端编排入口
   - 从 SQLite 读取 `profile / weekly_plan / daily_log / memory / knowledge / summary / recent_messages`
-  - 返回 DeepSeek messages、模型配置和上下文调试信息，并通过 `run_tool_calling_chat()` 执行 DeepSeek Tool Calls 循环
+  - 返回 DeepSeek messages、模型配置和上下文调试信息，并通过 `run_tool_calling_chat()` 执行工具调用循环
+  - 工具循环现在会按 client 类型选择 provider wrapper：DeepSeek/OpenAI-compatible 走 `_DeepSeekToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
 
 - `backend/agent/usage_ledger.py`
   - 负责规范化 DeepSeek `usage` 字段并写入 `UsageRecord`
@@ -313,10 +314,12 @@ docs/
 - `backend/providers/gemini_native.py`
   - 负责 Gemini 原生 `/models` 发现、`functionDeclarations` schema 生成、函数调用归一化以及 tool result 回灌消息格式转换
   - 与 OpenAI-compatible provider 共用同一套本地工具描述，但保留 Gemini 原生消息结构
+  - 会把 Pydantic/OpenAI 风格 schema 清洗为 Gemini 可接受的参数结构，移除 `$defs / $ref / additionalProperties` 等 Gemini REST 会拒绝的字段
 
 - `backend/providers/gemini_client.py`
   - 负责把 Gemini `generateContent` 包装成当前聊天主链路可复用的最小客户端
   - 当前用于 `/api/chat/reply`、`/api/chat/stream` 和后台任务的 Gemini 文本请求，先解决“Gemini 模型名误发到 DeepSeek”这一运行时路由问题
+  - 现在额外暴露原始 `generateContent` 响应，供 Gemini-native 工具循环直接处理 `functionCall / functionResponse`
 
 - `backend/api/drafts.py`
   - 提供会话级 Coach 草稿读取和 upsert

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.agent.tool_calling import build_default_tool_registry
 from backend.providers.base import ProviderAdapterError
 from backend.providers.gemini_native import GeminiNativeProvider
 
@@ -62,9 +63,29 @@ def test_builds_followup_tool_result_message_in_gemini_format() -> None:
         '{"name":"阿杰"}',
     )
 
-    assert next_messages[-1]["role"] == "tool"
+    assert next_messages[-1]["role"] == "user"
+    assert next_messages[-1]["parts"][0]["functionResponse"]["id"] == "call-1"
     assert next_messages[-1]["parts"][0]["functionResponse"]["name"] == "get_profile"
     assert next_messages[-1]["parts"][0]["functionResponse"]["response"]["result"] == '{"name":"阿杰"}'
+
+
+def test_build_tool_schema_strips_openai_only_schema_fields_for_nested_tools() -> None:
+    provider = GeminiNativeProvider()
+    registry = build_default_tool_registry()
+
+    schema = provider.build_tool_schema(registry.describe_tools())
+    nested_parameters = next(
+        declaration["parameters"]
+        for declaration in schema["functionDeclarations"]
+        if declaration["name"] == "propose_plan_change"
+    )
+
+    dumped = str(nested_parameters)
+
+    assert "$defs" not in dumped
+    assert "$ref" not in dumped
+    assert "additionalProperties" not in dumped
+    assert nested_parameters["properties"]["changes"]["items"]["properties"]["exerciseName"]["type"] == "string"
 
 
 @pytest.mark.asyncio

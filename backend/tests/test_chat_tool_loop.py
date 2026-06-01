@@ -14,6 +14,7 @@ from backend.agent.deepseek_client import DeepSeekChatResult
 from backend.agent.tool_calling import build_default_tool_registry
 from backend.db.database import create_engine_and_session_factory
 from backend.db.models import Base, ChatSession, ToolCallLog, WeeklyPlanDay, utc_now
+from backend.providers.gemini_client import GeminiNativeClient
 
 
 class ToolLoopClient:
@@ -65,6 +66,91 @@ class ThinkingToolLoopClient:
                 ],
             )
         return DeepSeekChatResult(content="读取后建议保持容量。")
+
+
+class MultiToolLoopClient:
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, tool_choice, stream
+        self.calls.append(messages)
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_profile",
+                        "type": "function",
+                        "function": {"name": "get_profile", "arguments": "{}"},
+                    },
+                    {
+                        "id": "call_weekly",
+                        "type": "function",
+                        "function": {"name": "get_weekly_plan", "arguments": "{}"},
+                    },
+                ],
+            )
+        return DeepSeekChatResult(content="我已经读取了档案和本周计划。")
+
+
+class FakeGeminiResponse:
+    def __init__(self, json_data: dict[str, Any], status_code: int = 200) -> None:
+        self._json_data = json_data
+        self.status_code = status_code
+        self.reason_phrase = "OK"
+
+    @property
+    def is_success(self) -> bool:
+        return 200 <= self.status_code < 300
+
+    def json(self) -> dict[str, Any]:
+        return self._json_data
+
+
+class FakeGeminiHttpClient:
+    def __init__(
+        self,
+        *,
+        responses: list[FakeGeminiResponse],
+        request_log: list[dict[str, Any]],
+        **_: Any,
+    ) -> None:
+        self.responses = responses
+        self.request_log = request_log
+
+    async def __aenter__(self) -> "FakeGeminiHttpClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    async def post(
+        self,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> FakeGeminiResponse:
+        self.request_log.append(
+            {
+                "url": url,
+                "params": params or {},
+                "json": json or {},
+                "headers": headers or {},
+            }
+        )
+        return self.responses.pop(0)
 
 
 @pytest_asyncio.fixture
@@ -177,3 +263,107 @@ async def test_tool_loop_preserves_thinking_reasoning_content_between_rounds(
     assistant_message = client.calls[1]["messages"][1]
     assert assistant_message["role"] == "assistant"
     assert assistant_message["reasoning_content"] == "需要先读取本周计划。"
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_keeps_one_assistant_tool_call_message_for_parallel_deepseek_calls(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = ChatSession(title="tool-loop-parallel", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add(WeeklyPlanDay(day_key="Monday", type="strength", exercises=[{"name": "深蹲"}]))
+    await db_session.commit()
+
+    client = MultiToolLoopClient()
+    result = await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "同时读取档案和计划"}],
+        model="deepseek-v4-pro",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+    )
+
+    followup_messages = client.calls[1]
+    assistant_messages = [message for message in followup_messages if message.get("role") == "assistant"]
+    tool_messages = [message for message in followup_messages if message.get("role") == "tool"]
+
+    assert result.content == "我已经读取了档案和本周计划。"
+    assert len(assistant_messages) == 1
+    assert [message["tool_call_id"] for message in tool_messages] == ["call_profile", "call_weekly"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_tool_loop_returns_function_response_in_followup_history(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = ChatSession(title="gemini-tool-loop", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add(WeeklyPlanDay(day_key="Monday", type="strength", exercises=[{"name": "深蹲", "rpe": 8}]))
+    await db_session.commit()
+
+    request_log: list[dict[str, Any]] = []
+    queued_responses = [
+        FakeGeminiResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "id": "call_weekly",
+                                        "name": "get_weekly_plan",
+                                        "args": {},
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ),
+        FakeGeminiResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "我读取了本周计划，建议今天维持原计划。"}],
+                        }
+                    }
+                ]
+            }
+        ),
+    ]
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=lambda **kwargs: FakeGeminiHttpClient(
+            responses=queued_responses,
+            request_log=request_log,
+            **kwargs,
+        ),
+    )
+
+    result = await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "读取本周计划再建议"}],
+        model="gemini-2.5-flash",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+    )
+
+    second_payload = request_log[1]["json"]
+
+    assert result.content == "我读取了本周计划，建议今天维持原计划。"
+    assert second_payload["tools"][0]["functionDeclarations"][0]["name"] == "get_profile"
+    assert second_payload["contents"][1]["role"] == "model"
+    assert second_payload["contents"][1]["parts"][0]["functionCall"]["name"] == "get_weekly_plan"
+    assert second_payload["contents"][2]["role"] == "user"
+    assert second_payload["contents"][2]["parts"][0]["functionResponse"]["name"] == "get_weekly_plan"
+    assert second_payload["contents"][2]["parts"][0]["functionResponse"]["id"] == "call_weekly"

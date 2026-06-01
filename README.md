@@ -119,6 +119,7 @@ HTTPS_PROXY=
 - `MODEL_PROVIDER_CONFIG_PATH` 用来覆盖模型配置 JSON 的路径，缺失文件时会自动根据当前后端设置生成首份文件
 - `GET /api/models` 现在返回带 `provider::remoteModel` 形式的 `modelRef`，聊天、草稿和后台任务会统一按这个引用解析真实模型
 - 选择 Gemini 模型后，`/api/chat/reply` 与 `/api/chat/stream` 会直接实例化 Gemini 运行时客户端；如果仍看到 DeepSeek 模型名相关报错，通常说明当前进程还没有加载到最新代码
+- AI 教练工具调用现在分为两条运行时链路：DeepSeek/OpenAI-compatible 会按 `assistant(tool_calls) -> tool` 顺序补齐消息，Gemini-native 会按官方 `functionCall -> functionResponse` 结构继续下一轮请求
 - `GET/PUT /api/model-config` 会读取和保存脱敏后的多供应商模型配置；保存后后端会立即刷新运行时缓存，不需要重启服务
 - `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表
 - 如果本机访问 Gemini 依赖代理，请把 `HTTP_PROXY` / `HTTPS_PROXY` 写入 `backend/.env`；后端启动时会自动同步到运行进程，避免只在某个终端窗口里临时设代理导致 Gemini 连不上

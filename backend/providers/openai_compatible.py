@@ -116,8 +116,9 @@ class OpenAICompatibleProvider(ProviderAdapter):
         updated_messages = list(messages)
         raw_payload = tool_call.get("rawProviderPayload")
         assistant_message = raw_payload.get("assistantMessage") if isinstance(raw_payload, dict) else None
-        if isinstance(assistant_message, dict) and (
-            not updated_messages or updated_messages[-1].get("role") != "assistant"
+        if isinstance(assistant_message, dict) and not self._has_matching_trailing_assistant(
+            updated_messages,
+            assistant_message,
         ):
             updated_messages.append(
                 {
@@ -140,6 +141,28 @@ class OpenAICompatibleProvider(ProviderAdapter):
                 "content": tool_result,
             }
         ]
+
+    @staticmethod
+    def _has_matching_trailing_assistant(
+        messages: list[dict[str, Any]],
+        assistant_message: dict[str, Any],
+    ) -> bool:
+        index = len(messages) - 1
+        while index >= 0 and messages[index].get("role") == "tool":
+            index -= 1
+
+        if index < 0:
+            return False
+
+        candidate = messages[index]
+        if candidate.get("role") != "assistant":
+            return False
+
+        return (
+            candidate.get("content", "") == assistant_message.get("content", "")
+            and candidate.get("tool_calls", []) == assistant_message.get("tool_calls", [])
+            and candidate.get("reasoning_content") == assistant_message.get("reasoning_content")
+        )
 
     def _raise_for_error_response(self, response: Any) -> None:
         if getattr(response, "is_success", False):

@@ -11,6 +11,8 @@ from backend.agent.tool_loop import ToolLoopOrchestrator, ToolLoopResult
 from backend.agent.deepseek_client import DeepSeekChatResult
 from backend.agent.memory import MemoryRetriever
 from backend.agent.tool_calling import ToolRegistry, ToolResultSlimmer
+from backend.providers.gemini_client import GeminiNativeClient
+from backend.providers.gemini_native import GeminiNativeProvider
 from backend.providers.openai_compatible import OpenAICompatibleProvider
 from backend.db.models import (
     ChatMessage,
@@ -86,7 +88,7 @@ async def run_tool_calling_chat(
     max_tool_rounds: int = 4,
     slimmer: ToolResultSlimmer | None = None,
 ) -> ToolLoopResult:
-    provider = _DeepSeekToolLoopProvider(client=deepseek_client)
+    provider = _build_tool_loop_provider(deepseek_client)
     orchestrator = ToolLoopOrchestrator(
         registry=registry,
         max_rounds=max_tool_rounds,
@@ -102,6 +104,12 @@ async def run_tool_calling_chat(
         reasoning_effort=reasoning_effort,
         tool_choice=None if thinking and thinking.get("type") == "enabled" else "auto",
     )
+
+
+def _build_tool_loop_provider(client: Any) -> Any:
+    if isinstance(client, GeminiNativeClient):
+        return _GeminiToolLoopProvider(client=client)
+    return _DeepSeekToolLoopProvider(client=client)
 
 
 class _DeepSeekToolLoopProvider(OpenAICompatibleProvider):
@@ -146,6 +154,39 @@ class _DeepSeekToolLoopProvider(OpenAICompatibleProvider):
         return {
             "text": result.content,
             "toolCalls": result.tool_calls or [],
+            "raw": raw_payload,
+        }
+
+
+class _GeminiToolLoopProvider(GeminiNativeProvider):
+    """把 Gemini 原生 REST client 接到统一工具回环里。"""
+
+    def __init__(self, *, client: GeminiNativeClient) -> None:
+        super().__init__(client_factory=None)
+        self.client = client
+
+    async def generate_chat(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: dict[str, Any],
+        tool_choice: str | dict[str, Any] | None = None,
+        thinking: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        raw_payload = await self.client.generate_content_raw(
+            messages=messages,
+            model=model,
+            thinking=thinking,
+            tools=tools,
+            tool_choice=tool_choice,
+            reasoning_effort=reasoning_effort,
+        )
+        return {
+            "text": self.client._read_text_content(raw_payload),
+            "toolCalls": self.normalize_tool_call_response(raw_payload),
             "raw": raw_payload,
         }
 
