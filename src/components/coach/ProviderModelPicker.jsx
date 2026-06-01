@@ -8,8 +8,11 @@ function buildEmptyDraft() {
 }
 
 function ProviderModelPicker({
+  discoverMessage = '',
   disabled = false,
+  isDiscovering = false,
   models = [],
+  onDiscover,
   onChange,
 }) {
   const [draft, setDraft] = useState(buildEmptyDraft)
@@ -57,12 +60,28 @@ function ProviderModelPicker({
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-slate-700">可用模型</p>
-          <p className="text-[11px] text-slate-400">先保存你真正想在 AI 教练页里展示的模型。</p>
+          <p className="text-[11px] text-slate-400">先发现模型，再关闭不想在 AI 教练页里展示的项。</p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
-          {models.length} 个
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
+            {models.length} 个
+          </span>
+          <button
+            className="inline-flex h-8 items-center justify-center rounded-full border border-fitloop-line bg-white px-3 text-[11px] font-semibold text-slate-600 transition hover:border-fitloop-orange/30 hover:text-fitloop-orange disabled:opacity-40"
+            disabled={disabled || isDiscovering}
+            onClick={() => onDiscover?.()}
+            type="button"
+          >
+            {isDiscovering ? '发现中...' : '发现模型'}
+          </button>
+        </div>
       </div>
+
+      {discoverMessage ? (
+        <div className="rounded-2xl border border-fitloop-line/70 bg-fitloop-canvas/60 px-3 py-2 text-[11px] text-slate-500">
+          {discoverMessage}
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         {models.length ? (
@@ -110,7 +129,7 @@ function ProviderModelPicker({
           ))
         ) : (
           <div className="rounded-2xl border border-dashed border-fitloop-line px-4 py-5 text-center text-xs text-slate-400">
-            还没有可用模型，先手动添加一个远端模型 ID。
+            还没有可用模型，可以先点上面的“发现模型”，也可以手动补一个远端模型 ID。
           </div>
         )}
       </div>

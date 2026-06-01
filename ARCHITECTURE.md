@@ -299,8 +299,9 @@ docs/
   - 当前对外返回 provider 副本，避免后续路由或适配层误改共享缓存内部状态
 
 - `backend/api/model_config.py`
-  - 提供 `GET /api/model-config` 与 `PUT /api/model-config`
+  - 提供 `GET /api/model-config`、`PUT /api/model-config`、`POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models`
   - 读取时返回脱敏后的 provider 配置；保存时写回 JSON 后立刻调用 runtime refresh，确保设置页改动无需重启服务
+  - provider 测试连接与模型发现统一通过适配层转发到 OpenAI-compatible / Gemini-native 两套协议
 
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
   - 定义 Provider 适配层的最小公共接口和统一错误类型

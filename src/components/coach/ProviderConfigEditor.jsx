@@ -1,10 +1,15 @@
 import ProviderModelPicker from './ProviderModelPicker.jsx'
 
 function ProviderConfigEditor({
+  connectionMessage = '',
   disabled = false,
+  isDiscovering = false,
+  isTesting = false,
+  onDiscoverModels,
   provider,
   onChange,
   onRemove,
+  onTestConnection,
 }) {
   const providerType = provider?.type || 'openai_compatible'
   const apiKeyValue = provider?.apiKey || provider?.apiKeyPreview || ''
@@ -109,9 +114,34 @@ function ProviderConfigEditor({
         ) : null}
       </label>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          className="inline-flex h-9 items-center justify-center rounded-full border border-fitloop-line bg-white px-3 text-[11px] font-semibold text-slate-600 transition hover:border-fitloop-orange/30 hover:text-fitloop-orange disabled:opacity-40"
+          disabled={disabled || isTesting}
+          onClick={() => onTestConnection?.(provider)}
+          type="button"
+        >
+          {isTesting ? '测试中...' : '测试连接'}
+        </button>
+        <button
+          className="inline-flex h-9 items-center justify-center rounded-full border border-fitloop-line bg-white px-3 text-[11px] font-semibold text-slate-600 transition hover:border-fitloop-orange/30 hover:text-fitloop-orange disabled:opacity-40"
+          disabled={disabled || isDiscovering}
+          onClick={() => onDiscoverModels?.(provider)}
+          type="button"
+        >
+          {isDiscovering ? '发现中...' : '发现模型'}
+        </button>
+        {connectionMessage ? (
+          <span className="text-[11px] text-slate-500">{connectionMessage}</span>
+        ) : null}
+      </div>
+
       <ProviderModelPicker
+        discoverMessage=""
         disabled={disabled}
+        isDiscovering={isDiscovering}
         models={provider?.selectedModels || []}
+        onDiscover={() => onDiscoverModels?.(provider)}
         onChange={(selectedModels) => updateProvider({ selectedModels })}
       />
     </div>

@@ -737,6 +737,16 @@ function CoachTab({
     }
   }
 
+  async function handleTestProviderConnection(providerConfig) {
+    const client = createBackendClient()
+    return client.testProviderConnection(providerConfig)
+  }
+
+  async function handleDiscoverProviderModels(providerConfig) {
+    const client = createBackendClient()
+    return client.discoverProviderModels(providerConfig)
+  }
+
   async function handleSelectSession(sessionId) {
     if (isSending || !Number.isInteger(sessionId)) {
       return
@@ -1021,7 +1031,9 @@ function CoachTab({
       <ModelConfigDialog
         errorMessage={modelConfigError}
         onClose={() => setIsModelConfigOpen(false)}
+        onDiscoverProviderModels={handleDiscoverProviderModels}
         onSave={handleSaveModelConfig}
+        onTestProviderConnection={handleTestProviderConnection}
         open={isModelConfigOpen}
         saving={isModelConfigSaving}
         value={modelConfigDraft}

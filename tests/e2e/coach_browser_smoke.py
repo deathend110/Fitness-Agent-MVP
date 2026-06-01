@@ -168,19 +168,72 @@ def install_backend_mock(page, commit_calls):
             return json_response(
                 route,
                 {
-                    "defaultModel": "deepseek-v4-flash",
+                    "defaultModel": "provider_deepseek_main::deepseek-v4-flash",
+                    "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
                     "models": [
                         {
-                            "id": "deepseek-v4-flash",
-                            "label": "DeepSeek V4 Flash",
+                            "id": "provider_deepseek_main::deepseek-v4-flash",
+                            "providerId": "provider_deepseek_main",
+                            "providerType": "openai_compatible",
+                            "providerLabel": "DeepSeek 主账号",
+                            "remoteModelId": "deepseek-v4-flash",
+                            "label": "DeepSeek 主账号 / DeepSeek V4 Flash",
                             "supportsThinking": True,
+                            "thinking": {
+                                "supported": True,
+                                "canDisable": True,
+                                "defaultEnabled": False,
+                                "intensityOptions": [{"id": "standard", "label": "标准"}],
+                                "defaultIntensity": "standard",
+                            },
                         }
                     ],
                     "thinking": {
                         "enabled": False,
-                        "budget": "auto",
-                        "options": ["off", "auto", "max"],
+                        "budget": "standard",
+                        "options": ["off", "standard"],
                     },
+                },
+            )
+
+        if method == "GET" and path == "/model-config":
+            return json_response(
+                route,
+                {
+                    "version": 1,
+                    "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
+                    "providers": [
+                        {
+                            "id": "provider_deepseek_main",
+                            "type": "openai_compatible",
+                            "label": "DeepSeek 主账号",
+                            "enabled": True,
+                            "apiKeyPreview": "sk-t***1234",
+                            "baseUrl": "https://api.deepseek.com",
+                            "selectedModels": [
+                                {
+                                    "remoteId": "deepseek-v4-flash",
+                                    "label": "DeepSeek V4 Flash",
+                                    "enabled": True,
+                                }
+                            ],
+                        },
+                        {
+                            "id": "provider_gemini_main",
+                            "type": "gemini_native",
+                            "label": "Gemini (Google AI Studio)",
+                            "enabled": True,
+                            "apiKeyPreview": "AIza***1234",
+                            "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+                            "selectedModels": [
+                                {
+                                    "remoteId": "gemini-2.5-flash",
+                                    "label": "Gemini 2.5 Flash",
+                                    "enabled": True,
+                                }
+                            ],
+                        },
+                    ],
                 },
             )
 
@@ -230,8 +283,8 @@ def install_backend_mock(page, commit_calls):
                     route,
                     {
                         "content": "",
-                        "model": "deepseek-v4-flash",
-                        "thinking": {"enabled": False, "budget": "auto"},
+                        "model": "provider_deepseek_main::deepseek-v4-flash",
+                        "thinking": {"enabled": False, "budget": "standard"},
                     },
                 )
             if method == "PUT":
@@ -303,6 +356,11 @@ def main():
         page.wait_for_function(
             "() => { const el = document.querySelector('main > div[style*=\"scrollbar-gutter\"]'); return !!el && el.scrollTop > 0; }"
         )
+
+        page.get_by_role("button", name="模型设置").click()
+        expect(page.get_by_text("模型与供应商设置")).to_be_visible(timeout=5_000)
+        expect(page.get_by_text("Gemini (Google AI Studio)", exact=True)).to_be_visible(timeout=5_000)
+        page.get_by_role("button", name="取消").click()
 
         page.get_by_role("button", name="我的档案").click()
         page.get_by_role("button", name="AI 教练").click()

@@ -116,6 +116,7 @@ MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
 - `MODEL_PROVIDER_CONFIG_PATH` 用来覆盖模型配置 JSON 的路径，缺失文件时会自动根据当前后端设置生成首份文件
 - `GET /api/models` 现在返回带 `provider::remoteModel` 形式的 `modelRef`，聊天、草稿和后台任务会统一按这个引用解析真实模型
 - `GET/PUT /api/model-config` 会读取和保存脱敏后的多供应商模型配置；保存后后端会立即刷新运行时缓存，不需要重启服务
+- `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表
 - 保存模型配置时会保留真实 `apiKey`，但返回给前端的是脱敏预览值
 - 未配置 API Key 时，除 AI 教练外的大部分本地功能仍可使用
 - 不要提交真实 API Key

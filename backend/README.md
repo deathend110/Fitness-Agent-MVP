@@ -181,6 +181,8 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `GET /api/models`
 - `GET /api/model-config`
 - `PUT /api/model-config`
+- `POST /api/model-config/providers/test`
+- `POST /api/model-config/providers/discover-models`
 - `GET /api/chat/sessions/{id}/draft`
 - `PUT /api/chat/sessions/{id}/draft`
 - `GET /api/metrics/daily-summary?date=YYYY-MM-DD`
@@ -219,6 +221,8 @@ uv run alembic -c backend\alembic.ini upgrade head
 
 - `GET /api/models` 现在返回运行时启用模型列表，核心字段为 `defaultModelRef`、`models[].id(modelRef)`、模型级 `thinking` 能力，以及给旧版 UI 兼容保留的顶层 `thinking`。
 - `GET /api/model-config` 返回脱敏后的 provider 配置；`PUT /api/model-config` 保存后会立即 refresh 进程内 runtime，无需重启后端。
+- `POST /api/model-config/providers/test` 用轻量模型发现请求验证 provider 的 `apiKey + baseUrl` 是否可用。
+- `POST /api/model-config/providers/discover-models` 返回远端 provider 的模型列表，前端可按需勾选启用项。
 - 默认配置文件位于 `backend/config/model_providers.json`，路径可由 `MODEL_PROVIDER_CONFIG_PATH` 覆盖；缺失文件时会从旧版 DeepSeek 环境变量自动 bootstrap 首份 JSON。
 - `GET/PUT /api/chat/sessions/{id}/draft` 按会话保存草稿文本、模型、thinking 和附件 id。未知附件 id 会返回 422，避免 UI 误以为附件已恢复。
 - `GET /api/metrics/daily-summary` 读取 SQLite 中的 profile / weeklyPlan / dailyLog，返回 snake_case 指标字段；当前规则与前端固定样本对齐。

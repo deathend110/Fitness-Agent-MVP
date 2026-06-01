@@ -202,6 +202,8 @@ test('CoachTab 会挂载模型设置弹窗并在保存后刷新模型列表', ()
   assert.match(source, /client\.getModelConfig\(\)/)
   assert.match(source, /client\.saveModelConfig\(nextConfig\)/)
   assert.match(source, /buildModelRuntimeView\(await client\.getModels\(\)\)/)
+  assert.match(source, /handleTestProviderConnection/)
+  assert.match(source, /handleDiscoverProviderModels/)
 })
 
 test('ModelSelector 支持模型级 thinking 强度选项', () => {
@@ -211,4 +213,18 @@ test('ModelSelector 支持模型级 thinking 强度选项', () => {
   assert.match(source, /intensityOptions/)
   assert.match(source, /defaultIntensity/)
   assert.match(source, /option\.label \|\| option\.id/)
+})
+
+test('模型设置弹窗源码包含测试连接与发现模型入口', () => {
+  const dialogSource = readFileSync('src/components/coach/ModelConfigDialog.jsx', 'utf-8')
+  const editorSource = readFileSync('src/components/coach/ProviderConfigEditor.jsx', 'utf-8')
+  const pickerSource = readFileSync('src/components/coach/ProviderModelPicker.jsx', 'utf-8')
+
+  assert.match(dialogSource, /handleTestProvider/)
+  assert.match(dialogSource, /handleDiscoverProvider/)
+  assert.match(dialogSource, /onDiscoverProviderModels/)
+  assert.match(editorSource, /测试连接/)
+  assert.match(editorSource, /发现模型/)
+  assert.match(pickerSource, /发现模型/)
+  assert.match(pickerSource, /onDiscover/)
 })

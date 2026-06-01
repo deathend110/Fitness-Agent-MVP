@@ -41,12 +41,15 @@ function sanitizeProviderForSave(provider) {
 function ModelConfigDialog({
   errorMessage = '',
   onClose,
+  onDiscoverProviderModels,
   onSave,
+  onTestProviderConnection,
   open = false,
   saving = false,
   value,
 }) {
   const [draft, setDraft] = useState(() => buildDraftFromValue(value))
+  const [providerActionState, setProviderActionState] = useState({})
 
   useEffect(() => {
     if (!open) {
@@ -54,6 +57,7 @@ function ModelConfigDialog({
     }
 
     setDraft(buildDraftFromValue(value))
+    setProviderActionState({})
   }, [open, value])
 
   const modelRefs = useMemo(() => listProviderModelRefs(draft), [draft])
@@ -104,6 +108,96 @@ function ModelConfigDialog({
       providers: draft.providers.map((provider) => sanitizeProviderForSave(provider)),
     }
     onSave?.(payload)
+  }
+
+  function updateProviderActionState(providerId, patch) {
+    setProviderActionState((current) => ({
+      ...current,
+      [providerId]: {
+        ...(current[providerId] || {}),
+        ...patch,
+      },
+    }))
+  }
+
+  async function handleTestProvider(provider) {
+    const sanitizedProvider = sanitizeProviderForSave(provider)
+    if (!sanitizedProvider.apiKey) {
+      updateProviderActionState(provider.id, {
+        message: '请重新输入 API Key 后再测试连接。',
+      })
+      return
+    }
+
+    updateProviderActionState(provider.id, {
+      testing: true,
+      message: '',
+    })
+
+    try {
+      const result = await onTestProviderConnection?.(sanitizedProvider)
+      updateProviderActionState(provider.id, {
+        testing: false,
+        message: `连接成功，发现 ${result?.modelCount ?? 0} 个模型。`,
+      })
+    } catch (error) {
+      updateProviderActionState(provider.id, {
+        testing: false,
+        message: error?.message || '连接测试失败，请检查地址和密钥。',
+      })
+    }
+  }
+
+  async function handleDiscoverProvider(provider) {
+    const sanitizedProvider = sanitizeProviderForSave(provider)
+    if (!sanitizedProvider.apiKey) {
+      updateProviderActionState(provider.id, {
+        message: '出于安全原因，发现模型前需要重新输入一次 API Key。',
+      })
+      return
+    }
+
+    updateProviderActionState(provider.id, {
+      discovering: true,
+      message: '',
+    })
+
+    try {
+      const result = await onDiscoverProviderModels?.(sanitizedProvider)
+      const discoveredModels = Array.isArray(result?.models) ? result.models : []
+      const existingModels = Array.isArray(provider?.selectedModels) ? provider.selectedModels : []
+      const existingByRemoteId = new Map(existingModels.map((item) => [item.remoteId, item]))
+      const mergedModels = discoveredModels.map((model) => {
+        const existing = existingByRemoteId.get(model.remoteId)
+        return {
+          remoteId: model.remoteId,
+          label: existing?.label || model.label || model.remoteId,
+          enabled: existing ? existing.enabled !== false : model.enabled !== false,
+        }
+      })
+      const mergedRemoteIds = new Set(mergedModels.map((model) => model.remoteId))
+
+      for (const existing of existingModels) {
+        if (!mergedRemoteIds.has(existing.remoteId)) {
+          mergedModels.push(existing)
+        }
+      }
+
+      updateProvider(provider.id, {
+        ...provider,
+        apiKey: sanitizedProvider.apiKey,
+        selectedModels: mergedModels,
+      })
+      updateProviderActionState(provider.id, {
+        discovering: false,
+        message: `已同步 ${discoveredModels.length} 个远端模型，可按需关闭不想展示的项。`,
+      })
+    } catch (error) {
+      updateProviderActionState(provider.id, {
+        discovering: false,
+        message: error?.message || '发现模型失败，请检查地址和密钥。',
+      })
+    }
   }
 
   return (
@@ -172,9 +266,14 @@ function ModelConfigDialog({
             {draft.providers.map((provider) => (
               <ProviderConfigEditor
                 key={provider.id}
+                connectionMessage={providerActionState[provider.id]?.message || ''}
                 disabled={saving}
+                isDiscovering={Boolean(providerActionState[provider.id]?.discovering)}
+                isTesting={Boolean(providerActionState[provider.id]?.testing)}
                 onChange={(nextProvider) => updateProvider(provider.id, nextProvider)}
+                onDiscoverModels={handleDiscoverProvider}
                 onRemove={removeProvider}
+                onTestConnection={handleTestProvider}
                 provider={provider}
               />
             ))}

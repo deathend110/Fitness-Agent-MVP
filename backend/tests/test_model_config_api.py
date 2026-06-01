@@ -94,3 +94,61 @@ async def test_put_model_config_persists_file_and_refreshes_runtime(
     assert refreshed == ["ok"]
     assert (tmp_path / "model_providers.json").exists()
     assert response.json()["providers"][0]["apiKeyPreview"].startswith("sk-t")
+
+
+@pytest.mark.asyncio
+async def test_provider_test_connection_uses_matching_adapter(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    calls: list[dict[str, str]] = []
+
+    class FakeAdapter:
+        async def list_remote_models(self, *, api_key: str, base_url: str):
+            calls.append({"api_key": api_key, "base_url": base_url})
+            return [{"remoteId": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "enabled": True}]
+
+    monkeypatch.setattr(model_config_api, "get_provider_adapter", lambda provider_type: FakeAdapter())
+
+    response = await api_client.post(
+        "/api/model-config/providers/test",
+        json={
+            "type": "openai_compatible",
+            "apiKey": "sk-test",
+            "baseUrl": "https://api.deepseek.com",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "modelCount": 1}
+    assert calls == [{"api_key": "sk-test", "base_url": "https://api.deepseek.com"}]
+
+
+@pytest.mark.asyncio
+async def test_provider_discover_models_returns_adapter_models(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    class FakeAdapter:
+        async def list_remote_models(self, *, api_key: str, base_url: str):
+            assert api_key == "AIza-test"
+            assert base_url == "https://generativelanguage.googleapis.com/v1beta"
+            return [
+                {"remoteId": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "enabled": True},
+                {"remoteId": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "enabled": True},
+            ]
+
+    monkeypatch.setattr(model_config_api, "get_provider_adapter", lambda provider_type: FakeAdapter())
+
+    response = await api_client.post(
+        "/api/model-config/providers/discover-models",
+        json={
+            "type": "gemini_native",
+            "apiKey": "AIza-test",
+            "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["models"][0]["remoteId"] == "gemini-2.5-flash"
+    assert response.json()["models"][1]["remoteId"] == "gemini-2.5-pro"
