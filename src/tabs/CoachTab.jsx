@@ -10,6 +10,7 @@ import {
   getSuggestionCommitKey,
   mergeMessageMeta,
 } from '../utils/chatSuggestionState.js'
+import { mergeCommittedWeeklyPlan } from '../utils/weeklyPlanCommit.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
 import {
   buildBackgroundCoachTaskRecord,
@@ -701,7 +702,7 @@ function CoachTab({
         return
       }
 
-      onWeeklyPlanChange(adoptResult.plan)
+      onWeeklyPlanChange((currentPlan) => mergeCommittedWeeklyPlan(currentPlan, adoptResult.plan))
       setErrorMessage('')
       handleDismissSuggestion(targetSuggestion)
     } catch (error) {

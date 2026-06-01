@@ -62,3 +62,31 @@ test('buildAdoptCardModel 在 suggestion 缺少可展示内容时返回 null', (
     null,
   )
 })
+
+test('buildAdoptCardModel 会把 day_plan_replace proposal 转成单日计划卡模型', () => {
+  const card = buildAdoptCardModel({
+    proposalId: 'proposal-day-plan',
+    kind: 'day_plan_replace',
+    day: 'Monday',
+    summary: '恢复型腿日',
+    dayPlan: {
+      type: '腿日',
+      exercises: [
+        {
+          name: '深蹲',
+          tier: 'main',
+          sets: 3,
+          reps: 5,
+          pct: 0.7,
+          rpe: 7,
+          note: '恢复周主项',
+        },
+      ],
+    },
+  })
+
+  assert.equal(card.variant, 'dayPlan')
+  assert.equal(card.dayLabel, '周一')
+  assert.equal(card.dayTypeLabel, '腿日')
+  assert.equal(card.exercises[0].name, '深蹲')
+})

@@ -136,3 +136,10 @@ test('CoachTab 对同一卡片采纳请求有 in-flight 去重保护', () => {
   assert.match(source, /adoptingSuggestionKeysRef\.current\.add\(commitKey\)/)
   assert.match(source, /adoptingSuggestionKeysRef\.current\.delete\(commitKey\)/)
 })
+
+test('CoachTab 会用 mergeCommittedWeeklyPlan 安全合并后端写回结果', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /mergeCommittedWeeklyPlan/)
+  assert.match(source, /onWeeklyPlanChange\(\(currentPlan\) => mergeCommittedWeeklyPlan\(currentPlan, adoptResult\.plan\)\)/)
+})

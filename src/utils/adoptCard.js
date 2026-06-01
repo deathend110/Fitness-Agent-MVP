@@ -91,7 +91,40 @@ export function buildAdoptCardModel(suggestion) {
   }
 
   const summary = typeof suggestion.summary === 'string' ? suggestion.summary.trim() : ''
+  const dayPlan =
+    suggestion.kind === 'day_plan_replace' && suggestion.dayPlan && typeof suggestion.dayPlan === 'object'
+      ? suggestion.dayPlan
+      : null
   const rawChanges = Array.isArray(suggestion.changes) ? suggestion.changes : []
+
+  if (dayPlan) {
+    const exercises = Array.isArray(dayPlan.exercises) ? dayPlan.exercises : []
+
+    if (!summary && exercises.length === 0) {
+      return null
+    }
+
+    return {
+      variant: 'dayPlan',
+      dayLabel: formatDayLabel(suggestion.day),
+      dayTypeLabel:
+        typeof dayPlan.type === 'string' && dayPlan.type.trim() ? dayPlan.type.trim() : '训练日',
+      summary: summary || 'AI 给出了一张单日训练计划调整卡。',
+      exercises: exercises.map((exercise, index) => ({
+        id: exercise?.id || `${index}-${exercise?.name || 'exercise'}`,
+        name: exercise?.name || '未命名动作',
+        tier: exercise?.tier || 'accessory',
+        setsLabel: formatChangeValue('sets', exercise?.sets),
+        repsLabel: formatChangeValue('reps', exercise?.reps),
+        loadLabel:
+          typeof exercise?.pct === 'number'
+            ? formatChangeValue('pct', exercise.pct)
+            : formatChangeValue('kg', exercise?.kg),
+        rpeLabel: formatChangeValue('rpe', exercise?.rpe),
+        note: typeof exercise?.note === 'string' ? exercise.note.trim() : '',
+      })),
+    }
+  }
 
   if (!summary && rawChanges.length === 0) {
     return null
