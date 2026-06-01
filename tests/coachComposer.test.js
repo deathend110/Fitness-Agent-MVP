@@ -61,3 +61,34 @@ test('CoachTab 会把后台 pending/running 任务映射为教练思考中状态
   assert.match(source, /isSending=\{isCoachThinking\}/)
   assert.match(source, /autoScrollKey=\{`\$\{messageList\.length\}:\$\{isCoachThinking \? 'sending' : 'idle'\}`\}/)
 })
+
+test('CoachTab 会把新回复的 proposal 或 suggestion 写入 assistant message', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /const assistantSuggestion = reply\.proposal \|\| reply\.suggestion \|\| null/)
+  assert.match(source, /suggestion: assistantSuggestion/)
+  assert.doesNotMatch(
+    source,
+    /appendChatMessages\(nextHistory,\s*\[\{ role: 'assistant', content: reply\.text \}\]\)/,
+  )
+})
+
+test('CoachTab 会从 message.suggestion 恢复采纳卡片并在处理后持久隐藏', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /message\?\.suggestion \|\| null/)
+  assert.match(source, /function persistHideSuggestion/)
+  assert.match(source, /suggestion: null/)
+  assert.match(source, /onChatHistoryChange\(nextHistory\)/)
+  assert.match(source, /handleDismissSuggestion\(targetSuggestion\)/)
+})
+
+test('CoachTab 对同一卡片采纳请求有 in-flight 去重保护', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /const adoptingSuggestionKeysRef = useRef\(new Set\(\)\)/)
+  assert.match(source, /function getSuggestionCommitKey/)
+  assert.match(source, /adoptingSuggestionKeysRef\.current\.has\(commitKey\)/)
+  assert.match(source, /adoptingSuggestionKeysRef\.current\.add\(commitKey\)/)
+  assert.match(source, /adoptingSuggestionKeysRef\.current\.delete\(commitKey\)/)
+})

@@ -32,3 +32,44 @@ test('appendChatMessages 只保留最近 20 条消息', () => {
   assert.equal(nextHistory[0].content, '消息-2')
   assert.equal(nextHistory.at(-1).content, '最新消息')
 })
+
+test('appendChatMessages 会保留 assistant 消息上的 suggestion 对象', () => {
+  const suggestion = {
+    proposalId: 'proposal-1',
+    summary: '降低周一深蹲强度',
+    day: 'Monday',
+    changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.7 }],
+  }
+
+  const nextHistory = appendChatMessages([], [
+    { role: 'assistant', content: '建议调整训练计划。', suggestion },
+  ])
+
+  assert.deepEqual(nextHistory[0], {
+    role: 'assistant',
+    content: '建议调整训练计划。',
+    suggestion,
+  })
+})
+
+test('appendChatMessages 裁剪历史时仍保留剩余消息上的 suggestion 对象', () => {
+  const history = Array.from({ length: CHAT_HISTORY_LIMIT }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    content: `消息-${index + 1}`,
+  }))
+  const suggestion = {
+    day: 'Tuesday',
+    changes: [{ action: 'add', exercise: { name: '暂停深蹲', sets: 2, reps: 8 } }],
+  }
+
+  const nextHistory = appendChatMessages(history, [
+    { role: 'assistant', content: '新增一个技术动作。', suggestion },
+  ])
+
+  assert.equal(nextHistory.length, CHAT_HISTORY_LIMIT)
+  assert.deepEqual(nextHistory.at(-1), {
+    role: 'assistant',
+    content: '新增一个技术动作。',
+    suggestion,
+  })
+})

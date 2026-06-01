@@ -300,6 +300,8 @@ docs/
   - 负责 AI 教练页状态协调
   - 继续管理 `draft / errorMessage / isSending / streamingText`
   - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
+  - assistant 消息会携带原始 `suggestion`，用于切页或组件重挂载后恢复采纳卡片；忽略或采纳成功后会把对应消息的 `suggestion` 清空以持久隐藏
+  - 采纳动作按 `proposalId` 或旧版 `day + changes` 做 in-flight 去重，避免同一卡片快速重复点击触发二次提交
   - 页面隐藏或离开时中止前台请求并提交后台思考兜底；只有后台任务成功拿到 `task_id` 后才抑制前台错误
   - 页面恢复可见且后台任务仍处于 `pending/running` 时，若源 user 消息仍存在，则恢复消息区“正在整理上下文”等待态
   - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
@@ -690,19 +692,20 @@ Task 6 的复杂指标不单独持久化，而是运行时根据 `profile + week
 
 当前 AI 教练页仍使用该 key 保存页面展示状态；V2.3 Phase 2 Task 9 已将发送请求切到后端 chat/SSE，成功回复会同步写入后端 chat 表。
 
-只持久化：
+主要持久化：
 
 - `role`
 - `content`
+- `suggestion`：可选，保存 AI 结构化计划建议，用于本地消息列表恢复采纳卡片
 
-结构化建议卡片不落盘，仅存在于当前页面状态中。
+用户点击“忽略”或采纳成功后，前端会把对应消息的 `suggestion` 清空，让已处理卡片在切页、组件重挂载后继续保持隐藏。
 
 AI 教练页的消息展示补充约束：
 
 - `message.suggestion`：原始领域建议对象，供后端 `/api/weekly-plan/adopt` 等业务链路消费
 - `message.suggestionCard`：由 `buildAdoptCardModel()` 派生的展示模型，只负责渲染采纳卡片
 - 采纳 / 忽略回调必须继续传递 `message.suggestion`，不能把 `suggestionCard` 冒充为领域 suggestion
-- 结构化建议不会写回 `fitloop_chatHistory`，避免 localStorage 中混入展示态和易失业务态
+- 采纳卡片展示状态以 `message.suggestion` 为准；本地 `messageMeta` 只承担当前渲染周期的辅助隐藏状态
 
 ### `fitloop:coach-background-task`
 

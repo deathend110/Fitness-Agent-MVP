@@ -124,6 +124,7 @@ export function shouldShowBackgroundCoachPendingIndicator({
 
 export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTask } = {}) {
   const assistantText = typeof reply?.text === 'string' ? reply.text.trim() : ''
+  const suggestion = reply?.proposal ?? reply?.suggestion ?? null
 
   if (!assistantText) {
     return {
@@ -152,14 +153,14 @@ export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTa
 
   const nextHistory = [
     ...currentHistory,
-    { role: 'assistant', content: assistantText },
+    { role: 'assistant', content: assistantText, suggestion },
   ]
 
   return {
     assistantIndex: nextHistory.length - 1,
     nextHistory,
     status: 'merged',
-    suggestion: reply?.suggestion ?? null,
+    suggestion,
   }
 }
 

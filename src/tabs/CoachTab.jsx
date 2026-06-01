@@ -48,19 +48,38 @@ function mergeMessageMeta(messages = [], currentMeta = []) {
     return buckets
   }, new Map())
 
-  return buildMessageStableKeys(messages).map((messageKey) => {
+  return buildMessageStableKeys(messages).map((messageKey, index) => {
     const bucket = currentBuckets.get(messageKey)
+    const messageSuggestion = messages[index]?.suggestion || null
 
     if (bucket?.length) {
-      return bucket.shift()
+      const currentEntry = bucket.shift()
+
+      return {
+        ...currentEntry,
+        suggestion: currentEntry?.suggestion || messageSuggestion,
+      }
     }
 
     return {
       isDismissed: false,
       messageKey,
-      suggestion: null,
+      suggestion: messageSuggestion,
     }
   })
+}
+
+function getSuggestionCommitKey(suggestion) {
+  if (!suggestion) {
+    return ''
+  }
+
+  if (suggestion.proposalId) {
+    return `proposal:${suggestion.proposalId}`
+  }
+
+  // 旧版 suggestion 没有 proposalId，只能用 day + changes 表示同一张本地采纳卡片。
+  return `legacy:${suggestion.day || ''}:${JSON.stringify(suggestion.changes || [])}`
 }
 
 function getActiveHistoryItem(historyView, activeSessionId) {
@@ -122,6 +141,7 @@ function CoachTab({
   const backgroundTaskStartedRef = useRef(false)
   const chatHistoryRef = useRef(chatHistory)
   const pendingRequestRef = useRef(null)
+  const adoptingSuggestionKeysRef = useRef(new Set())
 
   const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
   const emptyQuestions = useMemo(() => getCoachEmptyQuestionView(), [])
@@ -137,7 +157,7 @@ function CoachTab({
     () =>
       chatHistory.map((message, index) => {
         const meta = messageMeta[index]
-        const suggestion = meta?.isDismissed ? null : meta?.suggestion || null
+        const suggestion = meta?.isDismissed ? null : meta?.suggestion || message?.suggestion || null
 
         return {
           ...message,
@@ -317,6 +337,7 @@ function CoachTab({
 
         return nextMeta
       })
+      chatHistoryRef.current = mergeResult.nextHistory
       onChatHistoryChange(mergeResult.nextHistory)
     }
 
@@ -483,14 +504,48 @@ function CoachTab({
   }
 
   function handleDismissSuggestion(targetSuggestion) {
+    const commitKey = getSuggestionCommitKey(targetSuggestion)
+
+    persistHideSuggestion(targetSuggestion)
     setMessageMeta((currentMeta) =>
       currentMeta.map((entry) =>
-        entry?.suggestion === targetSuggestion ? { ...entry, isDismissed: true } : entry,
+        getSuggestionCommitKey(entry?.suggestion) === commitKey
+          ? { ...entry, isDismissed: true, suggestion: null }
+          : entry,
       ),
     )
   }
 
+  function persistHideSuggestion(targetSuggestion) {
+    const commitKey = getSuggestionCommitKey(targetSuggestion)
+
+    if (!commitKey) {
+      return
+    }
+
+    const nextHistory = chatHistoryRef.current.map((message) =>
+      getSuggestionCommitKey(message?.suggestion) === commitKey
+        ? { ...message, suggestion: null }
+        : message,
+    )
+
+    chatHistoryRef.current = nextHistory
+    onChatHistoryChange(nextHistory)
+  }
+
   async function handleAdoptSuggestion(targetSuggestion) {
+    const commitKey = getSuggestionCommitKey(targetSuggestion)
+
+    if (!commitKey) {
+      return
+    }
+
+    if (adoptingSuggestionKeysRef.current.has(commitKey)) {
+      return
+    }
+
+    adoptingSuggestionKeysRef.current.add(commitKey)
+
     try {
       const client = createBackendClient()
       const adoptResult = targetSuggestion?.proposalId
@@ -510,6 +565,8 @@ function CoachTab({
       handleDismissSuggestion(targetSuggestion)
     } catch (error) {
       setErrorMessage(error?.message || '采纳建议失败，请确认本地后端服务已启动。')
+    } finally {
+      adoptingSuggestionKeysRef.current.delete(commitKey)
     }
   }
 
@@ -573,9 +630,11 @@ function CoachTab({
       const reply = await requestReplyWithFallback(requestPayload, {
         signal: activeRequestAbortRef.current?.signal,
       })
+      const assistantSuggestion = reply.proposal || reply.suggestion || null
       const assistantMessage = {
         content: reply.text,
         role: 'assistant',
+        suggestion: assistantSuggestion,
       }
       const finalHistory = appendChatMessages(nextHistory, [assistantMessage])
 
@@ -587,14 +646,13 @@ function CoachTab({
         nextMeta[assistantIndex] = {
           ...nextMeta[assistantIndex],
           isDismissed: false,
-          suggestion: reply.proposal || reply.suggestion,
+          suggestion: assistantSuggestion,
         }
 
         return nextMeta
       })
-      onChatHistoryChange(
-        appendChatMessages(nextHistory, [{ role: 'assistant', content: reply.text }]),
-      )
+      chatHistoryRef.current = finalHistory
+      onChatHistoryChange(finalHistory)
       setDraft('')
       setAttachedFiles([])
     } catch (error) {

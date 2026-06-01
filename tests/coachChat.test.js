@@ -287,10 +287,31 @@ test('mergeBackgroundCoachReply 只在当前历史仍包含源用户消息时追
   assert.equal(mergeResult.status, 'merged')
   assert.deepEqual(mergeResult.nextHistory, [
     { role: 'user', content: '离页后继续分析' },
-    { role: 'assistant', content: '后台分析完成' },
+    { role: 'assistant', content: '后台分析完成', suggestion: { day: 'Friday' } },
   ])
   assert.equal(mergeResult.assistantIndex, 1)
   assert.deepEqual(mergeResult.suggestion, { day: 'Friday' })
+})
+
+test('mergeBackgroundCoachReply 成功合并时会把 suggestion 持久到 assistant 消息', () => {
+  const suggestion = {
+    proposalId: 'proposal-bg-1',
+    summary: '把周五硬拉改轻',
+    day: 'Friday',
+    changes: [{ action: 'update', exerciseName: '硬拉', field: 'pct', newValue: 0.65 }],
+  }
+  const mergeResult = mergeBackgroundCoachReply({
+    currentHistory: [{ role: 'user', content: '离页后继续分析' }],
+    reply: { text: '建议把硬拉强度下调。', suggestion },
+    storedTask: { taskId: 'task-1', userContent: '离页后继续分析' },
+  })
+
+  assert.equal(mergeResult.status, 'merged')
+  assert.deepEqual(mergeResult.nextHistory.at(-1), {
+    role: 'assistant',
+    content: '建议把硬拉强度下调。',
+    suggestion,
+  })
 })
 
 test('mergeBackgroundCoachReply 在用户已清空当前聊天时不污染当前对话', () => {
