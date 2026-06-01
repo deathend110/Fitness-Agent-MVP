@@ -1,5 +1,6 @@
 function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDay, planType }) {
-  const typeLabel = displayModel?.headerBadgeLabel ?? (!isTrainingDay && planType === 'rest' ? '休息' : planType)
+  const typeLabel = displayModel?.headerBadgeLabel ?? (!isTrainingDay && planType === 'rest' ? '休息' : null)
+  const shouldShowTypeBadge = Boolean(typeLabel)
   const header = displayModel?.header ?? {
     title: dayLabel,
     dateLabel: '',
@@ -25,9 +26,11 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
         {header.dateLabel ? (
           <p className="mt-1 text-[11px] leading-4 text-slate-400">{header.dateLabel}</p>
         ) : null}
-        <span className="mt-2 rounded-full border border-fitloop-line/70 bg-fitloop-panel/90 px-2 py-0.5 text-[11px] font-semibold text-slate-300">
-          {typeLabel}
-        </span>
+        {shouldShowTypeBadge ? (
+          <span className="mt-2 rounded-full border border-fitloop-line/70 bg-fitloop-panel/90 px-2 py-0.5 text-[11px] font-semibold text-slate-300">
+            {typeLabel}
+          </span>
+        ) : null}
       </div>
     )
   }
@@ -59,11 +62,13 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
             : `flex-col items-center ${isCompactRestDay ? 'gap-1.5' : 'gap-2'}`
         }`}
       >
-        <span
-          className={`rounded-full border text-xs font-semibold ${isCompactRestDay ? 'px-2 py-0.5' : 'px-2.5 py-1'} ${typeBadgeClassName}`}
-        >
-          {typeLabel}
-        </span>
+        {shouldShowTypeBadge ? (
+          <span
+            className={`rounded-full border text-xs font-semibold ${isCompactRestDay ? 'px-2 py-0.5' : 'px-2.5 py-1'} ${typeBadgeClassName}`}
+          >
+            {typeLabel}
+          </span>
+        ) : null}
 
         {isTrainingDay ? (
           <span className="rounded-full border border-fitloop-line/70 bg-black/10 px-2.5 py-1 text-xs text-slate-400">

@@ -378,7 +378,8 @@ docs/
   - 只负责组合头部、训练类型区、动作编辑区和动作列表
 
 - `src/components/PlanDayCardHeader.jsx`
-  - 展示星期标签、日期标签、训练日 / 恢复日模式、训练类型和动作数量
+  - 展示星期标签、日期标签、训练日 / 恢复日模式和动作数量
+  - 训练日头部不再渲染 `plan.type` 类型胶囊，避免默认「腿日」污染所有训练日；休息日仍保留「休息」状态提示
 
 - `src/components/PlanDayTypeSection.jsx`
   - 负责训练类型输入
@@ -1020,6 +1021,7 @@ tests/
 - `src/components/PlanDayCardHeader.jsx`
   - 训练日与休息日共用同一入口，但根据展示模型输出不同的头部信息密度。
   - 空休息日窄列只保留“周几 + 月日 + 休息 badge”，避免与中部恢复面板重复表达。
+  - 训练日仅展示动作数量和训练预览文案，不把默认训练类型渲染为头部胶囊，训练类型编辑仍由 `PlanDayTypeSection` 承担。
 - `src/components/plan-grid/PlanWeekGridColumn.jsx`
   - 继续负责宽窄列比例，同时让休息日列使用更轻的容器样式。
 - `src/components/plan-rest/PlanDayEmptyState.jsx`

@@ -81,7 +81,7 @@ export function buildPlanDayDisplayModel({
     dayTypeSectionVariant: 'full',
     dayTypeQuickOptions: [],
     showNoteEntry: false,
-    headerBadgeLabel: plan.type || '训练日',
+    headerBadgeLabel: null,
     header: createHeaderModel(dayLabel, dateLabel),
     historyHint: null,
     preview: {
