@@ -1,4 +1,5 @@
 import AdoptCard from '../AdoptCard.jsx'
+import MessageAttachmentCard from './MessageAttachmentCard.jsx'
 import MarkdownMessage from './MarkdownMessage.jsx'
 
 function AssistantActions({ onCopy, onRetry }) {
@@ -24,6 +25,7 @@ function AssistantActions({ onCopy, onRetry }) {
 
 function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggestion }) {
   const isUser = message.role === 'user'
+  const attachments = Array.isArray(message.attachments) ? message.attachments : []
   const senderLabel = message.senderLabel || (isUser ? '我' : 'RepMind')
   const rawSuggestion = message.suggestion || null
   const handleAdopt = rawSuggestion ? () => onAdopt?.(rawSuggestion) : undefined
@@ -50,6 +52,17 @@ function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggest
             <span className="ml-2 text-fitloop-line">{message.timeLabel}</span>
           ) : null}
         </p>
+
+        {isUser && attachments.length ? (
+          <div className="mb-2 flex w-full max-w-[600px] flex-col gap-2">
+            {attachments.map((attachment, index) => (
+              <MessageAttachmentCard
+                attachment={attachment}
+                key={`${attachment.fileId || attachment.originalName || 'attachment'}-${index}`}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <div
           className={`max-w-[600px] rounded-2xl border px-4 py-3 text-sm leading-7 text-slate-800 ${
