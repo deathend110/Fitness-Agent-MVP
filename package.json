@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:backend": "uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:backend\"",
+    "stop:all": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-fitloop.ps1",
     "test": "node --test \"tests/*.test.js\"",
     "build": "vite build",
     "preview": "vite preview"

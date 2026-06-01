@@ -96,6 +96,8 @@ backend/
   config.py
   main.py
   requirements.txt
+scripts/
+  kill-fitloop.ps1
 ```
 
 ### 测试导入约定
@@ -118,6 +120,12 @@ backend/
 - `src/components/coach/MessageList.jsx`
   - 首次挂载和切回 AI 教练页时会自动贴到底部，确保用户看到最新消息。
   - 仍保留“用户手动上翻时不强制追底”的滚动判定。
+
+### 本地运维脚本
+
+- `scripts/kill-fitloop.ps1`
+  - 负责停止当前仓库关联的 `vite / uvicorn / concurrently / uv` 等本地开发进程。
+  - 只匹配命令行中包含当前仓库路径或 `Fitness Agent MVP` 标识的进程，避免误杀其他项目。
 
 ### 当前新增前端接口层
 

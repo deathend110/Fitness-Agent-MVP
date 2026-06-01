@@ -69,6 +69,12 @@ npm run dev
 npm run dev:all
 ```
 
+关闭当前项目相关前后端进程：
+
+```powershell
+npm run stop:all
+```
+
 只启动后端：
 
 ```powershell
@@ -92,6 +98,7 @@ http://localhost:5173/
 
 - 后端首次启动会自动在 `backend/data/repmind.db` 创建 SQLite 表
 - 浏览器端默认通过 `VITE_API_BASE_URL` 访问本地后端
+- `npm run stop:all` 会调用 `scripts/kill-fitloop.ps1`，只停止命令行中包含当前仓库路径的 `node/python/uv` 相关进程
 
 ## API Key 配置
 
