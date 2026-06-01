@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from backend.api import drafts as drafts_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base, ChatSession, UploadedFile, utc_now
 from backend.main import app
@@ -61,13 +62,21 @@ async def seed_session_and_file() -> tuple[int, int]:
 @pytest.mark.asyncio
 async def test_get_empty_draft_returns_defaults(api_client: AsyncClient) -> None:
     session_id, _file_id = await seed_session_and_file()
+    drafts_api.get_provider_runtime = lambda: type(
+        "FakeRuntime",
+        (),
+        {"default_model_ref": "provider_deepseek_main::deepseek-v4-flash"},
+    )()
 
-    response = await api_client.get(f"/api/chat/sessions/{session_id}/draft")
+    try:
+        response = await api_client.get(f"/api/chat/sessions/{session_id}/draft")
+    finally:
+        drafts_api.get_provider_runtime = __import__("backend.api.drafts", fromlist=["get_provider_runtime"]).get_provider_runtime
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["content"] == ""
-    assert payload["model"] == "deepseek-v4-flash"
+    assert payload["model"] == "provider_deepseek_main::deepseek-v4-flash"
     assert payload["thinking"] == {"enabled": False, "budget": "auto"}
     assert payload["attachedFileIds"] == []
 

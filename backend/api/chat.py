@@ -21,6 +21,7 @@ from backend.agent.usage_ledger import record_usage, summarize_session_usage
 from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
 from backend.db.models import ChatMessage, ChatSession, UploadedFile, utc_now
+from backend.model_config.runtime import get_provider_runtime
 from backend.schemas import (
     ChatMessageCreateSchema,
     ChatMessageSchema,
@@ -87,6 +88,7 @@ def initialize_background_worker(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     client_factory: Any = get_deepseek_client,
     default_model: str | None = None,
+    runtime_provider: Any | None = None,
 ) -> None:
     global background_worker
 
@@ -99,6 +101,7 @@ def initialize_background_worker(
         session_factory=session_factory,
         client_factory=client_factory,
         default_model=default_model or settings.default_model,
+        runtime_provider=runtime_provider or get_provider_runtime,
     )
 
 
@@ -111,6 +114,7 @@ def get_background_worker() -> BackgroundWorker:
             session_factory=session_factory,
             client_factory=get_deepseek_client,
             default_model=settings.default_model,
+            runtime_provider=get_provider_runtime,
         )
 
     return background_worker
@@ -293,6 +297,47 @@ def normalize_deepseek_thinking(
 
     budget = str(thinking.get("budget") or "auto").lower()
     return {"type": "enabled"}, "max" if budget == "max" else "high"
+
+
+def resolve_selected_chat_model(model: str | None) -> tuple[str, Any | None, str]:
+    """把聊天入口收到的 model/modelRef 统一解析成可请求的远端模型 ID。"""
+
+    runtime = get_provider_runtime()
+    if model is None:
+        selected_model = runtime.default_model_ref
+    else:
+        selected_model = model
+
+    if "::" not in selected_model:
+        return selected_model, None, selected_model
+
+    provider, remote_model_id = runtime.resolve_model_ref(selected_model)
+    return selected_model, provider, remote_model_id
+
+
+def build_provider_bound_client(
+    provider: Any | None,
+    fallback_client: DeepSeekClient,
+) -> DeepSeekClient:
+    """OpenAI 兼容 provider 可直接复用现有 DeepSeek/OpenAI 格式客户端。"""
+
+    if not isinstance(fallback_client, DeepSeekClient):
+        return fallback_client
+
+    if provider is None or getattr(provider, "type", "") != "openai_compatible":
+        return fallback_client
+
+    api_key = str(getattr(provider, "api_key", "") or "").strip()
+    base_url = str(getattr(provider, "base_url", "") or "").strip()
+    if not api_key or not base_url:
+        return fallback_client
+
+    settings = get_settings()
+    return DeepSeekClient(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=settings.deepseek_timeout_seconds,
+    )
 
 
 def build_sse_frame(event: str, payload: dict[str, Any]) -> str:
@@ -510,8 +555,8 @@ async def stream_chat_reply(
     session: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
     chat_session = await resolve_chat_session(session_id, session)
-    settings = get_settings()
-    selected_model = model or settings.default_model
+    selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(model)
+    provider_client = build_provider_bound_client(selected_provider, deepseek_client)
     direct_user_input = read_user_input(user_input)
     selected_file_ids = parse_file_ids_query(file_ids)
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(parse_thinking_query(thinking))
@@ -525,7 +570,7 @@ async def stream_chat_reply(
             session_id=chat_session.id,
             user_input=user_content,
             file_ids=selected_file_ids,
-            model_config={"model": selected_model},
+            model_config={"model": selected_model_ref},
         )
         request_messages = agent_request.messages
     else:
@@ -541,9 +586,9 @@ async def stream_chat_reply(
         try:
             if direct_user_input is not None:
                 assistant_text, suggestion, proposal = await request_agent_tool_reply(
-                    deepseek_client=deepseek_client,
+                    deepseek_client=provider_client,
                     messages=request_messages,
-                    model=selected_model,
+                    model=remote_model_id,
                     session=session,
                     session_id=chat_session.id,
                     thinking=thinking_payload,
@@ -558,7 +603,7 @@ async def stream_chat_reply(
                     user_attachments=user_attachments,
                     assistant_text=assistant_text,
                     suggestion=proposal or suggestion,
-                    model=selected_model,
+                    model=selected_model_ref,
                     usage=None,
                 )
                 if proposal is not None:
@@ -568,9 +613,9 @@ async def stream_chat_reply(
                 return
 
             async for chunk, event_usage in stream_deepseek_reply_with_usage(
-                deepseek_client=deepseek_client,
+                deepseek_client=provider_client,
                 messages=request_messages,
-                model=selected_model,
+                model=remote_model_id,
                 thinking=thinking_payload,
                 reasoning_effort=reasoning_effort,
             ):
@@ -592,7 +637,7 @@ async def stream_chat_reply(
                 user_attachments=user_attachments,
                 assistant_text=assistant_text,
                 suggestion=suggestion,
-                model=selected_model,
+                model=selected_model_ref,
                 usage=usage,
             )
 
@@ -617,8 +662,8 @@ async def request_chat_reply(
 ) -> ChatReplyResponseSchema:
     user_content = read_payload_user_content(payload)
     chat_session = await resolve_chat_session(payload.sessionId, session)
-    settings = get_settings()
-    selected_model = payload.model or settings.default_model
+    selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(payload.model)
+    provider_client = build_provider_bound_client(selected_provider, deepseek_client)
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
     user_attachments: list[dict[str, Any]] = []
     if payload.userInput is not None:
@@ -628,7 +673,7 @@ async def request_chat_reply(
             session_id=chat_session.id,
             user_input=user_content,
             file_ids=payload.fileIds,
-            model_config={"model": selected_model},
+            model_config={"model": selected_model_ref},
         )
         request_messages = agent_request.messages
     else:
@@ -641,9 +686,9 @@ async def request_chat_reply(
         usage = None
         if payload.userInput is not None:
             assistant_text, suggestion, proposal = await request_agent_tool_reply(
-                deepseek_client=deepseek_client,
+                deepseek_client=provider_client,
                 messages=request_messages,
-                model=selected_model,
+                model=remote_model_id,
                 session=session,
                 session_id=chat_session.id,
                 thinking=thinking_payload,
@@ -651,9 +696,9 @@ async def request_chat_reply(
             )
         else:
             content, usage = await request_deepseek_reply_with_usage(
-                deepseek_client=deepseek_client,
+                deepseek_client=provider_client,
                 messages=request_messages,
-                model=selected_model,
+                model=remote_model_id,
                 thinking=thinking_payload,
                 reasoning_effort=reasoning_effort,
             )
@@ -668,7 +713,7 @@ async def request_chat_reply(
             user_attachments=user_attachments,
             assistant_text=assistant_text,
             suggestion=proposal or suggestion,
-            model=selected_model,
+            model=selected_model_ref,
             usage=usage,
         )
         return ChatReplyResponseSchema(
@@ -708,15 +753,16 @@ async def submit_background_chat_task(
         user_content = read_last_user_message(payload.messages)
         request_messages = payload.messages
     else:
-        settings = get_settings()
-        selected_model = payload.model or settings.default_model
+        selected_model_ref = payload.model
+        if selected_model_ref is not None:
+            selected_model_ref, _selected_provider, _remote_model_id = resolve_selected_chat_model(payload.model)
         user_attachments = await build_message_attachment_snapshots(session, payload.fileIds)
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
             user_input=user_content,
             file_ids=payload.fileIds,
-            model_config={"model": selected_model},
+            model_config={"model": selected_model_ref} if selected_model_ref is not None else None,
         )
         request_messages = agent_request.messages
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)

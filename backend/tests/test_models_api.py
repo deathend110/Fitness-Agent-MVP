@@ -1,78 +1,84 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.agent.deepseek_client import DeepSeekClientError
 from backend.api import models as models_api
-from backend.config import Settings
 from backend.main import app
 
 
-class FakeModelsClient:
-    def __init__(self, payload: list[dict[str, Any]] | None = None, error: Exception | None = None) -> None:
-        self.payload = payload or []
-        self.error = error
-
-    async def list_models(self) -> list[dict[str, Any]]:
-        if self.error is not None:
-            raise self.error
-        return self.payload
-
-
 @pytest.mark.asyncio
-async def test_models_api_filters_remote_models_to_allowlist() -> None:
-    app.dependency_overrides[models_api.get_models_settings] = lambda: Settings(
-        deepseek_api_key="test-key",
-        model_allowlist=["deepseek-v4-flash", "deepseek-v4-pro"],
-        default_model="deepseek-v4-flash",
-    )
-    app.dependency_overrides[models_api.get_models_client] = lambda: FakeModelsClient(
-        [
-            {"id": "deepseek-v4-pro"},
-            {"id": "unknown-model"},
-            {"id": "deepseek-v4-flash"},
-        ]
-    )
+async def test_models_api_returns_selected_models_from_runtime_cache(monkeypatch) -> None:
+    class FakeRuntime:
+        default_model_ref = "provider_gemini_main::gemini-2.5-flash"
 
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-            response = await client.get("/api/models")
-    finally:
-        app.dependency_overrides.clear()
+        def list_enabled_models(self):
+            return [
+                {
+                    "id": "provider_gemini_main::gemini-2.5-flash",
+                    "providerId": "provider_gemini_main",
+                    "providerType": "gemini_native",
+                    "providerLabel": "Gemini 主账号",
+                    "remoteModelId": "gemini-2.5-flash",
+                    "label": "Gemini 主账号 / Gemini 2.5 Flash",
+                    "supportsThinking": True,
+                    "thinking": {
+                        "supported": True,
+                        "canDisable": True,
+                        "defaultEnabled": True,
+                        "intensityOptions": [{"id": "standard", "label": "标准"}],
+                        "defaultIntensity": "standard",
+                    },
+                }
+            ]
+
+    monkeypatch.setattr(models_api, "get_provider_runtime", lambda: FakeRuntime())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.get("/api/models")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["source"] == "remote"
-    assert payload["defaultModel"] == "deepseek-v4-flash"
-    assert [item["id"] for item in payload["models"]] == ["deepseek-v4-pro", "deepseek-v4-flash"]
-    assert payload["models"][0]["label"] == "DeepSeek V4 Pro"
-    assert payload["models"][0]["supportsThinking"] is True
-    assert payload["thinking"] == {"enabled": False, "budget": "auto", "options": ["off", "auto", "max"]}
+    assert payload["defaultModel"] == "provider_gemini_main::gemini-2.5-flash"
+    assert payload["defaultModelRef"] == "provider_gemini_main::gemini-2.5-flash"
+    assert payload["models"][0]["label"] == "Gemini 主账号 / Gemini 2.5 Flash"
+    assert payload["models"][0]["thinking"]["defaultIntensity"] == "standard"
+    assert payload["warning"] == ""
 
 
 @pytest.mark.asyncio
-async def test_models_api_falls_back_without_key_or_when_upstream_fails() -> None:
-    app.dependency_overrides[models_api.get_models_settings] = lambda: Settings(
-        deepseek_api_key="",
-        model_allowlist=["deepseek-v4-flash", "deepseek-v4-pro"],
-        default_model="deepseek-v4-flash",
-    )
-    app.dependency_overrides[models_api.get_models_client] = lambda: FakeModelsClient(
-        error=DeepSeekClientError("boom", code="network_error")
-    )
+async def test_models_api_keeps_legacy_top_level_thinking_for_current_ui(monkeypatch) -> None:
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-v4-flash"
 
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
-            response = await client.get("/api/models")
-    finally:
-        app.dependency_overrides.clear()
+        def list_enabled_models(self):
+            return [
+                {
+                    "id": "provider_deepseek_main::deepseek-v4-flash",
+                    "providerId": "provider_deepseek_main",
+                    "providerType": "openai_compatible",
+                    "providerLabel": "DeepSeek 主账号",
+                    "remoteModelId": "deepseek-v4-flash",
+                    "label": "DeepSeek 主账号 / DeepSeek V4 Flash",
+                    "supportsThinking": True,
+                    "thinking": {
+                        "supported": True,
+                        "canDisable": True,
+                        "defaultEnabled": False,
+                        "intensityOptions": [
+                            {"id": "standard", "label": "标准"},
+                            {"id": "deep", "label": "深入"},
+                        ],
+                        "defaultIntensity": "standard",
+                    },
+                }
+            ]
+
+    monkeypatch.setattr(models_api, "get_provider_runtime", lambda: FakeRuntime())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        response = await client.get("/api/models")
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["source"] == "fallback"
-    assert payload["warning"]
-    assert [item["id"] for item in payload["models"]] == ["deepseek-v4-flash", "deepseek-v4-pro"]
-    assert "deepseek-chat" not in [item["id"] for item in payload["models"]]
+    assert payload["thinking"] == {"enabled": False, "budget": "standard", "options": ["off", "standard", "deep"]}

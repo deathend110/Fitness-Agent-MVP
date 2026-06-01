@@ -12,6 +12,7 @@ from backend.agent.chat_session import run_tool_calling_chat
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.tool_calling import build_default_tool_registry
+from backend.config import get_settings
 from backend.db.models import ChatMessage, ChatSession, utc_now
 
 BackgroundTaskStatus = Literal["pending", "running", "succeeded", "failed", "not_found"]
@@ -32,11 +33,13 @@ class BackgroundWorker:
         *,
         session_factory: async_sessionmaker[AsyncSession],
         client_factory: Callable[[], DeepSeekClient],
-        default_model: str,
+        default_model: str | None = None,
+        runtime_provider: Callable[[], Any] | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.client_factory = client_factory
         self.default_model = default_model
+        self.runtime_provider = runtime_provider
         self._tasks: dict[str, BackgroundTaskRecord] = {}
 
     async def submit(
@@ -53,13 +56,15 @@ class BackgroundWorker:
         task_id = uuid4().hex
         record = BackgroundTaskRecord(task_id=task_id, session_id=session_id)
         self._tasks[task_id] = record
+        selected_model = self._resolve_selected_model(model)
         asyncio.create_task(
             self._run_task(
                 record=record,
                 messages=messages,
                 user_content=user_content,
                 user_attachments=user_attachments,
-                model=model or self.default_model,
+                model=selected_model["remote_model_id"],
+                provider=selected_model["provider"],
                 thinking=thinking,
                 reasoning_effort=reasoning_effort,
             )
@@ -87,13 +92,15 @@ class BackgroundWorker:
         user_content: str,
         user_attachments: list[dict[str, Any]] | None,
         model: str,
+        provider: Any | None,
         thinking: dict[str, Any] | None,
         reasoning_effort: str | None,
     ) -> None:
         record.status = "running"
 
         try:
-            client = self.client_factory()
+            fallback_client = self.client_factory()
+            client = self._build_client_for_provider(provider, fallback_client)
             thinking_kwargs: dict[str, Any] = {}
             if thinking is not None:
                 thinking_kwargs["thinking"] = thinking
@@ -195,3 +202,49 @@ class BackgroundWorker:
             return str(error)
 
         return "后台 AI 教练任务执行失败，请稍后重试。"
+
+    def _resolve_selected_model(self, model: str | None) -> dict[str, Any]:
+        """后台任务统一接受旧 modelId 和新 modelRef，两种入口都能兼容。"""
+
+        runtime = self.runtime_provider() if self.runtime_provider is not None else None
+        if model and "::" not in model:
+            return {"provider": None, "remote_model_id": model}
+
+        selected_model = model
+        if not selected_model:
+            if runtime is not None:
+                selected_model = runtime.default_model_ref
+            elif self.default_model:
+                selected_model = self.default_model
+            else:
+                raise ValueError("后台任务缺少默认模型配置。")
+
+        if "::" not in selected_model:
+            return {"provider": None, "remote_model_id": selected_model}
+
+        if runtime is None:
+            raise ValueError("后台任务收到 modelRef，但运行时 provider cache 尚未初始化。")
+
+        provider, remote_model_id = runtime.resolve_model_ref(selected_model)
+        return {"provider": provider, "remote_model_id": remote_model_id}
+
+    def _build_client_for_provider(self, provider: Any | None, fallback_client: Any) -> Any:
+        """OpenAI 兼容 provider 先复用 DeepSeekClient 封装，便于平滑承接多供应商。"""
+
+        if not isinstance(fallback_client, DeepSeekClient):
+            return fallback_client
+
+        if provider is None or getattr(provider, "type", "") != "openai_compatible":
+            return fallback_client
+
+        api_key = str(getattr(provider, "api_key", "") or "").strip()
+        base_url = str(getattr(provider, "base_url", "") or "").strip()
+        if not api_key or not base_url:
+            return fallback_client
+
+        settings = get_settings()
+        return DeepSeekClient(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=settings.deepseek_timeout_seconds,
+        )

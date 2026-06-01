@@ -2,78 +2,52 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
-from backend.config import Settings, get_settings
+from backend.model_config.runtime import get_provider_runtime
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
-MODEL_LABELS = {
-    "deepseek-v4-flash": "DeepSeek V4 Flash",
-    "deepseek-v4-pro": "DeepSeek V4 Pro",
-    "deepseek-chat": "DeepSeek Chat（兼容名）",
-    "deepseek-reasoner": "DeepSeek Reasoner（兼容名）",
-}
 
-THINKING_MODELS = {"deepseek-v4-flash", "deepseek-v4-pro"}
+def build_legacy_top_level_thinking(models: list[dict[str, Any]], default_model_ref: str) -> dict[str, Any]:
+    """兼容旧版 UI：优先从默认模型的能力信息回推顶层 thinking。"""
 
+    selected_model = next((item for item in models if item.get("id") == default_model_ref), None)
+    if not isinstance(selected_model, dict):
+        return {"enabled": False, "budget": "auto", "options": ["off", "auto", "max"]}
 
-def get_models_settings() -> Settings:
-    return get_settings()
+    thinking = selected_model.get("thinking")
+    if not isinstance(thinking, dict) or not thinking.get("supported"):
+        return {"enabled": False, "budget": "auto", "options": ["off", "auto", "max"]}
 
-
-def get_models_client(settings: Settings = Depends(get_models_settings)) -> DeepSeekClient:
-    return DeepSeekClient(
-        api_key=settings.deepseek_api_key,
-        base_url=settings.deepseek_base_url,
-        timeout=settings.deepseek_timeout_seconds,
+    options = ["off"]
+    options.extend(
+        option["id"]
+        for option in thinking.get("intensityOptions", [])
+        if isinstance(option, dict) and isinstance(option.get("id"), str)
     )
-
-
-@router.get("")
-async def list_models(
-    settings: Settings = Depends(get_models_settings),
-    client: DeepSeekClient = Depends(get_models_client),
-) -> dict[str, Any]:
-    warning = ""
-    source = "remote"
-    model_ids: list[str]
-
-    if not settings.deepseek_api_key.strip():
-        source = "fallback"
-        warning = "未配置 DeepSeek API Key，已使用本地模型白名单。"
-        model_ids = list(settings.model_allowlist)
-    else:
-        try:
-            remote_models = await client.list_models()
-            remote_ids = [str(item.get("id")) for item in remote_models if isinstance(item, dict) and item.get("id")]
-            model_ids = [model_id for model_id in remote_ids if model_id in settings.model_allowlist]
-            if not model_ids:
-                source = "fallback"
-                warning = "DeepSeek /models 未返回白名单模型，已使用本地模型白名单。"
-                model_ids = list(settings.model_allowlist)
-        except DeepSeekClientError as exc:
-            source = "fallback"
-            warning = str(exc)
-            model_ids = list(settings.model_allowlist)
-
     return {
-        "source": source,
-        "warning": warning,
-        "defaultModel": settings.default_model if settings.default_model in model_ids else model_ids[0],
-        "models": [build_model_option(model_id) for model_id in model_ids],
-        "thinking": {
-            "enabled": settings.default_thinking_enabled,
-            "budget": settings.default_thinking_budget,
-            "options": ["off", "auto", "max"],
-        },
+        "enabled": bool(thinking.get("defaultEnabled")),
+        "budget": str(thinking.get("defaultIntensity") or "auto"),
+        "options": options,
     }
 
 
-def build_model_option(model_id: str) -> dict[str, Any]:
+@router.get("")
+async def list_models() -> dict[str, Any]:
+    """返回运行时启用模型列表，并保留旧版前端仍在消费的顶层 thinking 字段。"""
+
+    runtime = get_provider_runtime()
+    models = runtime.list_enabled_models()
     return {
-        "id": model_id,
-        "label": MODEL_LABELS.get(model_id, model_id),
-        "supportsThinking": model_id in THINKING_MODELS,
+        "source": "runtime",
+        "warning": "",
+        "defaultModel": runtime.default_model_ref,
+        "defaultModelRef": runtime.default_model_ref,
+        "models": models,
+        "thinking": (
+            runtime.get_legacy_default_thinking()
+            if hasattr(runtime, "get_legacy_default_thinking")
+            else build_legacy_top_level_thinking(models, runtime.default_model_ref)
+        ),
     }

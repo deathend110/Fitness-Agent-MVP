@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import get_settings
 from backend.db.database import get_db_session
 from backend.db.models import ChatSession, CoachDraft, UploadedFile, utc_now
+from backend.model_config.runtime import get_provider_runtime
 
 router = APIRouter(prefix="/api/chat/sessions", tags=["drafts"])
 
@@ -50,10 +51,11 @@ async def get_coach_draft(
         return build_draft_response(draft)
 
     settings = get_settings()
+    runtime = get_provider_runtime()
     return {
         "sessionId": session_id,
         "content": "",
-        "model": settings.default_model,
+        "model": runtime.default_model_ref,
         "thinking": {
             "enabled": settings.default_thinking_enabled,
             "budget": settings.default_thinking_budget,

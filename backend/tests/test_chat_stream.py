@@ -62,6 +62,23 @@ class FakeDeepSeekClient:
         return "".join(self.chunks)
 
 
+class FakeReplyModelClient(FakeDeepSeekClient):
+    def __init__(self, reply: str) -> None:
+        super().__init__([reply])
+        self.calls: list[dict[str, Any]] = []
+
+    async def request_chat(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        stream: bool = False,
+        **_: Any,
+    ) -> str:
+        self.calls.append({"messages": messages, "model": model})
+        return await super().request_chat(messages=messages, model=model, stream=stream, **_)
+
+
 class FakeToolProposalClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -550,3 +567,39 @@ async def test_chat_stream_persists_user_attachment_snapshot_and_empty_assistant
     assert stored_messages[0]["attachments"] == [uploaded_file]
     assert stored_messages[1]["role"] == "assistant"
     assert stored_messages[1]["attachments"] == []
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_resolves_model_ref_before_requesting_provider_client(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    fake_client = FakeReplyModelClient("按解析后的远端模型回复。")
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    resolved_model_refs: list[str] = []
+
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-v4-flash"
+
+        def resolve_model_ref(self, model_ref: str):
+            resolved_model_refs.append(model_ref)
+            return (
+                type("Provider", (), {"type": "openai_compatible", "api_key": None, "base_url": ""})(),
+                "deepseek-v4-flash",
+            )
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+
+    response = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages("hello"),
+            "model": "provider_deepseek_main::deepseek-v4-flash",
+        },
+    )
+
+    assert response.status_code == 200
+    assert resolved_model_refs == ["provider_deepseek_main::deepseek-v4-flash"]
+    assert fake_client.calls[0]["model"] == "deepseek-v4-flash"

@@ -238,6 +238,7 @@ docs/
   - 负责聊天会话与消息的后端 CRUD、SSE 流式代理、非流式回退代理和后台思考任务 API
   - 提供会话列表、创建会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
+  - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
   - `/api/chat/stream` 将 DeepSeek 流式文本映射为 `delta / suggestion / done / error` 事件
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
 
@@ -286,11 +287,11 @@ docs/
   - Markdown/TXT、DOCX、Excel 和图片统一输出 `{kind,title,summary,preview,text}`；图片摘要不内嵌完整 base64
 
 - `backend/api/models.py`
-  - 提供 `/api/models`，优先读取 DeepSeek `/models` 并按 `MODEL_ALLOWLIST` 过滤
-  - 缺 Key 或上游失败时返回本地 fallback、`source="fallback"` 和可展示 warning，避免阻断聊天
+  - 提供 `/api/models`，直接读取 `ProviderRuntimeCache` 当前启用模型集合
+  - 返回值同时包含 `defaultModel / defaultModelRef / models[] / thinking`；其中 `thinking` 仍是给旧版前端保留的兼容字段
 
 - `backend/model_config/runtime.py`
-  - 负责模型配置运行时缓存、`default_model_ref` 暴露、`modelRef` 解析与配置热刷新入口
+  - 负责模型配置运行时缓存、`default_model_ref` 暴露、`modelRef` 解析、启用模型列表生成与配置热刷新入口
   - 当前对外返回 provider 副本，避免后续路由或适配层误改共享缓存内部状态
 
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
@@ -322,6 +323,7 @@ docs/
 - `backend/agent/background_worker.py`
   - 负责离页后台思考的进程内任务表和 `asyncio.create_task` 调度
   - 后台任务使用独立 SQLAlchemy session factory 写库，不复用请求生命周期内的 DB session
+  - 当请求未显式传模型时，会优先使用运行时默认 `modelRef`，再解析到真实远端模型 ID，保证前台聊天与后台思考使用同一套模型来源
   - 成功任务解析 `suggestion` 后写入本轮 user + assistant；失败任务只记录友好状态，不写脏 assistant
 
 - `backend/db/models.py`
@@ -873,6 +875,7 @@ CoachTab
 - memory 保存用户长期事实，knowledge 保存外部资料或上传文件知识，两者不会混写；单日状态不晋升长期 memory
 - 上传文件只通过 `fileIds` 和摘要进入 Agent，不把本机路径或完整大文件塞进请求
 - 模型与 thinking 配置由后端 `/api/models` 收口，前端仅选择后端声明的可用项
+- 聊天、草稿和后台任务共享 `modelRef -> ProviderRuntimeCache -> remote_model_id` 解析链路，避免前端、SSE 与后台任务各自维护一套默认模型逻辑
 - 后台任务提交由 `backgroundTaskStartedRef` 去重，窗口 focus 回来后主动轮询，避免 Alt+Tab 或应用内 tab 切换时用户消息看起来丢失
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 - AI 教练页历史侧栏使用后端真实 session id；`buildCoachHistoryView()` 只作为旧测试与兼容工具保留，不再驱动生产侧栏

@@ -526,3 +526,38 @@ async def test_background_task_failed_status_does_not_persist_dirty_assistant(
     messages_response = await client.get(f"/api/chat/sessions/{session_id}/messages")
     assert messages_response.status_code == 200
     assert messages_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_background_task_uses_runtime_default_model_ref_when_model_missing(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+) -> None:
+    client, fake_client = api_client
+    session_id = (await client.post("/api/chat/sessions", json={"title": "runtime-default"})).json()["id"]
+
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-v4-pro"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_deepseek_main::deepseek-v4-pro"
+            return (
+                type("Provider", (), {"type": "openai_compatible", "api_key": None, "base_url": ""})(),
+                "deepseek-v4-pro",
+            )
+
+    chat_api.initialize_background_worker(
+        session_factory=chat_api.background_worker.session_factory,
+        client_factory=lambda: fake_client,
+        runtime_provider=lambda: FakeRuntime(),
+    )
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={"messages": build_messages("第一条问题")},
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+    assert fake_client.calls[-1]["model"] == "deepseek-v4-pro"
