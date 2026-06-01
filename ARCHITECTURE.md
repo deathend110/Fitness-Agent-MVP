@@ -69,6 +69,7 @@ backend/
     types.py
   providers/
     base.py
+    gemini_native.py
     openai_compatible.py
   db/
     database.py
@@ -290,6 +291,10 @@ docs/
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
   - 定义 Provider 适配层的最小公共接口和统一错误类型
   - 已落地 OpenAI-compatible `/models` 发现与 OpenAI function tools schema 转换，为 DeepSeek 和同类接口复用打基础
+
+- `backend/providers/gemini_native.py`
+  - 负责 Gemini 原生 `/models` 发现、`functionDeclarations` schema 生成、函数调用归一化以及 tool result 回灌消息格式转换
+  - 与 OpenAI-compatible provider 共用同一套本地工具描述，但保留 Gemini 原生消息结构
 
 - `backend/api/drafts.py`
   - 提供会话级 Coach 草稿读取和 upsert
