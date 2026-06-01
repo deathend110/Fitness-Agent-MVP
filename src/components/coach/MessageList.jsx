@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { getCoachEmptyQuestionView } from '../../utils/coachView.js'
 import EmptyState from './EmptyState.jsx'
 import MessageBubble from './MessageBubble.jsx'
@@ -21,21 +21,26 @@ function MessageList({
 }) {
   const bottomRef = useRef(null)
   const scrollRef = useRef(null)
+  const hasMountedRef = useRef(false)
   const isEmpty = messages.length === 0
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!scrollRef.current || isEmpty) {
+      hasMountedRef.current = true
       return
     }
 
     const element = scrollRef.current
+    const shouldRestoreBottom = !hasMountedRef.current
 
     // 只有用户本来就在底部附近，或当前处于流式回复时，才自动追到底部。
-    if (isSending || shouldAutoScroll(element)) {
+    // 首次挂载/切回 AI 教练页时，直接恢复到最新消息，避免页面回到历史最早一条。
+    if (shouldRestoreBottom || isSending || shouldAutoScroll(element)) {
       requestAnimationFrame(() => {
         bottomRef.current?.scrollIntoView({ block: 'end' })
       })
     }
+    hasMountedRef.current = true
   }, [autoScrollKey, isEmpty, isSending, messages.length, streamingText])
 
   if (isEmpty) {

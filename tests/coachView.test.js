@@ -99,4 +99,7 @@ test('MessageList 使用底部 sentinel 和 autoScrollKey 控制滚动', () => {
   assert.match(source, /bottomRef/)
   assert.match(source, /autoScrollKey/)
   assert.match(source, /scrollIntoView/)
+  assert.match(source, /hasMountedRef/)
+  assert.match(source, /shouldRestoreBottom/)
+  assert.match(source, /useLayoutEffect/)
 })

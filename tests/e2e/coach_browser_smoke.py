@@ -66,32 +66,44 @@ UPDATED_WEEKLY_PLAN = {
 }
 
 USER_MESSAGE = "请帮我把周一深蹲降一点量"
-CHAT_HISTORY = [
-    {"role": "user", "content": USER_MESSAGE},
-    {
-        "role": "assistant",
-        "content": "建议先把周一深蹲总量降一组，观察恢复。",
-        "suggestion": {
-            "proposalId": "proposal-e2e",
-            "day": "Monday",
-            "summary": "周一深蹲降低一组，用于验证采纳链路。",
-            "changes": [
-                {
-                    "action": "update",
-                    "exerciseName": "深蹲",
-                    "field": "sets",
-                    "oldValue": 4,
-                    "newValue": 3,
-                }
-            ],
-        },
-    },
-]
+
+
+def build_chat_history():
+    history = []
+    for index in range(12):
+        history.append({"role": "user", "content": f"历史提问 {index + 1}"})
+        history.append({"role": "assistant", "content": f"历史回复 {index + 1}"})
+
+    history.append({"role": "user", "content": USER_MESSAGE})
+    history.append(
+        {
+            "role": "assistant",
+            "content": "建议先把周一深蹲总量降一组，观察恢复。",
+            "suggestion": {
+                "proposalId": "proposal-e2e",
+                "day": "Monday",
+                "summary": "周一深蹲降低一组，用于验证采纳链路。",
+                "changes": [
+                    {
+                        "action": "update",
+                        "exerciseName": "深蹲",
+                        "field": "sets",
+                        "oldValue": 4,
+                        "newValue": 3,
+                    }
+                ],
+            },
+        }
+    )
+    return history
+
+
+CHAT_HISTORY = build_chat_history()
 
 BACKGROUND_TASK = {
     "taskId": "task-e2e",
     "sessionId": 1,
-    "sourceUserIndex": 0,
+    "sourceUserIndex": len(CHAT_HISTORY) - 2,
     "userContent": USER_MESSAGE,
     "files": [],
     "createdAt": "2026-06-01T00:00:00.000Z",
@@ -223,12 +235,20 @@ def main():
         expect(page.get_by_text(USER_MESSAGE).first).to_be_visible(timeout=10_000)
         expect(page.get_by_text("正在整理上下文...")).to_be_visible(timeout=10_000)
         expect(page.get_by_role("button", name="采纳并更新计划")).to_be_visible()
+        coach_scroll = page.locator('main > div[style*="scrollbar-gutter"]')
+        expect(coach_scroll).to_be_visible()
+        page.wait_for_function(
+            "() => { const el = document.querySelector('main > div[style*=\"scrollbar-gutter\"]'); return !!el && el.scrollTop > 0; }"
+        )
 
         page.get_by_role("button", name="我的档案").click()
         page.get_by_role("button", name="AI 教练").click()
 
         expect(page.get_by_text("正在整理上下文...")).to_be_visible(timeout=10_000)
         expect(page.get_by_role("button", name="采纳并更新计划")).to_be_visible()
+        page.wait_for_function(
+            "() => { const el = document.querySelector('main > div[style*=\"scrollbar-gutter\"]'); return !!el && el.scrollTop > 0; }"
+        )
 
         page.get_by_role("button", name="采纳并更新计划").click()
         expect(page.get_by_role("button", name="采纳并更新计划")).not_to_be_visible(timeout=5_000)

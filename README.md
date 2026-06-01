@@ -317,6 +317,7 @@ uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" -
 ```
 
 该脚本会用 Playwright 打开真实 Vite 页面，并 mock 本地后端 API，覆盖 AI 教练页切换后仍显示“正在整理上下文...”以及采纳卡片可提交的核心浏览器路径。
+同一套冒烟脚本也会检查 AI 教练消息列表在切换页面后是否恢复到最新对话位置。
 
 最小验证记录见 [docs/verification.md](/g:/VSCODE-G/Fitness Agent MVP/docs/verification.md)。
 V2.3 Phase 1 验收记录见 [task/V2.3/V2.3 Phase 1 验收记录.md](/g:/VSCODE-G/Fitness Agent MVP/task/V2.3/V2.3 Phase 1 验收记录.md)。

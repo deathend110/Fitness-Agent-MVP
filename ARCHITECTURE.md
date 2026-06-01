@@ -104,6 +104,10 @@ backend/
   - 负责 AI 教练消息里的 suggestion 元数据合并，最新消息优先，避免相同回复内容复用旧 proposalId。
   - 只有同一 proposal 才保留 dismissed 状态，防止旧卡片隐藏标记误伤新卡片。
 
+- `src/components/coach/MessageList.jsx`
+  - 首次挂载和切回 AI 教练页时会自动贴到底部，确保用户看到最新消息。
+  - 仍保留“用户手动上翻时不强制追底”的滚动判定。
+
 ### 当前新增前端接口层
 
 ```text
