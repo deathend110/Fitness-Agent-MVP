@@ -53,7 +53,7 @@ class ProviderRuntimeCache:
     def providers_by_id(self) -> Mapping[str, ProviderConfig]:
         """只读暴露 provider 索引，便于调用方查询但不直接持有内部字段。"""
 
-        return MappingProxyType(self._providers_by_id)
+        return MappingProxyType({provider_id: self._clone_provider(provider) for provider_id, provider in self._providers_by_id.items()})
 
     def refresh(self) -> ModelProviderConfig:
         """重新读取磁盘 JSON，让保存后的配置无需重启即可生效。"""
@@ -74,10 +74,16 @@ class ProviderRuntimeCache:
         if remote_model_id not in remote_model_ids:
             raise ValueError(f"provider {provider_id} 不包含 remote_id: {remote_model_id}")
 
-        return provider, remote_model_id
+        return self._clone_provider(provider), remote_model_id
 
     @staticmethod
     def _index_providers(document: ModelProviderConfig) -> dict[str, ProviderConfig]:
         """按 provider.id 建索引，避免后续解析时每次遍历完整配置。"""
 
         return {provider.id: provider for provider in document.providers}
+
+    @staticmethod
+    def _clone_provider(provider: ProviderConfig) -> ProviderConfig:
+        """对外返回 provider 副本，避免调用方修改共享缓存里的原始对象。"""
+
+        return ProviderConfig.model_validate(provider.model_dump(by_alias=True, exclude_none=True))

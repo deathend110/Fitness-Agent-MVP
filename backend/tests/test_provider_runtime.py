@@ -129,6 +129,26 @@ def test_refresh_reloads_updated_model_file(tmp_path: Path) -> None:
     assert provider.label == "新版 Gemini 账号"
 
 
+def test_provider_access_returns_copies_not_internal_state(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    _write_config(
+        config_file,
+        default_model_ref="provider_gemini_main::gemini-2.5-flash",
+        label="原始 Gemini 账号",
+    )
+
+    runtime = ProviderRuntimeCache.from_path(config_file)
+
+    provider_copy = runtime.providers_by_id["provider_gemini_main"]
+    provider_copy.label = "外部篡改的标题"
+
+    resolved_provider, _ = runtime.resolve_model_ref("provider_gemini_main::gemini-2.5-flash")
+    resolved_provider.label = "另一处篡改"
+
+    assert runtime.document.providers[0].label == "原始 Gemini 账号"
+    assert runtime.providers_by_id["provider_gemini_main"].label == "原始 Gemini 账号"
+
+
 def test_app_exposes_provider_runtime_on_startup(monkeypatch, tmp_path: Path) -> None:
     config_file = tmp_path / "model_providers.json"
     _write_config(
