@@ -100,6 +100,10 @@ backend/
   - 覆盖 AI 教练页后台任务恢复、切换 tab 后“正在整理上下文...”继续展示、采纳卡片持久展示与 `/api/tools/plan/commit` 提交参数。
   - 通过 `uv run python ...` 运行，避免依赖全局 Python 环境。
 
+- `src/utils/chatSuggestionState.js`
+  - 负责 AI 教练消息里的 suggestion 元数据合并，最新消息优先，避免相同回复内容复用旧 proposalId。
+  - 只有同一 proposal 才保留 dismissed 状态，防止旧卡片隐藏标记误伤新卡片。
+
 ### 当前新增前端接口层
 
 ```text

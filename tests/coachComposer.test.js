@@ -106,7 +106,7 @@ test('CoachTab 对同一卡片采纳请求有 in-flight 去重保护', () => {
   const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
 
   assert.match(source, /const adoptingSuggestionKeysRef = useRef\(new Set\(\)\)/)
-  assert.match(source, /function getSuggestionCommitKey/)
+  assert.match(source, /from '\.\.\/utils\/chatSuggestionState\.js'/)
   assert.match(source, /adoptingSuggestionKeysRef\.current\.has\(commitKey\)/)
   assert.match(source, /adoptingSuggestionKeysRef\.current\.add\(commitKey\)/)
   assert.match(source, /adoptingSuggestionKeysRef\.current\.delete\(commitKey\)/)

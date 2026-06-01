@@ -306,6 +306,7 @@ uv run pytest backend\tests\test_chat_files_context.py backend\tests\test_models
 
 ```powershell
 node --test tests/backendClient.test.js tests/coachComposer.test.js tests/markdownMessage.test.js tests/coachChat.test.js
+node --test tests/chatSuggestionState.test.js
 ```
 
 浏览器自动化冒烟测试：
