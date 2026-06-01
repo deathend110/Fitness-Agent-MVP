@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.context_manager import AgentContext, PromptAssembler, SummaryCompressor
+from backend.agent.tool_loop import ToolLoopOrchestrator, ToolLoopResult
 from backend.agent.deepseek_client import DeepSeekChatResult
 from backend.agent.memory import MemoryRetriever
 from backend.agent.tool_calling import ToolRegistry, ToolResultSlimmer
+from backend.providers.openai_compatible import OpenAICompatibleProvider
 from backend.db.models import (
     ChatMessage,
     ChatSessionSummary,
@@ -18,11 +19,9 @@ from backend.db.models import (
     KnowledgeItem,
     MemoryItem,
     Profile,
-    ToolCallLog,
     UploadedFile,
     WEEKDAY_ORDER,
     WeeklyPlanDay,
-    utc_now,
 )
 from backend.db.seed import DEFAULT_PROFILE_ID
 
@@ -32,14 +31,6 @@ class AgentRequest:
     messages: list[dict[str, str]]
     debug: dict[str, Any]
     model: str | None = None
-
-
-@dataclass(frozen=True)
-class ToolLoopResult:
-    content: str
-    messages: list[dict[str, Any]]
-    tool_rounds: int
-    proposals: list[dict[str, Any]]
 
 
 async def build_agent_request(
@@ -95,114 +86,69 @@ async def run_tool_calling_chat(
     max_tool_rounds: int = 4,
     slimmer: ToolResultSlimmer | None = None,
 ) -> ToolLoopResult:
-    active_messages = list(messages)
-    active_slimmer = slimmer or ToolResultSlimmer()
-    proposals: list[dict[str, Any]] = []
-    tools = registry.to_deepseek_tools()
-    thinking_kwargs: dict[str, Any] = {}
-    if thinking is not None:
-        thinking_kwargs["thinking"] = thinking
-    if reasoning_effort is not None:
-        thinking_kwargs["reasoning_effort"] = reasoning_effort
-
-    for round_index in range(max_tool_rounds + 1):
-        result: DeepSeekChatResult = await deepseek_client.request_chat_with_usage(
-            messages=active_messages,
-            model=model,
-            tools=tools,
-            tool_choice=None if thinking and thinking.get("type") == "enabled" else "auto",
-            stream=False,
-            **thinking_kwargs,
-        )
-        if not result.tool_calls:
-            return ToolLoopResult(
-                content=result.content,
-                messages=active_messages,
-                tool_rounds=round_index,
-                proposals=proposals,
-            )
-
-        if round_index >= max_tool_rounds:
-            return ToolLoopResult(
-                content="工具调用次数过多，请稍后重试或缩小问题范围。",
-                messages=active_messages,
-                tool_rounds=round_index,
-                proposals=proposals,
-            )
-
-        assistant_message = {
-            "role": "assistant",
-            "content": result.content,
-            "tool_calls": result.tool_calls,
-        }
-        if result.reasoning_content:
-            # DeepSeek 思考模式要求工具后续轮次带回 reasoning_content，避免推理链断裂。
-            assistant_message["reasoning_content"] = result.reasoning_content
-        active_messages.append(assistant_message)
-        for tool_call in result.tool_calls:
-            tool_name, tool_arguments = _read_tool_call(tool_call)
-            tool_call_id = str(tool_call.get("id") or tool_name)
-            try:
-                tool_result = await registry.execute(session, tool_name, tool_arguments)
-                if tool_name.startswith("propose_") and isinstance(tool_result, dict):
-                    proposal = tool_result.get("proposal")
-                    if isinstance(proposal, dict):
-                        proposals.append(proposal)
-                result_summary = active_slimmer.slim(tool_name, tool_result)
-                status = "succeeded"
-                error_message = None
-            except Exception as exc:
-                result_summary = json.dumps({"error": str(exc)}, ensure_ascii=False)
-                status = "failed"
-                error_message = str(exc)
-
-            session.add(
-                ToolCallLog(
-                    session_id=session_id,
-                    message_id=None,
-                    tool_name=tool_name,
-                    arguments_json=tool_arguments,
-                    result_summary=result_summary,
-                    status=status,
-                    error_message=error_message,
-                    created_at=utc_now(),
-                )
-            )
-            active_messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "name": tool_name,
-                    "content": result_summary,
-                }
-            )
-        await session.commit()
-
-    return ToolLoopResult(
-        content="工具调用次数过多，请稍后重试或缩小问题范围。",
-        messages=active_messages,
-        tool_rounds=max_tool_rounds,
-        proposals=proposals,
+    provider = _DeepSeekToolLoopProvider(client=deepseek_client)
+    orchestrator = ToolLoopOrchestrator(
+        registry=registry,
+        max_rounds=max_tool_rounds,
+        slimmer=slimmer,
+    )
+    return await orchestrator.run(
+        session=session,
+        session_id=session_id,
+        provider=provider,
+        messages=messages,
+        model=model,
+        thinking=thinking,
+        reasoning_effort=reasoning_effort,
+        tool_choice=None if thinking and thinking.get("type") == "enabled" else "auto",
     )
 
 
-def _read_tool_call(tool_call: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    function = tool_call.get("function") if isinstance(tool_call, dict) else {}
-    if not isinstance(function, dict):
-        function = {}
-    name = str(function.get("name") or "").strip()
-    raw_arguments = function.get("arguments") or "{}"
-    if not name:
-        raise ValueError("工具调用缺少 function.name")
-    if isinstance(raw_arguments, dict):
-        return name, raw_arguments
-    try:
-        parsed = json.loads(raw_arguments)
-    except json.JSONDecodeError as exc:
-        raise ValueError("工具调用参数不是合法 JSON") from exc
-    if not isinstance(parsed, dict):
-        raise ValueError("工具调用参数必须是 JSON object")
-    return name, parsed
+class _DeepSeekToolLoopProvider(OpenAICompatibleProvider):
+    """把现有 DeepSeekClient 包装成统一 provider 接口，供新工具循环复用。"""
+
+    def __init__(self, *, client: Any) -> None:
+        super().__init__(client_factory=None)
+        self.client = client
+
+    async def generate_chat(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]],
+        tool_choice: str | dict[str, Any] | None = None,
+        thinking: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        result: DeepSeekChatResult = await self.client.request_chat_with_usage(
+            messages=messages,
+            model=model,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=False,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
+        )
+        raw_payload = {
+            "choices": [
+                {
+                    "message": {
+                        "content": result.content,
+                        "tool_calls": result.tool_calls or [],
+                    }
+                }
+            ]
+        }
+        if result.reasoning_content:
+            raw_payload["choices"][0]["message"]["reasoning_content"] = result.reasoning_content
+        return {
+            "text": result.content,
+            "toolCalls": result.tool_calls or [],
+            "raw": raw_payload,
+        }
+
 
 
 async def _load_profile(session: AsyncSession) -> dict[str, Any] | None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -65,6 +66,81 @@ class OpenAICompatibleProvider(ProviderAdapter):
             for tool in tools
         ]
 
+    def normalize_tool_call_response(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        message = self._read_first_message(payload)
+        if not isinstance(message, dict):
+            return []
+
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            return []
+
+        normalized_calls: list[dict[str, Any]] = []
+        for tool_call in tool_calls:
+            if not isinstance(tool_call, dict):
+                continue
+            function = tool_call.get("function")
+            if not isinstance(function, dict):
+                continue
+            name = function.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            raw_arguments = function.get("arguments") or "{}"
+            if isinstance(raw_arguments, dict):
+                arguments = raw_arguments
+            else:
+                try:
+                    parsed = json.loads(raw_arguments)
+                except json.JSONDecodeError:
+                    parsed = {}
+                arguments = parsed if isinstance(parsed, dict) else {}
+            normalized_calls.append(
+                {
+                    "toolName": name,
+                    "callId": str(tool_call.get("id") or name),
+                    "arguments": arguments,
+                    "rawProviderPayload": {
+                        "toolCall": tool_call,
+                        "assistantMessage": message,
+                    },
+                }
+            )
+        return normalized_calls
+
+    def build_followup_messages_after_tool_result(
+        self,
+        messages: list[dict[str, Any]],
+        tool_call: dict[str, Any],
+        tool_result: Any,
+    ) -> list[dict[str, Any]]:
+        updated_messages = list(messages)
+        raw_payload = tool_call.get("rawProviderPayload")
+        assistant_message = raw_payload.get("assistantMessage") if isinstance(raw_payload, dict) else None
+        if isinstance(assistant_message, dict) and (
+            not updated_messages or updated_messages[-1].get("role") != "assistant"
+        ):
+            updated_messages.append(
+                {
+                    "role": "assistant",
+                    "content": assistant_message.get("content", ""),
+                    "tool_calls": assistant_message.get("tool_calls", []),
+                    **(
+                        {"reasoning_content": assistant_message["reasoning_content"]}
+                        if isinstance(assistant_message.get("reasoning_content"), str)
+                        else {}
+                    ),
+                }
+            )
+
+        return updated_messages + [
+            {
+                "role": "tool",
+                "tool_call_id": tool_call["callId"],
+                "name": tool_call["toolName"],
+                "content": tool_result,
+            }
+        ]
+
     def _raise_for_error_response(self, response: Any) -> None:
         if getattr(response, "is_success", False):
             return
@@ -94,3 +170,18 @@ class OpenAICompatibleProvider(ProviderAdapter):
 
         reason_phrase = getattr(response, "reason_phrase", "")
         return reason_phrase.strip() if isinstance(reason_phrase, str) else ""
+
+    def _read_first_message(self, payload: Any) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            return None
+
+        message = first_choice.get("message")
+        return message if isinstance(message, dict) else None

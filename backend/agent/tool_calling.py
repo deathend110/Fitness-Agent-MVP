@@ -73,16 +73,24 @@ class RegisteredTool:
     args_model: type[BaseModel]
     handler: Callable[[AsyncSession, BaseModel], Any]
 
-    def to_deepseek_tool(self) -> dict[str, Any]:
+    def to_tool_definition(self) -> dict[str, Any]:
         schema = self.args_model.model_json_schema()
         schema["additionalProperties"] = False
         schema.setdefault("required", list(schema.get("properties", {}).keys()))
         return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": schema,
+        }
+
+    def to_deepseek_tool(self) -> dict[str, Any]:
+        definition = self.to_tool_definition()
+        return {
             "type": "function",
             "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": schema,
+                "name": definition["name"],
+                "description": definition["description"],
+                "parameters": definition["parameters"],
             },
         }
 
@@ -98,6 +106,11 @@ class ToolRegistry:
         if name not in self._tools:
             raise KeyError(name)
         return self._tools[name]
+
+    def describe_tools(self) -> list[dict[str, Any]]:
+        """返回协议无关的工具描述，让不同 provider 自己决定 schema 转换方式。"""
+
+        return [tool.to_tool_definition() for tool in self._tools.values()]
 
     def to_deepseek_tools(self) -> list[dict[str, Any]]:
         return [tool.to_deepseek_tool() for tool in self._tools.values()]

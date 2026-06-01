@@ -52,6 +52,7 @@ backend/
     prompt_templates.py
     response_parser.py
     tool_calling.py
+    tool_loop.py
     usage_ledger.py
   files/
     uploader.py
@@ -264,9 +265,13 @@ docs/
   - 区分用户长期事实与单日临时状态，避免把“今天很累”这类一次性日志污染长期记忆
 
 - `backend/agent/tool_calling.py`
-  - 注册 DeepSeek OpenAI 兼容 tools schema，并用 Pydantic 做二次校验
+  - 负责本地工具注册、参数 schema 生成和执行前的 Pydantic 二次校验
   - 当前开放健身闭环工具：读取档案、周计划、今日日志、轻量指标、搜索 memory、读取上传文件摘要，以及 `propose_plan_change / propose_day_plan_replace`
-  - 工具循环最多 4 轮，超限或参数非法时返回可解释错误并写入 `ToolCallLog`
+  - provider-specific 的 tools schema 转换已开始从这里抽离，交给各 provider adapter 处理
+
+- `backend/agent/tool_loop.py`
+  - 负责协议无关的工具调用编排：执行本地工具、控制轮次、记录 `ToolCallLog`、收集 proposal，并委托 provider 处理 schema 与 follow-up message 格式
+  - 当前 DeepSeek/OpenAI-compatible 与 Gemini-native provider 都开始对接这套统一回环
 
 - `backend/api/memory.py`
   - 提供长期记忆查询、候选确认和候选忽略接口，供后续前端 memory 面板接入
