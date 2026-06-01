@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from backend.agent.deepseek_client import DeepSeekChatResult, DeepSeekClientError
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
-from backend.db.models import Base
+from backend.db.models import Base, UploadedFile, utc_now
 from backend.main import app
 
 pytestmark = [
@@ -132,10 +132,40 @@ async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        setattr(client, "_session_factory", session_factory)
         yield client
 
     app.dependency_overrides.clear()
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def uploaded_file(api_client: AsyncClient) -> dict[str, Any]:
+    session_factory = getattr(api_client, "_session_factory")
+    async with session_factory() as session:
+        uploaded = UploadedFile(
+            original_name="减脂容量型计划.xlsx",
+            stored_name="test-message-attachment.xlsx",
+            mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            extension=".xlsx",
+            size_bytes=10321,
+            sha256="a" * 64,
+            storage_path="test-message-attachment.xlsx",
+            summary={"summary": "容量型减脂计划摘要"},
+            parser_status="parsed",
+            parser_error=None,
+            created_at=utc_now(),
+        )
+        session.add(uploaded)
+        await session.commit()
+        await session.refresh(uploaded)
+        return {
+            "fileId": uploaded.id,
+            "originalName": uploaded.original_name,
+            "mimeType": uploaded.mime_type,
+            "extension": uploaded.extension,
+            "sizeBytes": uploaded.size_bytes,
+        }
 
 
 def parse_sse_events(raw_text: str) -> list[dict[str, Any]]:
@@ -380,3 +410,37 @@ async def test_chat_stream_rolls_back_when_upstream_breaks_after_delta(
     )
 
     assert messages_response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_persists_user_attachment_snapshot_and_empty_assistant_attachments(
+    api_client: AsyncClient,
+    uploaded_file: dict[str, Any],
+):
+    fake_client = FakeDeepSeekClient(["带附件的回复。"])
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "userInput": "请基于我上传的文件给建议。",
+            "fileIds": [str(uploaded_file["fileId"])],
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert [event["event"] for event in events] == ["delta", "suggestion", "done"]
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    stored_messages = messages_response.json()
+
+    assert len(stored_messages) == 2
+    assert stored_messages[0]["role"] == "user"
+    assert stored_messages[0]["attachments"] == [uploaded_file]
+    assert stored_messages[1]["role"] == "assistant"
+    assert stored_messages[1]["attachments"] == []

@@ -150,3 +150,40 @@ async def test_chat_empty_session_null_suggestion_and_failure_cases(api_client: 
 
     assert missing_session_response.status_code == 404
     assert invalid_role_response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_chat_message_attachment_snapshots_round_trip(api_client: AsyncClient):
+    create_response = await api_client.post("/api/chat/sessions", json={"title": "附件回显"})
+
+    assert create_response.status_code == 200
+    session_id = create_response.json()["id"]
+
+    attachments = [
+        {
+            "fileId": 7,
+            "originalName": "减脂容量型计划.xlsx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "extension": ".xlsx",
+            "sizeBytes": 10321,
+        }
+    ]
+
+    message_response = await api_client.post(
+        f"/api/chat/sessions/{session_id}/messages",
+        json={
+            "role": "user",
+            "content": "这是带附件的训练问题。",
+            "attachments": attachments,
+        },
+    )
+
+    assert message_response.status_code == 200
+    assert message_response.json()["attachments"] == attachments
+
+    messages_response = await api_client.get(f"/api/chat/sessions/{session_id}/messages")
+
+    assert messages_response.status_code == 200
+    messages = messages_response.json()
+    assert len(messages) == 1
+    assert messages[0]["attachments"] == attachments

@@ -109,10 +109,21 @@ class ChatSessionSchema(BaseModel):
     updatedAt: datetime
 
 
+class ChatAttachmentSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    fileId: int | None = None
+    originalName: str = ""
+    mimeType: str = ""
+    extension: str = ""
+    sizeBytes: int | None = None
+
+
 class ChatMessageCreateSchema(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     suggestion: dict[str, Any] | None = None
+    attachments: list[ChatAttachmentSchema] = Field(default_factory=list)
 
 
 class ChatMessageSchema(BaseModel):
@@ -123,4 +134,5 @@ class ChatMessageSchema(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
     suggestion: dict[str, Any] | None = None
+    attachments: list[ChatAttachmentSchema] = Field(default_factory=list)
     createdAt: datetime

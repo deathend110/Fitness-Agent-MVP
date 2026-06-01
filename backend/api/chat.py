@@ -20,7 +20,7 @@ from backend.agent.tool_calling import build_default_tool_registry
 from backend.agent.usage_ledger import record_usage, summarize_session_usage
 from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
-from backend.db.models import ChatMessage, ChatSession, utc_now
+from backend.db.models import ChatMessage, ChatSession, UploadedFile, utc_now
 from backend.schemas import (
     ChatMessageCreateSchema,
     ChatMessageSchema,
@@ -132,6 +132,7 @@ def build_message_response(message: ChatMessage) -> ChatMessageSchema:
         role=message.role,
         content=message.content,
         suggestion=message.suggestion,
+        attachments=message.attachments or [],
         createdAt=message.created_at,
     )
 
@@ -237,6 +238,37 @@ def parse_file_ids_query(raw_file_ids: list[str] | None) -> list[int]:
     return list(dict.fromkeys(value for value in values if value > 0))
 
 
+def build_uploaded_file_attachment_snapshot(uploaded_file: UploadedFile) -> dict[str, Any]:
+    return {
+        "fileId": uploaded_file.id,
+        "originalName": uploaded_file.original_name,
+        "mimeType": uploaded_file.mime_type,
+        "extension": uploaded_file.extension,
+        "sizeBytes": uploaded_file.size_bytes,
+    }
+
+
+async def build_message_attachment_snapshots(
+    session: AsyncSession,
+    file_ids: list[int],
+) -> list[dict[str, Any]]:
+    unique_ids = list(dict.fromkeys(file_id for file_id in file_ids if file_id > 0))
+    if not unique_ids:
+        return []
+
+    result = await session.execute(select(UploadedFile).where(UploadedFile.id.in_(unique_ids)))
+    files_by_id = {item.id: item for item in result.scalars().all()}
+    attachments: list[dict[str, Any]] = []
+
+    for file_id in unique_ids:
+        uploaded_file = files_by_id.get(file_id)
+        if uploaded_file is None:
+            continue
+        attachments.append(build_uploaded_file_attachment_snapshot(uploaded_file))
+
+    return attachments
+
+
 def parse_thinking_query(raw_thinking: str | None) -> dict[str, Any] | None:
     if raw_thinking is None or not raw_thinking.strip():
         return None
@@ -328,6 +360,7 @@ async def persist_successful_chat_turn(
     chat_session: ChatSession,
     session: AsyncSession,
     user_content: str,
+    user_attachments: list[dict[str, Any]] | None,
     assistant_text: str,
     suggestion: dict[str, Any] | None,
     model: str | None = None,
@@ -340,6 +373,7 @@ async def persist_successful_chat_turn(
         role="user",
         content=user_content,
         suggestion=None,
+        attachments=user_attachments or [],
         created_at=now,
     )
     assistant_message = ChatMessage(
@@ -347,6 +381,7 @@ async def persist_successful_chat_turn(
         role="assistant",
         content=assistant_text,
         suggestion=suggestion,
+        attachments=[],
         created_at=now,
     )
     session.add_all([user_message, assistant_message])
@@ -480,9 +515,11 @@ async def stream_chat_reply(
     direct_user_input = read_user_input(user_input)
     selected_file_ids = parse_file_ids_query(file_ids)
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(parse_thinking_query(thinking))
+    user_attachments: list[dict[str, Any]] = []
 
     if direct_user_input is not None:
         user_content = direct_user_input
+        user_attachments = await build_message_attachment_snapshots(session, selected_file_ids)
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
@@ -518,6 +555,7 @@ async def stream_chat_reply(
                     chat_session=chat_session,
                     session=session,
                     user_content=user_content,
+                    user_attachments=user_attachments,
                     assistant_text=assistant_text,
                     suggestion=proposal or suggestion,
                     model=selected_model,
@@ -551,6 +589,7 @@ async def stream_chat_reply(
                 chat_session=chat_session,
                 session=session,
                 user_content=user_content,
+                user_attachments=user_attachments,
                 assistant_text=assistant_text,
                 suggestion=suggestion,
                 model=selected_model,
@@ -581,7 +620,9 @@ async def request_chat_reply(
     settings = get_settings()
     selected_model = payload.model or settings.default_model
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
+    user_attachments: list[dict[str, Any]] = []
     if payload.userInput is not None:
+        user_attachments = await build_message_attachment_snapshots(session, payload.fileIds)
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
@@ -624,6 +665,7 @@ async def request_chat_reply(
             chat_session=chat_session,
             session=session,
             user_content=user_content,
+            user_attachments=user_attachments,
             assistant_text=assistant_text,
             suggestion=proposal or suggestion,
             model=selected_model,
@@ -763,6 +805,7 @@ async def append_chat_message(
         role=payload.role,
         content=payload.content,
         suggestion=payload.suggestion,
+        attachments=[attachment.model_dump(by_alias=True) for attachment in payload.attachments],
         created_at=now,
     )
     session.add(message)

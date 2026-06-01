@@ -90,6 +90,8 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     # suggestion 保存 AI 回复中的结构化采纳建议；为空时表示普通聊天消息，避免前端被迫补空对象。
     suggestion: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # attachments 保存用户消息附件快照，历史回显只依赖这份元数据，不依赖源文件是否仍存在。
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
 
