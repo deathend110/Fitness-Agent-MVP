@@ -42,6 +42,13 @@ class WeeklyPlanDaySchema(BaseModel):
     exercises: list[dict[str, Any]]
 
 
+class PlanProposalDayPlanSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: str
+    exercises: list[dict[str, Any]]
+
+
 class WeeklyPlanSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

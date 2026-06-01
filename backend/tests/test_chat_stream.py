@@ -116,6 +116,81 @@ class FakeToolProposalClient:
         return DeepSeekChatResult(content="已生成一张需要你确认的训练计划调整卡。")
 
 
+class FakeDayPlanProposalClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, stream
+        self.calls.append(
+            {
+                "messages": messages,
+                "thinking": _.get("thinking"),
+                "reasoning_effort": _.get("reasoning_effort"),
+                "tool_choice": tool_choice,
+            }
+        )
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_day_plan",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_day_plan_replace",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "把周一改成恢复型腿日。",
+                                    "dayPlan": {
+                                        "type": "腿日",
+                                        "exercises": [
+                                            {
+                                                "name": "深蹲",
+                                                "tier": "main",
+                                                "template": {
+                                                    "loadMode": "percentage",
+                                                    "ref1RM": "squat",
+                                                    "setType": "straight",
+                                                    "sets": 3,
+                                                    "repsText": "5",
+                                                },
+                                                "instance": {
+                                                    "pct": 0.7,
+                                                    "kg": None,
+                                                    "rpe": 7,
+                                                    "note": "恢复周主项",
+                                                },
+                                                "ref1RM": "squat",
+                                                "pct": 0.7,
+                                                "kg": None,
+                                                "sets": 3,
+                                                "reps": 5,
+                                                "rpe": 7,
+                                                "note": "恢复周主项",
+                                            }
+                                        ],
+                                    },
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="已生成一张单日训练计划卡。")
+
+
 @pytest_asyncio.fixture
 async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'chat-stream.db'}"
@@ -338,6 +413,37 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
     assert fake_client.calls[0]["thinking"] == {"type": "enabled"}
     assert fake_client.calls[0]["reasoning_effort"] == "max"
     assert fake_client.calls[0]["tool_choice"] is None
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_emits_day_plan_replace_proposal(
+    api_client: AsyncClient,
+):
+    fake_client = FakeDayPlanProposalClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "userInput": "请给我一张周一恢复型腿日卡片。",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == [
+        "delta",
+        "proposal",
+        "suggestion",
+        "done",
+    ]
+    assert events[1]["data"]["proposal"]["kind"] == "day_plan_replace"
+    assert events[1]["data"]["proposal"]["dayPlan"]["type"] == "腿日"
+    assert events[1]["data"]["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
 
 
 @pytest.mark.asyncio

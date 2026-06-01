@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Any
 from uuid import uuid4
@@ -23,17 +23,26 @@ class AdoptPlanResult:
 
 
 @dataclass(frozen=True)
-class PlanChangeProposal:
+class StoredPlanProposal:
     proposal_id: str
     session_id: int | None
+    kind: str
     day: str
-    changes: list[dict[str, Any]]
+    summary: str
+    payload: dict[str, Any]
     card: dict[str, Any]
     validation: AdoptPlanResult
     status: str = "pending"
 
+    @property
+    def changes(self) -> list[dict[str, Any]]:
+        raw_changes = self.payload.get("changes")
+        return deepcopy(raw_changes) if isinstance(raw_changes, list) else []
 
-_proposal_store: dict[str, PlanChangeProposal] = {}
+
+# 兼容旧命名，避免其他模块和测试需要同步迁移类型名。
+PlanChangeProposal = StoredPlanProposal
+_proposal_store: dict[str, StoredPlanProposal] = {}
 
 
 def clear_plan_change_proposals() -> None:
@@ -58,16 +67,20 @@ def build_plan_change_proposal(
 ) -> PlanChangeProposal:
     validation = validate_plan_changes(current_plan, day, changes)
     proposal_id = uuid4().hex
+    normalized_changes = deepcopy(changes)
     proposal = PlanChangeProposal(
         proposal_id=proposal_id,
         session_id=session_id,
+        kind="field_changes",
         day=day,
-        changes=deepcopy(changes),
+        summary=summary,
+        payload={"changes": normalized_changes},
         card={
             "proposalId": proposal_id,
+            "kind": "field_changes",
             "day": day,
             "summary": summary,
-            "changes": deepcopy(changes),
+            "changes": normalized_changes,
             "status": "pending" if validation.ok else "invalid",
         },
         validation=validation,
@@ -83,6 +96,60 @@ def commit_validated_plan_change(
     *,
     confirmed_by_user: bool,
 ) -> AdoptPlanResult:
+    return commit_plan_proposal(
+        current_plan=current_plan,
+        proposal_id=proposal_id,
+        confirmed_by_user=confirmed_by_user,
+    )
+
+
+def validate_day_plan_replace(
+    weekly_plan: dict[str, Any] | None,
+    day: str | None,
+    day_plan: dict[str, Any] | None,
+) -> AdoptPlanResult:
+    return adopt_day_plan_replace(weekly_plan, day, day_plan)
+
+
+def build_day_plan_replace_proposal(
+    *,
+    current_plan: dict[str, Any],
+    session_id: int | None,
+    day: str,
+    summary: str,
+    day_plan: dict[str, Any],
+) -> StoredPlanProposal:
+    normalized_day_plan = normalize_day_plan_payload(day_plan)
+    validation = validate_day_plan_replace(current_plan, day, normalized_day_plan)
+    proposal_id = uuid4().hex
+    proposal = StoredPlanProposal(
+        proposal_id=proposal_id,
+        session_id=session_id,
+        kind="day_plan_replace",
+        day=day,
+        summary=summary,
+        payload={"dayPlan": normalized_day_plan},
+        card={
+            "proposalId": proposal_id,
+            "kind": "day_plan_replace",
+            "day": day,
+            "summary": summary,
+            "dayPlan": normalized_day_plan,
+            "status": "pending" if validation.ok else "invalid",
+        },
+        validation=validation,
+        status="pending" if validation.ok else "invalid",
+    )
+    _proposal_store[proposal_id] = proposal
+    return proposal
+
+
+def commit_plan_proposal(
+    current_plan: dict[str, Any],
+    proposal_id: str,
+    *,
+    confirmed_by_user: bool,
+) -> AdoptPlanResult:
     proposal = _proposal_store.get(proposal_id)
     if proposal is None:
         return _build_failure_result(current_plan, "未找到计划修改提议，无法写回。")
@@ -91,15 +158,17 @@ def commit_validated_plan_change(
     if not confirmed_by_user:
         return _build_failure_result(current_plan, "计划写回必须来自用户确认。")
 
-    result = adopt_plan_change(current_plan, proposal.day, proposal.changes)
+    if proposal.kind == "field_changes":
+        result = adopt_plan_change(current_plan, proposal.day, proposal.changes)
+    elif proposal.kind == "day_plan_replace":
+        result = adopt_day_plan_replace(current_plan, proposal.day, proposal.payload.get("dayPlan"))
+    else:
+        return _build_failure_result(current_plan, "未识别的计划提议类型，无法写回。")
+
     next_status = "committed" if result.ok else "failed"
-    _proposal_store[proposal_id] = PlanChangeProposal(
-        proposal_id=proposal.proposal_id,
-        session_id=proposal.session_id,
-        day=proposal.day,
-        changes=proposal.changes,
+    _proposal_store[proposal_id] = replace(
+        proposal,
         card={**proposal.card, "status": next_status},
-        validation=proposal.validation,
         status=next_status,
     )
     return result
@@ -255,6 +324,20 @@ def _normalize_change_value(
     return True, new_value, ""
 
 
+def normalize_day_plan_payload(day_plan: dict[str, Any] | None) -> dict[str, Any]:
+    safe_day_plan = day_plan if _is_plain_object(day_plan) else {}
+    safe_exercises = safe_day_plan.get("exercises") if isinstance(safe_day_plan.get("exercises"), list) else []
+    normalized_exercises = [
+        _normalize_planned_exercise(exercise, exercise.get("id") or f"proposal-{index}")
+        for index, exercise in enumerate(safe_exercises)
+        if _is_plain_object(exercise)
+    ]
+    return {
+        "type": _read_string_value(safe_day_plan.get("type")) or "rest",
+        "exercises": normalized_exercises,
+    }
+
+
 def adopt_plan_change(
     weekly_plan: dict[str, Any] | None = None,
     day: str | None = None,
@@ -329,5 +412,33 @@ def adopt_plan_change(
                 **current_day_plan,
                 "exercises": next_exercises,
             },
+        },
+    )
+
+
+def adopt_day_plan_replace(
+    weekly_plan: dict[str, Any] | None,
+    day: str | None,
+    day_plan: dict[str, Any] | None,
+) -> AdoptPlanResult:
+    safe_plan = deepcopy(weekly_plan) if _is_plain_object(weekly_plan) else {}
+    day_key = day.strip() if isinstance(day, str) else ""
+
+    if not day_key or day_key not in safe_plan or day_key not in WEEKDAY_ORDER:
+        return _build_failure_result(
+            safe_plan,
+            f"未找到 {day_key or '目标日期'} 的训练计划，无法采纳该建议。",
+        )
+
+    normalized_day_plan = normalize_day_plan_payload(day_plan)
+    if not isinstance(normalized_day_plan.get("exercises"), list):
+        return _build_failure_result(safe_plan, "单日训练计划格式不合法，无法采纳该建议。")
+
+    return AdoptPlanResult(
+        ok=True,
+        message=SUCCESS_MESSAGE,
+        next_plan={
+            **safe_plan,
+            day_key: normalized_day_plan,
         },
     )

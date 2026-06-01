@@ -9,8 +9,10 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from backend.agent.adopt_plan import (
+    build_day_plan_replace_proposal,
     build_plan_change_proposal,
     clear_plan_change_proposals,
+    commit_plan_proposal,
     commit_validated_plan_change,
     validate_plan_changes,
 )
@@ -85,6 +87,38 @@ def build_change(new_value=0.7) -> list[dict]:
     return [{"action": "update", "exerciseName": "深蹲", "field": "pct", "newValue": new_value}]
 
 
+def build_day_plan_payload() -> dict:
+    return {
+        "type": "腿日",
+        "exercises": [
+            {
+                "name": "深蹲",
+                "tier": "main",
+                "template": {
+                    "loadMode": "percentage",
+                    "ref1RM": "squat",
+                    "setType": "straight",
+                    "sets": 3,
+                    "repsText": "5",
+                },
+                "instance": {
+                    "pct": 0.7,
+                    "kg": None,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                },
+                "ref1RM": "squat",
+                "pct": 0.7,
+                "kg": None,
+                "sets": 3,
+                "reps": 5,
+                "rpe": 7,
+                "note": "恢复周主项",
+            }
+        ],
+    }
+
+
 @pytest.mark.asyncio
 async def test_plan_proposal_does_not_write_weekly_plan(api_client: AsyncClient) -> None:
     original_plan = build_weekly_plan()
@@ -126,6 +160,44 @@ def test_validate_and_commit_plan_change_requires_user_confirm() -> None:
     assert "已处理" in repeated.message
 
 
+def test_build_day_plan_replace_proposal_preserves_day_plan_payload() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="改成恢复型腿日",
+        day_plan=build_day_plan_payload(),
+    )
+
+    assert proposal.kind == "day_plan_replace"
+    assert proposal.card["dayPlan"]["exercises"][0]["name"] == "深蹲"
+    assert proposal.validation.ok is True
+
+
+def test_commit_day_plan_replace_overwrites_target_day() -> None:
+    plan = build_weekly_plan()
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="改成恢复型腿日",
+        day_plan=build_day_plan_payload(),
+    )
+
+    committed = commit_plan_proposal(
+        current_plan=plan,
+        proposal_id=proposal.proposal_id,
+        confirmed_by_user=True,
+    )
+
+    assert committed.ok is True
+    assert committed.next_plan["Monday"]["type"] == "腿日"
+    assert committed.next_plan["Monday"]["exercises"][0]["sets"] == 3
+    assert committed.next_plan["Monday"]["exercises"][0]["rpe"] == 7
+
+
 @pytest.mark.asyncio
 async def test_plan_commit_endpoint_writes_only_after_confirm(api_client: AsyncClient) -> None:
     original_plan = build_weekly_plan()
@@ -144,6 +216,52 @@ async def test_plan_commit_endpoint_writes_only_after_confirm(api_client: AsyncC
     assert committed.json()["plan"]["Monday"]["exercises"][0]["pct"] == 0.7
     assert repeated.json()["ok"] is False
     assert "已处理" in repeated.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_plan_propose_endpoint_accepts_day_plan_replace(api_client: AsyncClient) -> None:
+    original_plan = build_weekly_plan()
+    await api_client.put("/api/weekly-plan", json=original_plan)
+
+    response = await api_client.post(
+        "/api/tools/plan/propose",
+        json={
+            "kind": "day_plan_replace",
+            "sessionId": 3,
+            "day": "Monday",
+            "summary": "改成恢复型腿日",
+            "dayPlan": build_day_plan_payload(),
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["validation"]["ok"] is True
+    assert body["card"]["kind"] == "day_plan_replace"
+    assert body["card"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
+
+
+@pytest.mark.asyncio
+async def test_plan_commit_endpoint_writes_day_plan_replace(api_client: AsyncClient) -> None:
+    original_plan = build_weekly_plan()
+    await api_client.put("/api/weekly-plan", json=original_plan)
+
+    proposal = await api_client.post(
+        "/api/tools/plan/propose",
+        json={
+            "kind": "day_plan_replace",
+            "sessionId": 5,
+            "day": "Monday",
+            "summary": "改成恢复型腿日",
+            "dayPlan": build_day_plan_payload(),
+        },
+    )
+    proposal_id = proposal.json()["proposalId"]
+
+    committed = await api_client.post("/api/tools/plan/commit", json={"proposalId": proposal_id})
+    assert committed.status_code == 200
+    assert committed.json()["ok"] is True
+    assert committed.json()["plan"]["Monday"]["exercises"][0]["name"] == "深蹲"
 
 
 @pytest.mark.asyncio

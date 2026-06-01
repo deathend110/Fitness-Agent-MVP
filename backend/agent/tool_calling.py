@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.agent.adopt_plan import build_plan_change_proposal
+from backend.agent.adopt_plan import (
+    build_day_plan_replace_proposal,
+    build_plan_change_proposal,
+)
 from backend.agent.memory import MemoryRetriever
 from backend.db.models import DailyLog, Profile, UploadedFile, WEEKDAY_ORDER, WeeklyPlanDay
 from backend.db.seed import DEFAULT_PROFILE_ID
@@ -53,6 +56,14 @@ class ProposePlanChangeToolArgs(BaseModel):
     day: str
     summary: str = ""
     changes: list[PlanChangeItemArgs]
+
+
+class ProposeDayPlanReplaceToolArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    day: str
+    summary: str = ""
+    dayPlan: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -155,6 +166,14 @@ def build_default_tool_registry() -> ToolRegistry:
             _propose_plan_change,
         )
     )
+    registry.register(
+        RegisteredTool(
+            "propose_day_plan_replace",
+            "生成单日训练计划替换建议卡；只生成 proposal，不直接写入计划。",
+            ProposeDayPlanReplaceToolArgs,
+            _propose_day_plan_replace,
+        )
+    )
     return registry
 
 
@@ -246,6 +265,27 @@ async def _propose_plan_change(session: AsyncSession, args: ProposePlanChangeToo
         day=args.day,
         summary=args.summary,
         changes=[item.model_dump() for item in args.changes],
+    )
+    return {
+        "proposal": proposal.card,
+        "validation": {
+            "ok": proposal.validation.ok,
+            "message": proposal.validation.message,
+        },
+    }
+
+
+async def _propose_day_plan_replace(
+    session: AsyncSession,
+    args: ProposeDayPlanReplaceToolArgs,
+) -> dict[str, Any]:
+    current_plan = await _get_weekly_plan(session, EmptyToolArgs())
+    proposal = build_day_plan_replace_proposal(
+        current_plan=current_plan,
+        session_id=None,
+        day=args.day,
+        summary=args.summary,
+        day_plan=args.dayPlan,
     )
     return {
         "proposal": proposal.card,

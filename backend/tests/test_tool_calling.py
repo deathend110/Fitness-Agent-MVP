@@ -57,6 +57,7 @@ def test_default_tool_registry_exports_deepseek_compatible_strict_schema() -> No
         "search_memory",
         "read_uploaded_file_summary",
         "propose_plan_change",
+        "propose_day_plan_replace",
     ]
     assert all(tool["type"] == "function" for tool in tools)
     assert all(tool["function"]["parameters"]["additionalProperties"] is False for tool in tools)
@@ -91,6 +92,39 @@ async def test_readonly_tools_execute_and_slim_large_results(db_session: AsyncSe
     slimmed = ToolResultSlimmer(max_chars=60).slim("get_weekly_plan", weekly_plan)
     assert len(slimmed) <= 80
     assert "深蹲" in slimmed
+
+
+@pytest.mark.asyncio
+async def test_plan_replace_tool_generates_proposal_card(db_session: AsyncSession) -> None:
+    await seed_tool_state(db_session)
+    registry = build_default_tool_registry()
+
+    result = await registry.execute(
+        db_session,
+        "propose_day_plan_replace",
+        {
+            "day": "Monday",
+            "summary": "改成恢复型腿日",
+            "dayPlan": {
+                "type": "腿日",
+                "exercises": [
+                    {
+                        "name": "深蹲",
+                        "tier": "main",
+                        "sets": 3,
+                        "reps": 5,
+                        "pct": 0.7,
+                        "rpe": 7,
+                        "note": "恢复周主项",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert result["proposal"]["kind"] == "day_plan_replace"
+    assert result["proposal"]["dayPlan"]["type"] == "腿日"
+    assert result["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
 
 
 def test_unknown_tool_is_rejected() -> None:

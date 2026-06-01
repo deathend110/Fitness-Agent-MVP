@@ -144,7 +144,7 @@ async def run_tool_calling_chat(
             tool_call_id = str(tool_call.get("id") or tool_name)
             try:
                 tool_result = await registry.execute(session, tool_name, tool_arguments)
-                if tool_name == "propose_plan_change" and isinstance(tool_result, dict):
+                if tool_name.startswith("propose_") and isinstance(tool_result, dict):
                     proposal = tool_result.get("proposal")
                     if isinstance(proposal, dict):
                         proposals.append(proposal)
