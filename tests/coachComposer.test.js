@@ -92,6 +92,23 @@ test('CoachTab 会把新回复的 proposal 或 suggestion 写入 assistant messa
   )
 })
 
+test('CoachTab 会为用户消息构造附件快照并在发送成功后清空输入区附件', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /function buildMessageAttachmentSnapshots\(files = \[\]\)/)
+  assert.match(source, /const messageAttachments = buildMessageAttachmentSnapshots\(attachedFiles\)/)
+  assert.match(
+    source,
+    /const userMessage = \{ role: 'user', content: userInput, attachments: messageAttachments \}/,
+  )
+  assert.match(source, /fileIds: attachedFiles\.map\(\(file\) => file\.id\)\.filter\(Number\.isInteger\)/)
+  assert.match(source, /setAttachedFiles\(\[\]\)/)
+  assert.match(
+    source,
+    /attachments: Array\.isArray\(message\?\.attachments\) \? message\.attachments : \[\]/,
+  )
+})
+
 test('CoachTab 会从 message.suggestion 恢复采纳卡片并在处理后持久隐藏', () => {
   const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
 

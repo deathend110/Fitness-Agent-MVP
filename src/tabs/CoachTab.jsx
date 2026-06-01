@@ -45,6 +45,16 @@ function buildConversationExportText(messages = []) {
     .join('\n\n')
 }
 
+function buildMessageAttachmentSnapshots(files = []) {
+  return files.map((file) => ({
+    fileId: Number.isInteger(file?.id) ? file.id : null,
+    originalName: file?.originalName || file?.name || '',
+    mimeType: file?.mimeType || '',
+    extension: file?.extension || '',
+    sizeBytes: Number.isFinite(file?.sizeBytes) ? file.sizeBytes : null,
+  }))
+}
+
 function normalizeChatMessages(messages = []) {
   if (!Array.isArray(messages)) {
     return []
@@ -54,6 +64,7 @@ function normalizeChatMessages(messages = []) {
     role: message?.role || 'assistant',
     content: typeof message?.content === 'string' ? message.content : '',
     suggestion: message?.suggestion ?? null,
+    attachments: Array.isArray(message?.attachments) ? message.attachments : [],
   }))
 }
 
@@ -114,7 +125,7 @@ function hydratePendingBackgroundUser(messages = [], sessionId) {
   }
 
   // 后台任务可能尚未把本轮 user 消息落库，先用本地 task 记录恢复等待态锚点。
-  return [...messages, { role: 'user', content: userContent, suggestion: null }]
+  return [...messages, { role: 'user', content: userContent, suggestion: null, attachments: [] }]
 }
 
 function hasPendingBackgroundTaskForSession(messages = [], sessionId) {
@@ -419,8 +430,13 @@ function CoachTab({
         return
       }
 
+      const nextHistory = mergeResult.nextHistory.map((message) => ({
+        ...message,
+        attachments: Array.isArray(message?.attachments) ? message.attachments : [],
+      }))
+
       setMessageMeta((currentMeta) => {
-        const nextMeta = mergeMessageMeta(mergeResult.nextHistory, currentMeta)
+        const nextMeta = mergeMessageMeta(nextHistory, currentMeta)
 
         nextMeta[mergeResult.assistantIndex] = {
           ...nextMeta[mergeResult.assistantIndex],
@@ -430,8 +446,8 @@ function CoachTab({
 
         return nextMeta
       })
-      chatHistoryRef.current = mergeResult.nextHistory
-      onChatHistoryChange(mergeResult.nextHistory)
+      chatHistoryRef.current = nextHistory
+      onChatHistoryChange(nextHistory)
     }
 
     async function pollStoredTask() {
@@ -725,12 +741,14 @@ function CoachTab({
       return
     }
 
-    const userMessage = { role: 'user', content: userInput }
+    const messageAttachments = buildMessageAttachmentSnapshots(attachedFiles)
+    const userMessage = { role: 'user', content: userInput, attachments: messageAttachments }
     const nextHistory = appendChatMessages(chatHistory, [userMessage])
     const requestPayload = {
       chatHistory,
       dailyLog,
       files: attachedFiles,
+      fileIds: attachedFiles.map((file) => file.id).filter(Number.isInteger),
       profile,
       sessionId: Number.isInteger(activeSessionId) ? activeSessionId : null,
       sourceUserIndex: nextHistory.length - 1,
@@ -760,6 +778,7 @@ function CoachTab({
         content: reply.text,
         role: 'assistant',
         suggestion: assistantSuggestion,
+        attachments: [],
       }
       const finalHistory = appendChatMessages(nextHistory, [assistantMessage])
 
