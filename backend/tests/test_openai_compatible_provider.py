@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from backend.providers.base import ProviderAdapterError
+from backend.providers.base import (
+    ProviderAdapterError,
+    build_responses_followup_messages,
+    convert_messages_to_responses_input,
+)
 from backend.providers.openai_compatible import OpenAICompatibleProvider
 
 
@@ -301,6 +305,15 @@ def test_normalizes_responses_function_calls() -> None:
             "arguments": {"scope": "latest"},
             "rawProviderPayload": {
                 "responseId": "resp_1",
+                "outputItems": [
+                    {"type": "reasoning", "summary": []},
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "get_profile",
+                        "arguments": '{"scope":"latest"}',
+                    },
+                ],
                 "functionCall": {
                     "type": "function_call",
                     "call_id": "call_1",
@@ -389,6 +402,15 @@ def test_builds_followup_messages_for_responses_function_output() -> None:
             "arguments": {},
             "rawProviderPayload": {
                 "responseId": "resp_1",
+                "outputItems": [
+                    {"type": "reasoning", "summary": []},
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "get_profile",
+                        "arguments": "{}",
+                    },
+                ],
                 "functionCall": {
                     "type": "function_call",
                     "call_id": "call_1",
@@ -400,6 +422,7 @@ def test_builds_followup_messages_for_responses_function_output() -> None:
         '{"name":"阿杰"}',
     )
 
+    assert next_messages[-3] == {"type": "reasoning", "summary": []}
     assert next_messages[-2] == {
         "type": "function_call",
         "call_id": "call_1",
@@ -451,6 +474,82 @@ def test_deduplicates_trailing_chat_completions_assistant_message_before_tool_re
             "content": '{"name":"阿杰"}',
         },
     ]
+
+
+def test_converts_messages_to_responses_input_for_user_assistant_and_tool_messages() -> None:
+    converted = convert_messages_to_responses_input(
+        [
+            {"role": "system", "content": "你是 AI 教练"},
+            {"role": "user", "content": "读取今天状态"},
+            {"role": "assistant", "content": "先读取数据"},
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "name": "get_profile",
+                "content": {"fatigue": 8},
+            },
+        ]
+    )
+
+    assert converted == [
+        {
+            "type": "message",
+            "role": "system",
+            "content": [{"type": "input_text", "text": "你是 AI 教练"}],
+        },
+        {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "读取今天状态"}],
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "先读取数据"}],
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"fatigue": 8}',
+        },
+    ]
+
+
+def test_build_responses_followup_messages_preserves_full_output_items_once() -> None:
+    messages = [{"role": "user", "content": "读取档案"}]
+    tool_call = {
+        "toolName": "get_profile",
+        "callId": "call_1",
+        "arguments": {},
+        "rawProviderPayload": {
+            "responseId": "resp_1",
+            "outputItems": [
+                {"type": "reasoning", "summary": [{"type": "summary_text", "text": "先看档案"}]},
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "get_profile",
+                    "arguments": "{}",
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "已准备调用工具"}],
+                },
+            ],
+        },
+    }
+
+    first_followup = build_responses_followup_messages(messages, tool_call, '{"name":"阿杰"}')
+    second_followup = build_responses_followup_messages(first_followup, tool_call, '{"name":"阿杰"}')
+
+    assert first_followup[-4:-1] == tool_call["rawProviderPayload"]["outputItems"]
+    assert first_followup[-1] == {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": '{"name":"阿杰"}',
+    }
+    assert second_followup.count(tool_call["rawProviderPayload"]["outputItems"][0]) == 1
 
 
 @pytest.mark.asyncio

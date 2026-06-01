@@ -17,7 +17,15 @@ class GeminiNativeProvider(ProviderAdapter):
     def __init__(self, client_factory=httpx.AsyncClient) -> None:
         super().__init__(client_factory=client_factory)
 
-    async def list_remote_models(self, *, api_key: str, base_url: str) -> list[dict[str, Any]]:
+    async def list_remote_models(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        wire_api: str | None = None,
+        api_path_mode: str | None = None,
+    ) -> list[dict[str, Any]]:
+        del wire_api, api_path_mode
         normalized_base_url = self._normalize_base_url(base_url)
         try:
             async with self.client_factory() as client:

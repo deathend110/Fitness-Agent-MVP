@@ -17,6 +17,10 @@ from backend.agent.chat_session import (
     build_provider_bound_client,
     convert_messages_to_responses_input,
     provider_client_supports_tool_loop,
+    read_openai_compatible_provider_wire_config,
+    read_runtime_client_wire_api,
+    read_responses_output_text,
+    read_openai_usage_payload,
     run_tool_calling_chat,
 )
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
@@ -441,16 +445,16 @@ async def request_deepseek_reply_with_usage(
     if reasoning_effort is not None:
         thinking_kwargs["reasoning_effort"] = reasoning_effort
 
-    if hasattr(deepseek_client, "request_responses_with_usage"):
+    if read_runtime_client_wire_api(deepseek_client) == "responses":
         result = await deepseek_client.request_responses_with_usage(
             input_items=convert_messages_to_responses_input(messages),
             model=model,
             **thinking_kwargs,
         )
         if isinstance(result, dict):
-            output_text = result.get("output_text")
-            if isinstance(output_text, str):
-                return output_text, result.get("usage")
+            output_text = read_responses_output_text(result)
+            if output_text:
+                return output_text, read_openai_usage_payload(result)
 
     if hasattr(deepseek_client, "request_chat_with_usage"):
         result = await deepseek_client.request_chat_with_usage(
@@ -489,16 +493,16 @@ async def stream_deepseek_reply_with_usage(
     if reasoning_effort is not None:
         thinking_kwargs["reasoning_effort"] = reasoning_effort
 
-    if hasattr(deepseek_client, "request_responses_with_usage"):
+    if read_runtime_client_wire_api(deepseek_client) == "responses":
         result = await deepseek_client.request_responses_with_usage(
             input_items=convert_messages_to_responses_input(messages),
             model=model,
             **thinking_kwargs,
         )
         if isinstance(result, dict):
-            output_text = result.get("output_text")
-            if isinstance(output_text, str):
-                yield output_text, result.get("usage")
+            output_text = read_responses_output_text(result)
+            if output_text:
+                yield output_text, read_openai_usage_payload(result)
                 return
 
     if hasattr(deepseek_client, "stream_chat_with_usage"):

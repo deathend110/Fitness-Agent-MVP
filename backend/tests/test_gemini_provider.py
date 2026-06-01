@@ -142,6 +142,51 @@ async def test_lists_models_from_gemini_models_endpoint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_remote_models_accepts_openai_style_optional_args_without_affecting_gemini() -> None:
+    request_snapshot: dict[str, object] = {}
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str] | None = None,
+            params: dict[str, str] | None = None,
+        ):
+            request_snapshot["url"] = url
+            request_snapshot["headers"] = headers or {}
+            request_snapshot["params"] = params or {}
+
+            class Response:
+                status_code = 200
+                is_success = True
+
+                def json(self) -> dict[str, list[dict[str, object]]]:
+                    return {"models": []}
+
+            return Response()
+
+    provider = GeminiNativeProvider(client_factory=lambda **_: FakeClient())
+    models = await provider.list_remote_models(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        wire_api="responses",
+        api_path_mode="append_v1",
+    )
+
+    assert models == []
+    assert request_snapshot["url"] == "https://generativelanguage.googleapis.com/v1beta/models"
+    assert request_snapshot["params"] == {"key": "AIza-test"}
+    assert request_snapshot["headers"] == {}
+
+
+@pytest.mark.asyncio
 async def test_normalizes_official_gemini_base_url_and_uses_query_api_key() -> None:
     request_snapshot: dict[str, object] = {}
 

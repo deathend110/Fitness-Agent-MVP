@@ -5,7 +5,14 @@ from typing import Any
 
 import httpx
 
-from backend.providers.base import ProviderAdapter, ProviderAdapterError
+from backend.providers.base import (
+    ProviderAdapter,
+    ProviderAdapterError,
+    build_responses_followup_messages,
+    convert_messages_to_responses_input,
+    normalize_responses_tool_call_response,
+    read_responses_output_text,
+)
 from backend.providers.openai_compatible_client import (
     OPENAI_COMPATIBLE_DEFAULT_TIMEOUT,
     OpenAICompatibleClient,
@@ -134,7 +141,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
     def read_text_response(self, payload: Any, *, wire_api: str | None = None) -> str:
         active_wire_api = wire_api or self.wire_api
         if active_wire_api == "responses":
-            return self._read_responses_text(payload)
+            return read_responses_output_text(payload)
         return self._read_chat_completions_text(payload)
 
     def normalize_tool_call_response(
@@ -145,7 +152,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
     ) -> list[dict[str, Any]]:
         active_wire_api = wire_api or self.wire_api
         if active_wire_api == "responses":
-            return self._normalize_responses_function_calls(payload)
+            return normalize_responses_tool_call_response(payload)
         return self._normalize_chat_completions_tool_calls(payload)
 
     def build_followup_messages_after_tool_result(
@@ -155,7 +162,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
         tool_result: Any,
     ) -> list[dict[str, Any]]:
         if self._resolve_wire_api_from_tool_call(tool_call) == "responses":
-            return self._build_responses_followup_messages(messages, tool_call, tool_result)
+            return build_responses_followup_messages(messages, tool_call, tool_result)
         return self._build_chat_completions_followup_messages(messages, tool_call, tool_result)
 
     def _build_http_client(
@@ -188,7 +195,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
         if wire_api == "responses":
             payload: dict[str, Any] = {
                 "model": model,
-                "input": messages,
+                "input": convert_messages_to_responses_input(messages),
             }
             if tools is not None:
                 payload["tools"] = tools
@@ -244,33 +251,6 @@ class OpenAICompatibleProvider(ProviderAdapter):
             )
         return normalized_calls
 
-    def _normalize_responses_function_calls(self, payload: Any) -> list[dict[str, Any]]:
-        output_items = payload.get("output") if isinstance(payload, dict) else None
-        if not isinstance(output_items, list):
-            return []
-
-        normalized_calls: list[dict[str, Any]] = []
-        for output_item in output_items:
-            if not isinstance(output_item, dict):
-                continue
-            if output_item.get("type") != "function_call":
-                continue
-            name = output_item.get("name")
-            if not isinstance(name, str) or not name.strip():
-                continue
-            normalized_calls.append(
-                {
-                    "toolName": name,
-                    "callId": str(output_item.get("call_id") or name),
-                    "arguments": self._parse_function_arguments(output_item.get("arguments")),
-                    "rawProviderPayload": {
-                        "responseId": payload.get("id"),
-                        "functionCall": output_item,
-                    },
-                }
-            )
-        return normalized_calls
-
     def _build_chat_completions_followup_messages(
         self,
         messages: list[dict[str, Any]],
@@ -306,30 +286,6 @@ class OpenAICompatibleProvider(ProviderAdapter):
             }
         ]
 
-    def _build_responses_followup_messages(
-        self,
-        messages: list[dict[str, Any]],
-        tool_call: dict[str, Any],
-        tool_result: Any,
-    ) -> list[dict[str, Any]]:
-        updated_messages = list(messages)
-        raw_payload = tool_call.get("rawProviderPayload")
-        function_call = raw_payload.get("functionCall") if isinstance(raw_payload, dict) else None
-        if isinstance(function_call, dict) and not self._has_matching_trailing_response_item(
-            updated_messages,
-            function_call,
-        ):
-            updated_messages.append(function_call)
-
-        updated_messages.append(
-            {
-                "type": "function_call_output",
-                "call_id": tool_call["callId"],
-                "output": tool_result,
-            }
-        )
-        return updated_messages
-
     @staticmethod
     def _has_matching_trailing_assistant(
         messages: list[dict[str, Any]],
@@ -352,53 +308,12 @@ class OpenAICompatibleProvider(ProviderAdapter):
             and candidate.get("reasoning_content") == assistant_message.get("reasoning_content")
         )
 
-    @staticmethod
-    def _has_matching_trailing_response_item(
-        messages: list[dict[str, Any]],
-        function_call: dict[str, Any],
-    ) -> bool:
-        if not messages:
-            return False
-        candidate = messages[-1]
-        return candidate == function_call
-
     def _read_chat_completions_text(self, payload: Any) -> str:
         message = self._read_first_message(payload)
         if not isinstance(message, dict):
             return ""
         content = message.get("content")
         return content.strip() if isinstance(content, str) else ""
-
-    def _read_responses_text(self, payload: Any) -> str:
-        if not isinstance(payload, dict):
-            return ""
-
-        output_text = payload.get("output_text")
-        if isinstance(output_text, str) and output_text.strip():
-            return output_text.strip()
-
-        output_items = payload.get("output")
-        if not isinstance(output_items, list):
-            return ""
-
-        collected: list[str] = []
-        for output_item in output_items:
-            if not isinstance(output_item, dict):
-                continue
-            if output_item.get("type") != "message":
-                continue
-            content_items = output_item.get("content")
-            if not isinstance(content_items, list):
-                continue
-            for content_item in content_items:
-                if not isinstance(content_item, dict):
-                    continue
-                if content_item.get("type") != "output_text":
-                    continue
-                text = content_item.get("text")
-                if isinstance(text, str) and text:
-                    collected.append(text)
-        return "".join(collected).strip()
 
     def _read_first_message(self, payload: Any) -> dict[str, Any] | None:
         if not isinstance(payload, dict):
@@ -418,7 +333,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
     def _resolve_wire_api_from_tool_call(self, tool_call: dict[str, Any]) -> str:
         raw_payload = tool_call.get("rawProviderPayload")
         if isinstance(raw_payload, dict) and (
-            "responseId" in raw_payload or "functionCall" in raw_payload
+            "responseId" in raw_payload or "functionCall" in raw_payload or "outputItems" in raw_payload
         ):
             return "responses"
         return self.wire_api

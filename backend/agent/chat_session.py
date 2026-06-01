@@ -21,6 +21,13 @@ from backend.agent.deepseek_client import (
 from backend.agent.memory import MemoryRetriever
 from backend.agent.tool_calling import ToolRegistry, ToolResultSlimmer
 from backend.providers.gemini_client import GeminiNativeClient
+from backend.providers.base import (
+    build_responses_followup_messages as build_base_responses_followup_messages,
+    convert_messages_to_responses_input as build_base_responses_input,
+    normalize_responses_tool_call_response,
+    read_responses_output_text as read_base_responses_output_text,
+    stringify_tool_result as stringify_base_tool_result,
+)
 from backend.providers.gemini_native import GeminiNativeProvider
 from backend.providers.openai_compatible import OpenAICompatibleProvider
 from backend.db.models import (
@@ -65,6 +72,7 @@ class OpenAICompatibleRuntimeClient:
         self.api_path_mode = str(api_path_mode or "raw_root").strip() or "raw_root"
         self.provider_label = str(provider_label or "").strip()
         self.client_factory = client_factory
+        self.runtime_wire_api = self.wire_api
 
     async def request_chat(
         self,
@@ -88,14 +96,14 @@ class OpenAICompatibleRuntimeClient:
                     reasoning_effort=reasoning_effort,
                 )
             payload = await self.request_responses_with_usage(
-                input_items=convert_messages_to_responses_input(messages),
+                input_items=build_base_responses_input(messages),
                 model=model,
                 tools=tools,
                 tool_choice=tool_choice,
                 thinking=thinking,
                 reasoning_effort=reasoning_effort,
             )
-            return read_responses_output_text(payload)
+            return read_base_responses_output_text(payload)
 
         if stream:
             return self.stream_chat(
@@ -129,14 +137,14 @@ class OpenAICompatibleRuntimeClient:
     ) -> DeepSeekChatResult:
         if self.wire_api == "responses":
             payload = await self.request_responses_with_usage(
-                input_items=convert_messages_to_responses_input(messages),
+                input_items=build_base_responses_input(messages),
                 model=model,
                 tools=tools,
                 tool_choice=tool_choice,
                 thinking=thinking,
                 reasoning_effort=reasoning_effort,
             )
-            text = read_responses_output_text(payload)
+            text = read_base_responses_output_text(payload)
             tool_calls = read_responses_tool_calls(payload)
             if not text and not tool_calls:
                 raise DeepSeekClientError(
@@ -209,14 +217,14 @@ class OpenAICompatibleRuntimeClient:
     ) -> AsyncIterator[DeepSeekStreamEvent]:
         if self.wire_api == "responses":
             payload = await self.request_responses_with_usage(
-                input_items=convert_messages_to_responses_input(messages),
+                input_items=build_base_responses_input(messages),
                 model=model,
                 tools=tools,
                 tool_choice=tool_choice,
                 thinking=thinking,
                 reasoning_effort=reasoning_effort,
             )
-            text = read_responses_output_text(payload)
+            text = read_base_responses_output_text(payload)
             if not text:
                 raise DeepSeekClientError(
                     f"{self._display_name()} 已返回成功响应，但没有可展示的消息内容。",
@@ -587,6 +595,25 @@ def read_openai_compatible_provider_wire_config(provider: Any | None) -> tuple[s
     return wire_api, api_path_mode
 
 
+def read_runtime_client_wire_api(client: Any) -> str:
+    """统一读取 runtime client 的显式协议，避免再用能力探测误判。"""
+
+    explicit_wire_api = (
+        getattr(client, "runtime_wire_api", None)
+        or getattr(client, "wire_api", None)
+        or getattr(client, "wireApi", None)
+    )
+    if explicit_wire_api is None:
+        # 兼容旧测试替身或外部注入客户端：只有暴露 responses 能力且没有 chat-completions
+        # usage 能力时，才把它兜底判定为 responses，避免误把双能力客户端路由错。
+        if hasattr(client, "request_responses_with_usage") and not hasattr(client, "request_chat_with_usage"):
+            return "responses"
+        return "chat_completions"
+
+    wire_api = str(explicit_wire_api).strip() or "chat_completions"
+    return wire_api
+
+
 def build_provider_bound_client(
     provider: Any | None,
     fallback_client: Any,
@@ -643,72 +670,18 @@ def build_provider_bound_client(
 
 
 def provider_client_supports_tool_loop(client: Any) -> bool:
-    return hasattr(client, "request_chat_with_usage") or hasattr(client, "request_responses_with_usage")
+    wire_api = read_runtime_client_wire_api(client)
+    if wire_api == "responses":
+        return hasattr(client, "request_responses_with_usage")
+    return hasattr(client, "request_chat_with_usage")
 
 
 def convert_messages_to_responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    input_items: list[dict[str, Any]] = []
-    for message in messages:
-        item_type = str(message.get("type") or "").strip()
-        if item_type in {"message", "function_call", "function_call_output", "reasoning"}:
-            input_items.append(message)
-            continue
-
-        role = str(message.get("role") or "user")
-        if role == "tool":
-            call_id = str(message.get("tool_call_id") or message.get("call_id") or "").strip()
-            if not call_id:
-                continue
-            input_items.append(
-                {
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": stringify_tool_result(message.get("content", "")),
-                }
-            )
-            continue
-
-        content = message.get("content")
-        if not isinstance(content, str):
-            content = ""
-        part_type = "output_text" if role in {"assistant", "model"} else "input_text"
-        input_items.append(
-            {
-                "type": "message",
-                "role": "assistant" if role in {"assistant", "model"} else role,
-                "content": [{"type": part_type, "text": content}],
-            }
-        )
-    return input_items
+    return build_base_responses_input(messages)
 
 
 def read_responses_output_text(payload: Any) -> str:
-    if not isinstance(payload, dict):
-        return ""
-    output_text = payload.get("output_text")
-    if isinstance(output_text, str) and output_text.strip():
-        return output_text.strip()
-
-    output = payload.get("output")
-    if not isinstance(output, list):
-        return ""
-
-    text_blocks: list[str] = []
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        if item.get("type") == "message":
-            content = item.get("content")
-            if not isinstance(content, list):
-                continue
-            for part in content:
-                if not isinstance(part, dict):
-                    continue
-                part_type = part.get("type")
-                text = part.get("text")
-                if part_type in {"output_text", "text"} and isinstance(text, str) and text.strip():
-                    text_blocks.append(text.strip())
-    return "\n".join(text_blocks).strip()
+    return read_base_responses_output_text(payload)
 
 
 def read_responses_tool_calls(payload: Any) -> list[dict[str, Any]] | None:
@@ -769,9 +742,7 @@ def read_openai_usage_payload(payload: Any) -> dict[str, int] | None:
 
 
 def stringify_tool_result(tool_result: Any) -> str:
-    if isinstance(tool_result, str):
-        return tool_result
-    return json.dumps(tool_result, ensure_ascii=False)
+    return stringify_base_tool_result(tool_result)
 
 
 async def run_tool_calling_chat(
@@ -808,7 +779,7 @@ async def run_tool_calling_chat(
 def _build_tool_loop_provider(client: Any) -> Any:
     if isinstance(client, GeminiNativeClient):
         return _GeminiToolLoopProvider(client=client)
-    if hasattr(client, "request_responses_with_usage"):
+    if read_runtime_client_wire_api(client) == "responses":
         return _OpenAIResponsesToolLoopProvider(client=client)
     return _DeepSeekToolLoopProvider(client=client)
 
@@ -863,7 +834,7 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
     """把 Responses API 适配成统一工具回环协议。"""
 
     def __init__(self, *, client: Any) -> None:
-        super().__init__(client_factory=None)
+        super().__init__(client_factory=None, wire_api="responses")
         self.client = client
 
     async def generate_chat(
@@ -878,7 +849,7 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
         **_: Any,
     ) -> dict[str, Any]:
         payload = await self.client.request_responses_with_usage(
-            input_items=convert_messages_to_responses_input(messages),
+            input_items=build_base_responses_input(messages),
             model=model,
             tools=tools,
             tool_choice=tool_choice,
@@ -886,41 +857,13 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
             reasoning_effort=reasoning_effort,
         )
         return {
-            "text": read_responses_output_text(payload),
+            "text": read_base_responses_output_text(payload),
             "toolCalls": self.normalize_tool_call_response(payload),
             "raw": payload,
         }
 
     def normalize_tool_call_response(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
-        output = payload.get("output")
-        if not isinstance(output, list):
-            return []
-
-        normalized_calls: list[dict[str, Any]] = []
-        for index, item in enumerate(output):
-            if not isinstance(item, dict) or item.get("type") != "function_call":
-                continue
-            name = item.get("name")
-            if not isinstance(name, str) or not name.strip():
-                continue
-            raw_arguments = item.get("arguments") or "{}"
-            if isinstance(raw_arguments, dict):
-                arguments = raw_arguments
-            else:
-                try:
-                    parsed = json.loads(raw_arguments)
-                except JSONDecodeError:
-                    parsed = {}
-                arguments = parsed if isinstance(parsed, dict) else {}
-            normalized_calls.append(
-                {
-                    "toolName": name,
-                    "callId": str(item.get("call_id") or item.get("id") or f"{name}-{index}"),
-                    "arguments": arguments,
-                    "rawProviderPayload": {"outputItems": output},
-                }
-            )
-        return normalized_calls
+        return normalize_responses_tool_call_response(payload)
 
     def build_followup_messages_after_tool_result(
         self,
@@ -928,28 +871,7 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
         tool_call: dict[str, Any],
         tool_result: Any,
     ) -> list[dict[str, Any]]:
-        updated_messages = convert_messages_to_responses_input(messages)
-        raw_payload = tool_call.get("rawProviderPayload")
-        output_items = raw_payload.get("outputItems") if isinstance(raw_payload, dict) else None
-        if isinstance(output_items, list) and not self._has_matching_trailing_output_items(updated_messages, output_items):
-            updated_messages.extend(output_items)
-
-        return updated_messages + [
-            {
-                "type": "function_call_output",
-                "call_id": tool_call["callId"],
-                "output": stringify_tool_result(tool_result),
-            }
-        ]
-
-    @staticmethod
-    def _has_matching_trailing_output_items(
-        messages: list[dict[str, Any]],
-        output_items: list[dict[str, Any]],
-    ) -> bool:
-        if len(messages) < len(output_items):
-            return False
-        return messages[-len(output_items) :] == output_items
+        return build_base_responses_followup_messages(messages, tool_call, tool_result)
 
 
 class _GeminiToolLoopProvider(GeminiNativeProvider):
