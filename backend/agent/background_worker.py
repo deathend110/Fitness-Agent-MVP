@@ -8,8 +8,10 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from backend.agent.chat_session import run_tool_calling_chat
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
+from backend.agent.tool_calling import build_default_tool_registry
 from backend.db.models import ChatMessage, ChatSession, utc_now
 
 BackgroundTaskStatus = Literal["pending", "running", "succeeded", "failed", "not_found"]
@@ -94,12 +96,28 @@ class BackgroundWorker:
                 thinking_kwargs["thinking"] = thinking
             if reasoning_effort is not None:
                 thinking_kwargs["reasoning_effort"] = reasoning_effort
-            content = await client.request_chat(
-                messages=messages,
-                model=model,
-                stream=False,
-                **thinking_kwargs,
-            )
+            proposal: dict[str, Any] | None = None
+            if hasattr(client, "request_chat_with_usage"):
+                async with self.session_factory() as session:
+                    # 后台任务也必须走同一套工具循环，否则离页后的计划卡片会退化成旧 suggestion。
+                    tool_result = await run_tool_calling_chat(
+                        session=session,
+                        session_id=record.session_id,
+                        messages=messages,
+                        model=model,
+                        deepseek_client=client,
+                        registry=build_default_tool_registry(),
+                        **thinking_kwargs,
+                    )
+                content = tool_result.content
+                proposal = tool_result.proposals[-1] if tool_result.proposals else None
+            else:
+                content = await client.request_chat(
+                    messages=messages,
+                    model=model,
+                    stream=False,
+                    **thinking_kwargs,
+                )
             if not isinstance(content, str):
                 raise DeepSeekClientError(
                     "DeepSeek 非流式响应格式异常，请稍后重试。",
@@ -112,15 +130,16 @@ class BackgroundWorker:
                 )
 
             parsed_reply = parse_ai_response(content)
+            suggestion = proposal or parsed_reply["suggestion"]
             await self._persist_successful_chat_turn(
                 session_id=record.session_id,
                 user_content=user_content,
                 assistant_text=parsed_reply["text"],
-                suggestion=parsed_reply["suggestion"],
+                suggestion=suggestion,
             )
             record.result = {
                 "text": parsed_reply["text"],
-                "suggestion": parsed_reply["suggestion"],
+                "suggestion": suggestion,
             }
             record.status = "succeeded"
             record.message = ""

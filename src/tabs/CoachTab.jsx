@@ -408,6 +408,16 @@ function CoachTab({
           window.localStorage.setItem(BACKGROUND_TASK_STORAGE_KEY, JSON.stringify(taskRecord))
         }
 
+        if (
+          shouldShowBackgroundCoachPendingIndicator({
+            currentHistory: chatHistoryRef.current,
+            storedTask: taskRecord,
+            taskStatus: 'pending',
+          })
+        ) {
+          setIsBackgroundThinking(true)
+        }
+
         return taskRecord
       })()
 
@@ -433,10 +443,15 @@ function CoachTab({
     pollStoredTask()
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('pagehide', submitBackgroundTask)
+    window.addEventListener('blur', submitBackgroundTask)
+    window.addEventListener('focus', pollStoredTask)
 
     return () => {
+      submitBackgroundTask()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pagehide', submitBackgroundTask)
+      window.removeEventListener('blur', submitBackgroundTask)
+      window.removeEventListener('focus', pollStoredTask)
       if (pollTimer) {
         window.clearTimeout(pollTimer)
       }

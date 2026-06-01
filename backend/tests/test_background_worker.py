@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+import json
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from backend.agent.adopt_plan import clear_plan_change_proposals
+from backend.agent.deepseek_client import DeepSeekChatResult
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base
@@ -60,6 +63,53 @@ class FakeDeepSeekClient:
         return reply
 
 
+class FakeToolProposalClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, tool_choice, stream
+        self.calls.append({"messages": messages})
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_propose",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "把深蹲百分比下调，给疲劳留余量。",
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "pct",
+                                            "newValue": 0.7,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="已生成一张训练计划调整卡，等你确认后写回。")
+
+
 @pytest_asyncio.fixture
 async def api_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, FakeDeepSeekClient]]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'background-worker.db'}"
@@ -81,6 +131,7 @@ async def api_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, FakeDee
             yield session
 
     app.dependency_overrides[get_db_session] = override_get_db_session
+    clear_plan_change_proposals()
     chat_api.initialize_background_worker(
         session_factory=session_factory,
         client_factory=lambda: fake_client,
@@ -92,6 +143,7 @@ async def api_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, FakeDee
         yield client, fake_client
 
     app.dependency_overrides.clear()
+    clear_plan_change_proposals()
     chat_api.initialize_background_worker(None)
     await engine.dispose()
 
@@ -101,6 +153,34 @@ def build_messages(user_content: str) -> list[dict[str, str]]:
         {"role": "system", "content": "SYSTEM_PROMPT"},
         {"role": "user", "content": user_content},
     ]
+
+
+def build_weekly_plan() -> dict[str, Any]:
+    rest_day = {"type": "rest", "exercises": []}
+    return {
+        "Monday": {
+            "type": "strength",
+            "exercises": [
+                {
+                    "id": "sq",
+                    "name": "深蹲",
+                    "template": {"loadMode": "percentage", "ref1RM": "squat", "sets": 5, "repsText": "5"},
+                    "instance": {"pct": 0.75, "rpe": 8},
+                    "ref1RM": "squat",
+                    "pct": 0.75,
+                    "rpe": 8,
+                    "sets": 5,
+                    "reps": 5,
+                }
+            ],
+        },
+        "Tuesday": dict(rest_day),
+        "Wednesday": dict(rest_day),
+        "Thursday": dict(rest_day),
+        "Friday": dict(rest_day),
+        "Saturday": dict(rest_day),
+        "Sunday": dict(rest_day),
+    }
 
 
 async def wait_for_task(client: AsyncClient, task_id: str) -> dict[str, Any]:
@@ -146,6 +226,44 @@ async def test_background_task_finishes_and_persists_chat_turn(
         ("assistant", "建议周三降低容量。"),
     ]
     assert stored_messages[1]["suggestion"] == {"day": "Wednesday", "summary": "降容量"}
+
+
+@pytest.mark.asyncio
+async def test_background_task_with_agent_user_input_generates_committable_plan_proposal(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+):
+    client, _legacy_client = api_client
+    fake_tool_client = FakeToolProposalClient()
+    chat_api.initialize_background_worker(
+        session_factory=chat_api.background_worker.session_factory,
+        client_factory=lambda: fake_tool_client,
+        default_model="deepseek-chat",
+    )
+    session_id = (await client.post("/api/chat/sessions", json={"title": "proposal"})).json()["id"]
+    assert (await client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={"userInput": "请根据我今天很累的状态，生成一张需要确认的深蹲调整卡。"},
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+    suggestion = result["result"]["suggestion"]
+    assert suggestion["proposalId"]
+    assert suggestion["day"] == "Monday"
+    assert suggestion["changes"][0]["newValue"] == 0.7
+
+    messages_response = await client.get(f"/api/chat/sessions/{session_id}/messages")
+    stored_messages = messages_response.json()
+    assert stored_messages[1]["suggestion"]["proposalId"] == suggestion["proposalId"]
+
+    committed = await client.post("/api/tools/plan/commit", json={"proposalId": suggestion["proposalId"]})
+    assert committed.status_code == 200
+    assert committed.json()["ok"] is True
+    assert committed.json()["plan"]["Monday"]["exercises"][0]["pct"] == 0.7
 
 
 @pytest.mark.asyncio

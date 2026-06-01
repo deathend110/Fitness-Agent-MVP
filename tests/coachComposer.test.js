@@ -62,6 +62,25 @@ test('CoachTab 会把后台 pending/running 任务映射为教练思考中状态
   assert.match(source, /autoScrollKey=\{`\$\{messageList\.length\}:\$\{isCoachThinking \? 'sending' : 'idle'\}`\}/)
 })
 
+test('CoachTab 在窗口 blur/focus 和组件卸载时衔接后台任务', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /window\.addEventListener\('blur', submitBackgroundTask\)/)
+  assert.match(source, /window\.addEventListener\('focus', pollStoredTask\)/)
+  assert.match(source, /window\.removeEventListener\('blur', submitBackgroundTask\)/)
+  assert.match(source, /window\.removeEventListener\('focus', pollStoredTask\)/)
+  assert.match(source, /return \(\) => \{[\s\S]*submitBackgroundTask\(\)[\s\S]*\}/)
+})
+
+test('CoachTab 后台任务提交成功后立即进入后台思考态且只提交一次', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /if \(!payload \|\| backgroundTaskStartedRef\.current\) \{/)
+  assert.match(source, /backgroundTaskStartedRef\.current = true/)
+  assert.match(source, /if \(taskRecord &&[\s\S]*shouldShowBackgroundCoachPendingIndicator\(/)
+  assert.match(source, /setIsBackgroundThinking\(true\)/)
+})
+
 test('CoachTab 会把新回复的 proposal 或 suggestion 写入 assistant message', () => {
   const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
 

@@ -789,7 +789,9 @@ CoachTab
   -> DeepSeekClient.stream_chat() / request_chat_with_usage()
   -> parse_ai_response(content)
   -> 保存 ChatMessage(user + assistant)
-  -> 页面离开时可补交 POST /api/chat/{session_id}/background
+  -> visibility hidden / pagehide / window blur / CoachTab unmount 时可补交 POST /api/chat/{session_id}/background
+      -> BackgroundWorker 对 request_chat_with_usage 客户端复用 run_tool_calling_chat()
+      -> proposal or parsed suggestion 写入 ChatMessage.suggestion 与 task.result.suggestion
   -> 回页 GET /api/chat/background/{task_id}
   -> fallback: POST /api/chat/reply
   -> buildAdoptCardModel()
@@ -806,6 +808,7 @@ CoachTab
 - memory 保存用户长期事实，knowledge 保存外部资料或上传文件知识，两者不会混写；单日状态不晋升长期 memory
 - 上传文件只通过 `fileIds` 和摘要进入 Agent，不把本机路径或完整大文件塞进请求
 - 模型与 thinking 配置由后端 `/api/models` 收口，前端仅选择后端声明的可用项
+- 后台任务提交由 `backgroundTaskStartedRef` 去重，窗口 focus 回来后主动轮询，避免 Alt+Tab 或应用内 tab 切换时用户消息看起来丢失
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 - AI 教练页历史侧栏若使用 `buildCoachHistoryView()`，其展示 id 需基于原始 `chatHistory` 下标生成，例如 `session-message-12`，保证新增消息后既有历史项 id 稳定可命中
 
