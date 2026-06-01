@@ -5,7 +5,7 @@ import json
 from json import JSONDecodeError
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -15,6 +15,11 @@ from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWork
 from backend.agent.chat_session import build_agent_request, run_tool_calling_chat
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
+from backend.agent.session_title import (
+    DEFAULT_SESSION_TITLE,
+    UNTITLED_SESSION_TITLE,
+    update_session_title_from_user_prompt,
+)
 from backend.agent.context_manager import TokenBudgetConfig
 from backend.agent.tool_calling import build_default_tool_registry
 from backend.agent.usage_ledger import record_usage, summarize_session_usage
@@ -30,10 +35,6 @@ from backend.schemas import (
 )
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-DEFAULT_SESSION_TITLE = "默认对话"
-UNTITLED_SESSION_TITLE = "新对话"
-
 
 class ChatReplyRequestSchema(BaseModel):
     sessionId: int | None = None
@@ -439,6 +440,8 @@ async def persist_successful_chat_turn(
             model=model,
             usage=usage,
         )
+    # 仅对“新对话”占位标题做一次性回填，默认会话仍保留自己的兼容语义。
+    update_session_title_from_user_prompt(chat_session, user_content)
     chat_session.updated_at = now
     await session.commit()
 
@@ -532,6 +535,20 @@ async def create_chat_session(
     await session.commit()
     await session.refresh(chat_session)
     return build_session_response(chat_session)
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_chat_session(
+    session_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> Response:
+    chat_session = await session.get(ChatSession, session_id)
+    if chat_session is None:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    await session.delete(chat_session)
+    await session.commit()
+    return Response(status_code=204)
 
 
 @router.get("/sessions/default", response_model=ChatSessionSchema, response_model_by_alias=True)
@@ -858,6 +875,7 @@ async def append_chat_message(
         created_at=now,
     )
     session.add(message)
+    update_session_title_from_user_prompt(chat_session, payload.content if payload.role == "user" else "")
     # 新消息写入时同步触碰会话更新时间，列表页才能按最近对话排序。
     chat_session.updated_at = now
     await session.commit()

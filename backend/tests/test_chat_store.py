@@ -153,6 +153,68 @@ async def test_chat_empty_session_null_suggestion_and_failure_cases(api_client: 
 
 
 @pytest.mark.asyncio
+async def test_untitled_session_uses_first_user_prompt_as_history_title(api_client: AsyncClient):
+    create_response = await api_client.post("/api/chat/sessions", json={})
+
+    assert create_response.status_code == 200
+    session_payload = create_response.json()
+    session_id = session_payload["id"]
+    assert session_payload["title"] == "新对话"
+
+    first_prompt = "帮我根据今天腿部训练后的疲劳感，安排明天的恢复建议和有氧强度。"
+    first_message_response = await api_client.post(
+        f"/api/chat/sessions/{session_id}/messages",
+        json={"role": "user", "content": first_prompt},
+    )
+
+    assert first_message_response.status_code == 200
+
+    sessions_response = await api_client.get("/api/chat/sessions")
+    assert sessions_response.status_code == 200
+    renamed_session = next(session for session in sessions_response.json() if session["id"] == session_id)
+    assert renamed_session["title"] == first_prompt[:48]
+
+    second_message_response = await api_client.post(
+        f"/api/chat/sessions/{session_id}/messages",
+        json={"role": "user", "content": "再补充一下，我昨晚只睡了 6 小时。"},
+    )
+    assert second_message_response.status_code == 200
+
+    sessions_after_second_message = await api_client.get("/api/chat/sessions")
+    stable_session = next(
+        session for session in sessions_after_second_message.json() if session["id"] == session_id
+    )
+    assert stable_session["title"] == first_prompt[:48]
+
+
+@pytest.mark.asyncio
+async def test_delete_chat_session_removes_it_from_history_and_messages(api_client: AsyncClient):
+    create_response = await api_client.post("/api/chat/sessions", json={"title": "准备删除"})
+
+    assert create_response.status_code == 200
+    session_id = create_response.json()["id"]
+
+    message_response = await api_client.post(
+        f"/api/chat/sessions/{session_id}/messages",
+        json={"role": "user", "content": "这条对话稍后会被删除。"},
+    )
+    assert message_response.status_code == 200
+
+    delete_response = await api_client.delete(f"/api/chat/sessions/{session_id}")
+    assert delete_response.status_code == 204
+
+    sessions_response = await api_client.get("/api/chat/sessions")
+    assert sessions_response.status_code == 200
+    assert all(session["id"] != session_id for session in sessions_response.json())
+
+    messages_response = await api_client.get(f"/api/chat/sessions/{session_id}/messages")
+    assert messages_response.status_code == 404
+
+    missing_delete_response = await api_client.delete(f"/api/chat/sessions/{session_id}")
+    assert missing_delete_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_chat_message_attachment_snapshots_round_trip(api_client: AsyncClient):
     create_response = await api_client.post("/api/chat/sessions", json={"title": "附件回显"})
 

@@ -1,6 +1,7 @@
 function ChatSidebar({
   activeSessionId,
   groups = [],
+  onDeleteSession,
   onNewChat,
   onSelectSession,
   title = 'AI 教练',
@@ -36,24 +37,47 @@ function ChatSidebar({
                 const isActive = item.id === activeSessionId || item.isActive
 
                 return (
-                  <button
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`block w-full rounded-xl border px-3 py-2 text-left text-sm leading-5 transition ${
+                  <div
+                    className={`group flex items-start gap-1 rounded-xl border px-2 py-2 transition ${
                       isActive
-                        ? 'border-fitloop-line bg-white font-medium text-slate-700 shadow-sm'
+                        ? 'border-fitloop-line bg-white shadow-sm'
                         : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-700'
                     }`}
                     key={item.id}
-                    onClick={() => onSelectSession?.(item.id)}
-                    type="button"
                   >
-                    <span className="block truncate">{item.title}</span>
-                    {item.subtitle ? (
-                      <span className="mt-1 block truncate text-[11px] leading-4 text-slate-400">
-                        {item.subtitle}
-                      </span>
+                    <button
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`min-w-0 flex-1 text-left text-sm leading-5 ${
+                        isActive ? 'font-medium text-slate-700' : 'text-slate-500 group-hover:text-slate-700'
+                      }`}
+                      onClick={() => onSelectSession?.(item.id)}
+                      type="button"
+                    >
+                      <span className="block truncate">{item.title}</span>
+                      {item.subtitle ? (
+                        <span className="mt-1 block truncate text-[11px] leading-4 text-slate-400">
+                          {item.subtitle}
+                        </span>
+                      ) : null}
+                    </button>
+
+                    {item.canDelete ? (
+                      <button
+                        aria-label={`删除对话：${item.title}`}
+                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDeleteSession?.(item.id)
+                        }}
+                        title="删除对话"
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="text-sm leading-none">
+                          ×
+                        </span>
+                      </button>
                     ) : null}
-                  </button>
+                  </div>
                 )
               })}
             </div>

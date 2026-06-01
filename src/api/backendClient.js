@@ -211,6 +211,9 @@ export function createBackendClient(options = {}) {
     createChatSession(payload = {}, { signal } = {}) {
       return request('/chat/sessions', { method: 'POST', body: payload, signal })
     },
+    deleteChatSession(sessionId, { signal } = {}) {
+      return request(`/chat/sessions/${sessionId}`, { method: 'DELETE', signal })
+    },
     getChatMessages(sessionId, { signal } = {}) {
       return request(`/chat/sessions/${sessionId}/messages`, { signal })
     },

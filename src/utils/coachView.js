@@ -14,6 +14,10 @@ function normalizeText(value, fallback) {
   return trimmed || fallback
 }
 
+export function buildSessionTitleFromPrompt(prompt = '') {
+  return normalizeText(String(prompt || '').replace(/\s+/g, ' '), '新对话').slice(0, 48)
+}
+
 function formatSessionUpdatedAt(updatedAt) {
   if (!updatedAt) {
     return ''
@@ -105,6 +109,7 @@ export function buildCoachSessionView(sessions = [], options = {}) {
       title: normalizeText(session?.title, '新对话'),
       updatedAt: session?.updatedAt ?? session?.updated_at ?? null,
       updatedAtLabel: formatSessionUpdatedAt(session?.updatedAt ?? session?.updated_at ?? null),
+      canDelete: true,
       isPlaceholder: false,
     }))
     .filter((session) => Number.isInteger(session.id))

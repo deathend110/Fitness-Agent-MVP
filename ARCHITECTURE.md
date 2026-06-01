@@ -240,11 +240,12 @@ docs/
 
 - `backend/api/chat.py`
   - 负责聊天会话与消息的后端 CRUD、SSE 流式代理、非流式回退代理和后台思考任务 API
-  - 提供会话列表、创建会话、获取或创建默认会话、追加消息、全量读取消息
+  - 提供会话列表、创建会话、删除会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
   - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
   - `/api/chat/stream` 将 DeepSeek 流式文本映射为 `delta / suggestion / done / error` 事件
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
+  - 普通“新对话”会在首条 user prompt 成功落库后自动回填标题，历史侧栏不再长期显示占位文案
 
 - `backend/agent/prompt_templates.py`
   - 定义稳定 system prompt，包含健身教练身份、安全边界、非医疗诊断声明和计划写回必须用户确认的约束

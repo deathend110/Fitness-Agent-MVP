@@ -27,6 +27,7 @@ import {
 } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import {
+  buildSessionTitleFromPrompt,
   buildCoachSessionView,
   getCoachEmptyQuestionView,
   getVisibleStreamText,
@@ -58,6 +59,27 @@ function buildMessageAttachmentSnapshots(files = []) {
     extension: file?.extension || '',
     sizeBytes: Number.isFinite(file?.sizeBytes) ? file.sizeBytes : null,
   }))
+}
+
+function syncSessionActivity(currentSessions = [], sessionId, userInput) {
+  if (!Number.isInteger(sessionId)) {
+    return currentSessions
+  }
+
+  const activeSession = currentSessions.find((session) => session?.id === sessionId)
+  if (!activeSession) {
+    return currentSessions
+  }
+
+  const nextTitle =
+    activeSession.title === '新对话' ? buildSessionTitleFromPrompt(userInput) : activeSession.title
+  const nextSession = {
+    ...activeSession,
+    title: nextTitle,
+    updatedAt: new Date().toISOString(),
+  }
+
+  return [nextSession, ...currentSessions.filter((session) => session?.id !== sessionId)]
 }
 
 function normalizeChatMessages(messages = []) {
@@ -759,6 +781,41 @@ function CoachTab({
     await loadSessionContent(sessionId)
   }
 
+  async function handleDeleteSession(sessionId) {
+    if (isSending || !Number.isInteger(sessionId)) {
+      return
+    }
+
+    if (typeof window !== 'undefined' && !window.confirm('删除这个对话后将无法恢复，确认删除吗？')) {
+      return
+    }
+
+    const wasActive = sessionId === activeSessionIdRef.current
+    const fallbackSession = sessions.find((session) => session.id !== sessionId) || null
+
+    setErrorMessage('')
+    try {
+      const client = createBackendClient()
+      await client.deleteChatSession(sessionId)
+
+      if (wasActive) {
+        setDraft('')
+        setAttachedFiles([])
+        setMessageMeta([])
+        setStreamingText('')
+        chatHistoryRef.current = []
+        onChatHistoryChange([])
+      }
+
+      await refreshSessions({
+        ensureDefault: wasActive && !fallbackSession,
+        preferredSessionId: wasActive ? fallbackSession?.id ?? null : activeSessionIdRef.current,
+      })
+    } catch (error) {
+      setErrorMessage(error?.message || '删除对话失败，请稍后重试。')
+    }
+  }
+
   function handleSuggestionQuestion(question) {
     setDraft(question)
     setErrorMessage('')
@@ -925,6 +982,9 @@ function CoachTab({
         return nextMeta
       })
       chatHistoryRef.current = finalHistory
+      setSessions((currentSessions) =>
+        syncSessionActivity(currentSessions, activeSessionIdRef.current, userInput),
+      )
       onChatHistoryChange(finalHistory)
       setDraft('')
       setAttachedFiles([])
@@ -1012,6 +1072,7 @@ function CoachTab({
         <ChatSidebar
           activeSessionId={activeSessionId}
           groups={historyView.groups}
+          onDeleteSession={handleDeleteSession}
           onNewChat={handleNewChat}
           onSelectSession={handleSelectSession}
         />

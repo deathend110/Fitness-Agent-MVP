@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.agent.chat_session import run_tool_calling_chat
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
+from backend.agent.session_title import update_session_title_from_user_prompt
 from backend.agent.tool_calling import build_default_tool_registry
 from backend.config import get_settings
 from backend.db.models import ChatMessage, ChatSession, utc_now
@@ -194,6 +195,7 @@ class BackgroundWorker:
                     ),
                 ]
             )
+            update_session_title_from_user_prompt(chat_session, user_content)
             chat_session.updated_at = now
             await session.commit()
 
