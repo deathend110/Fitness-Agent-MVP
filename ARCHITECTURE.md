@@ -64,8 +64,12 @@ backend/
     daily_metrics.py
   model_config/
     bootstrap.py
+    runtime.py
     service.py
     types.py
+  providers/
+    base.py
+    openai_compatible.py
   db/
     database.py
     models.py
@@ -278,6 +282,14 @@ docs/
 - `backend/api/models.py`
   - 提供 `/api/models`，优先读取 DeepSeek `/models` 并按 `MODEL_ALLOWLIST` 过滤
   - 缺 Key 或上游失败时返回本地 fallback、`source="fallback"` 和可展示 warning，避免阻断聊天
+
+- `backend/model_config/runtime.py`
+  - 负责模型配置运行时缓存、`default_model_ref` 暴露、`modelRef` 解析与配置热刷新入口
+  - 当前对外返回 provider 副本，避免后续路由或适配层误改共享缓存内部状态
+
+- `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
+  - 定义 Provider 适配层的最小公共接口和统一错误类型
+  - 已落地 OpenAI-compatible `/models` 发现与 OpenAI function tools schema 转换，为 DeepSeek 和同类接口复用打基础
 
 - `backend/api/drafts.py`
   - 提供会话级 Coach 草稿读取和 upsert
