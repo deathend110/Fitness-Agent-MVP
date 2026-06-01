@@ -160,7 +160,44 @@ def install_backend_mock(page, commit_calls):
             )
 
         if method == "GET" and path == "/chat/sessions/default":
-            return json_response(route, {"id": 1})
+            return json_response(
+                route,
+                {
+                    "id": 1,
+                    "title": "默认对话",
+                    "createdAt": "2026-06-01T00:00:00Z",
+                    "updatedAt": "2026-06-01T00:10:00Z",
+                },
+            )
+
+        if method == "GET" and path == "/chat/sessions":
+            return json_response(
+                route,
+                [
+                    {
+                        "id": 1,
+                        "title": "默认对话",
+                        "createdAt": "2026-06-01T00:00:00Z",
+                        "updatedAt": "2026-06-01T00:10:00Z",
+                    }
+                ],
+            )
+
+        if method == "GET" and path == "/chat/sessions/1/messages":
+            return json_response(
+                route,
+                [
+                    {
+                        "id": index + 1,
+                        "sessionId": 1,
+                        "role": message["role"],
+                        "content": message["content"],
+                        "suggestion": message.get("suggestion"),
+                        "createdAt": "2026-06-01T00:00:00Z",
+                    }
+                    for index, message in enumerate(CHAT_HISTORY)
+                ],
+            )
 
         if path == "/chat/sessions/1/draft":
             if method == "GET":
@@ -213,6 +250,7 @@ def seed_local_storage(context):
         window.localStorage.setItem('fitloop_weeklyPlan', JSON.stringify(seedPayload.weeklyPlan));
         window.localStorage.setItem('fitloop_dailyLog', JSON.stringify({{}}));
         window.localStorage.setItem('fitloop_chatHistory', JSON.stringify(seedPayload.chatHistory));
+        window.localStorage.setItem('fitloop:coach-active-session-id', '1');
         window.localStorage.setItem('fitloop_storageVersion', JSON.stringify('v2-empty-defaults'));
         window.localStorage.setItem('fitloop:coach-background-task', JSON.stringify(seedPayload.backgroundTask));
         """

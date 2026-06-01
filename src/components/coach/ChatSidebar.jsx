@@ -48,6 +48,11 @@ function ChatSidebar({
                     type="button"
                   >
                     <span className="block truncate">{item.title}</span>
+                    {item.subtitle ? (
+                      <span className="mt-1 block truncate text-[11px] leading-4 text-slate-400">
+                        {item.subtitle}
+                      </span>
+                    ) : null}
                   </button>
                 )
               })}

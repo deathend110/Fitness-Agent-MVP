@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CoachLayout from '../components/coach/CoachLayout.jsx'
 import ChatSidebar from '../components/coach/ChatSidebar.jsx'
 import ChatTopbar from '../components/coach/ChatTopbar.jsx'
@@ -23,7 +23,7 @@ import {
 } from '../utils/coachChat.js'
 import { appendChatMessages } from '../utils/chatHistory.js'
 import {
-  buildCoachHistoryView,
+  buildCoachSessionView,
   getCoachEmptyQuestionView,
   getVisibleStreamText,
 } from '../utils/coachView.js'
@@ -45,12 +45,95 @@ function buildConversationExportText(messages = []) {
     .join('\n\n')
 }
 
-function getBackendSessionId(sessionId) {
-  // 当前侧栏仍是本地历史生成的临时 id；只有后续接入真实会话列表后才把数字 sessionId 传给后端。
-  return Number.isInteger(sessionId) ? sessionId : null
+function normalizeChatMessages(messages = []) {
+  if (!Array.isArray(messages)) {
+    return []
+  }
+
+  return messages.map((message) => ({
+    role: message?.role || 'assistant',
+    content: typeof message?.content === 'string' ? message.content : '',
+    suggestion: message?.suggestion ?? null,
+  }))
+}
+
+function readStoredActiveSessionId() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const rawValue = window.localStorage.getItem(ACTIVE_COACH_SESSION_STORAGE_KEY)
+  const parsedValue = Number.parseInt(rawValue || '', 10)
+  return Number.isInteger(parsedValue) ? parsedValue : null
+}
+
+function persistActiveSessionId(sessionId) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (Number.isInteger(sessionId)) {
+    window.localStorage.setItem(ACTIVE_COACH_SESSION_STORAGE_KEY, String(sessionId))
+    return
+  }
+
+  window.localStorage.removeItem(ACTIVE_COACH_SESSION_STORAGE_KEY)
+}
+
+function readStoredBackgroundTask() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return JSON.parse(window.localStorage.getItem(BACKGROUND_TASK_STORAGE_KEY) || 'null')
+  } catch {
+    window.localStorage.removeItem(BACKGROUND_TASK_STORAGE_KEY)
+    return null
+  }
+}
+
+function hydratePendingBackgroundUser(messages = [], sessionId) {
+  const storedTask = readStoredBackgroundTask()
+  const userContent = typeof storedTask?.userContent === 'string' ? storedTask.userContent.trim() : ''
+
+  if (!storedTask?.taskId || !userContent) {
+    return messages
+  }
+
+  if (Number.isInteger(storedTask.sessionId) && storedTask.sessionId !== sessionId) {
+    return messages
+  }
+
+  const hasSourceUser = messages.some(
+    (message) => message.role === 'user' && message.content === userContent,
+  )
+
+  if (hasSourceUser) {
+    return messages
+  }
+
+  // 后台任务可能尚未把本轮 user 消息落库，先用本地 task 记录恢复等待态锚点。
+  return [...messages, { role: 'user', content: userContent, suggestion: null }]
+}
+
+function hasPendingBackgroundTaskForSession(messages = [], sessionId) {
+  const storedTask = readStoredBackgroundTask()
+  const userContent = typeof storedTask?.userContent === 'string' ? storedTask.userContent.trim() : ''
+
+  if (!storedTask?.taskId || !userContent) {
+    return false
+  }
+
+  if (Number.isInteger(storedTask.sessionId) && storedTask.sessionId !== sessionId) {
+    return false
+  }
+
+  return messages.some((message) => message.role === 'user' && message.content === userContent)
 }
 
 const BACKGROUND_TASK_STORAGE_KEY = 'fitloop:coach-background-task'
+const ACTIVE_COACH_SESSION_STORAGE_KEY = 'fitloop:coach-active-session-id'
 const FALLBACK_MODEL_CONFIG = {
   defaultModel: 'deepseek-v4-flash',
   models: [{ id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', supportsThinking: true }],
@@ -67,7 +150,6 @@ function CoachTab({
 }) {
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [attachedFiles, setAttachedFiles] = useState([])
-  const [backendSessionId, setBackendSessionId] = useState(null)
   const [draft, setDraft] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [isBackgroundThinking, setIsBackgroundThinking] = useState(false)
@@ -75,6 +157,7 @@ function CoachTab({
   const [isUploading, setIsUploading] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
   const [modelConfig, setModelConfig] = useState(FALLBACK_MODEL_CONFIG)
+  const [sessions, setSessions] = useState([])
   const [selectedModel, setSelectedModel] = useState(FALLBACK_MODEL_CONFIG.defaultModel)
   const [thinking, setThinking] = useState({
     enabled: FALLBACK_MODEL_CONFIG.thinking.enabled,
@@ -86,14 +169,17 @@ function CoachTab({
   const backgroundSubmitPromiseRef = useRef(null)
   const backgroundTaskStartedRef = useRef(false)
   const chatHistoryRef = useRef(chatHistory)
+  const activeSessionIdRef = useRef(activeSessionId)
   const pendingRequestRef = useRef(null)
   const adoptingSuggestionKeysRef = useRef(new Set())
+  const sessionLoadTokenRef = useRef(0)
+  const draftHydratedRef = useRef(false)
 
   const coachBlockReason = useMemo(() => getCoachBlockReason(profile), [profile])
   const emptyQuestions = useMemo(() => getCoachEmptyQuestionView(), [])
   const historyView = useMemo(
-    () => buildCoachHistoryView(chatHistory, { activeSessionId }),
-    [activeSessionId, chatHistory],
+    () => buildCoachSessionView(sessions, { activeSessionId }),
+    [activeSessionId, sessions],
   )
   const activeHistoryItem = useMemo(
     () => getActiveHistoryItem(historyView, activeSessionId),
@@ -173,42 +259,109 @@ function CoachTab({
     }
   }, [])
 
+  const loadSessionContent = useCallback(
+    async (sessionId) => {
+      if (!Number.isInteger(sessionId)) {
+        return null
+      }
+
+      const requestToken = sessionLoadTokenRef.current + 1
+      sessionLoadTokenRef.current = requestToken
+      draftHydratedRef.current = false
+
+      const client = createBackendClient()
+      const [messages, draftPayload] = await Promise.all([
+        client.getChatMessages(sessionId),
+        client.getCoachDraft(sessionId),
+      ])
+
+      if (sessionLoadTokenRef.current !== requestToken) {
+        return sessionId
+      }
+
+      const nextHistory = hydratePendingBackgroundUser(normalizeChatMessages(messages), sessionId)
+      const attachedFileIds = Array.isArray(draftPayload?.attachedFileIds)
+        ? draftPayload.attachedFileIds.filter(Number.isInteger)
+        : []
+      const attachedFilesResult = await Promise.all(
+        attachedFileIds.map(async (fileId) => {
+          try {
+            const response = await client.getFile(fileId)
+            return response?.file ?? response ?? null
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      if (sessionLoadTokenRef.current !== requestToken) {
+        return sessionId
+      }
+
+      chatHistoryRef.current = nextHistory
+      setMessageMeta(mergeMessageMeta(nextHistory))
+      onChatHistoryChange(nextHistory)
+      setIsBackgroundThinking(hasPendingBackgroundTaskForSession(nextHistory, sessionId))
+      setDraft(draftPayload?.content || '')
+      setSelectedModel(draftPayload?.model || FALLBACK_MODEL_CONFIG.defaultModel)
+      setThinking(
+        draftPayload?.thinking && Object.keys(draftPayload.thinking).length
+          ? draftPayload.thinking
+          : {
+              enabled: FALLBACK_MODEL_CONFIG.thinking.enabled,
+              budget: FALLBACK_MODEL_CONFIG.thinking.budget,
+            },
+      )
+      setAttachedFiles(attachedFilesResult.filter(Boolean))
+      draftHydratedRef.current = true
+      return sessionId
+    },
+    [onChatHistoryChange],
+  )
+
+  const refreshSessions = useCallback(
+    async ({ ensureDefault = false, preferredSessionId = null } = {}) => {
+      const client = createBackendClient()
+      let nextSessions = await client.getChatSessions()
+
+      if ((!Array.isArray(nextSessions) || !nextSessions.length) && ensureDefault) {
+        nextSessions = [await client.getDefaultChatSession()]
+      }
+
+      const normalizedSessions = Array.isArray(nextSessions) ? nextSessions : []
+      setSessions(normalizedSessions)
+
+      const storedActiveId = preferredSessionId ?? readStoredActiveSessionId()
+      const nextActiveSession =
+        normalizedSessions.find((session) => session.id === storedActiveId) ||
+        normalizedSessions.find((session) => session.id === activeSessionIdRef.current) ||
+        normalizedSessions[0] ||
+        null
+
+      if (!nextActiveSession) {
+        setActiveSessionId(null)
+        draftHydratedRef.current = false
+        return null
+      }
+
+      setActiveSessionId(nextActiveSession.id)
+      await loadSessionContent(nextActiveSession.id)
+      return nextActiveSession.id
+    },
+    [loadSessionContent],
+  )
+
   useEffect(() => {
-    let ignore = false
-    const client = createBackendClient()
-
-    client
-      .getDefaultChatSession()
-      .then(async (session) => {
-        if (ignore || !Number.isInteger(session?.id)) {
-          return
-        }
-        setBackendSessionId(session.id)
-        const draftPayload = await client.getCoachDraft(session.id)
-        if (ignore) {
-          return
-        }
-        setDraft(draftPayload.content || '')
-        if (draftPayload.model) {
-          setSelectedModel(draftPayload.model)
-        }
-        if (draftPayload.thinking) {
-          setThinking(draftPayload.thinking)
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          setBackendSessionId(null)
-        }
-      })
-
-    return () => {
-      ignore = true
-    }
-  }, [])
+    refreshSessions({ ensureDefault: true }).catch(() => null)
+  }, [refreshSessions])
 
   useEffect(() => {
-    if (!Number.isInteger(backendSessionId)) {
+    activeSessionIdRef.current = activeSessionId
+    persistActiveSessionId(activeSessionId)
+  }, [activeSessionId])
+
+  useEffect(() => {
+    if (!Number.isInteger(activeSessionId) || !draftHydratedRef.current) {
       return undefined
     }
 
@@ -220,11 +373,11 @@ function CoachTab({
       attachedFileIds: attachedFiles.map((file) => file.id).filter(Number.isInteger),
     }
     const timer = window.setTimeout(() => {
-      client.saveCoachDraft(backendSessionId, payload).catch(() => null)
+      client.saveCoachDraft(activeSessionId, payload).catch(() => null)
     }, 500)
 
     function flushDraft() {
-      client.saveCoachDraft(backendSessionId, payload).catch(() => null)
+      client.saveCoachDraft(activeSessionId, payload).catch(() => null)
     }
 
     window.addEventListener('pagehide', flushDraft)
@@ -232,23 +385,10 @@ function CoachTab({
       window.clearTimeout(timer)
       window.removeEventListener('pagehide', flushDraft)
     }
-  }, [attachedFiles, backendSessionId, draft, selectedModel, thinking])
+  }, [activeSessionId, attachedFiles, draft, selectedModel, thinking])
 
   useEffect(() => {
     let pollTimer = null
-
-    function readStoredTask() {
-      if (typeof window === 'undefined') {
-        return null
-      }
-
-      try {
-        return JSON.parse(window.localStorage.getItem(BACKGROUND_TASK_STORAGE_KEY) || 'null')
-      } catch {
-        window.localStorage.removeItem(BACKGROUND_TASK_STORAGE_KEY)
-        return null
-      }
-    }
 
     function clearStoredTask() {
       if (typeof window !== 'undefined') {
@@ -257,6 +397,13 @@ function CoachTab({
     }
 
     function appendBackgroundReply(reply, storedTask) {
+      if (
+        Number.isInteger(storedTask?.sessionId) &&
+        storedTask.sessionId !== activeSessionIdRef.current
+      ) {
+        return
+      }
+
       const mergeResult = mergeBackgroundCoachReply({
         currentHistory: chatHistoryRef.current,
         reply,
@@ -288,9 +435,17 @@ function CoachTab({
     }
 
     async function pollStoredTask() {
-      const storedTask = readStoredTask()
+      const storedTask = readStoredBackgroundTask()
 
       if (!storedTask?.taskId) {
+        setIsBackgroundThinking(false)
+        return
+      }
+
+      if (
+        Number.isInteger(storedTask.sessionId) &&
+        storedTask.sessionId !== activeSessionIdRef.current
+      ) {
         setIsBackgroundThinking(false)
         return
       }
@@ -404,18 +559,6 @@ function CoachTab({
     }
   }, [onChatHistoryChange])
 
-  useEffect(() => {
-    if (!chatHistory.length) {
-      setActiveSessionId(null)
-      return
-    }
-
-    const nextActiveItem = getActiveHistoryItem(historyView, activeSessionId)
-    if (nextActiveItem && nextActiveItem.id !== activeSessionId) {
-      setActiveSessionId(nextActiveItem.id)
-    }
-  }, [activeSessionId, chatHistory.length, historyView])
-
   async function requestReplyWithFallback(payload, { signal } = {}) {
     let hasReceivedStreamText = false
 
@@ -441,22 +584,43 @@ function CoachTab({
     }
   }
 
-  function handleNewChat() {
+  async function handleNewChat() {
     if (isSending) {
       return
     }
 
-    setActiveSessionId(null)
+    setErrorMessage('')
     setAttachedFiles([])
     setDraft('')
-    setErrorMessage('')
     setMessageMeta([])
     setStreamingText('')
+    chatHistoryRef.current = []
     onChatHistoryChange([])
+
+    try {
+      const client = createBackendClient()
+      const createdSession = await client.createChatSession({})
+      if (!Number.isInteger(createdSession?.id)) {
+        throw new Error('创建新对话失败，请稍后重试。')
+      }
+
+      await refreshSessions({ preferredSessionId: createdSession.id })
+      persistActiveSessionId(createdSession.id)
+    } catch (error) {
+      setErrorMessage(error?.message || '创建新对话失败，请稍后重试。')
+    }
   }
 
-  function handleSelectSession(sessionId) {
+  async function handleSelectSession(sessionId) {
+    if (isSending || !Number.isInteger(sessionId)) {
+      return
+    }
+
+    setErrorMessage('')
+    setStreamingText('')
+    setIsBackgroundThinking(false)
     setActiveSessionId(sessionId)
+    await loadSessionContent(sessionId)
   }
 
   function handleSuggestionQuestion(question) {
@@ -568,7 +732,7 @@ function CoachTab({
       dailyLog,
       files: attachedFiles,
       profile,
-      sessionId: backendSessionId ?? getBackendSessionId(activeSessionId),
+      sessionId: Number.isInteger(activeSessionId) ? activeSessionId : null,
       sourceUserIndex: nextHistory.length - 1,
       model: selectedModel,
       thinking,
@@ -646,7 +810,11 @@ function CoachTab({
     try {
       const uploadedFiles = []
       for (const file of files) {
-        uploadedFiles.push(await client.uploadFile(file, { sessionId: backendSessionId }))
+        uploadedFiles.push(
+          await client.uploadFile(file, {
+            sessionId: Number.isInteger(activeSessionId) ? activeSessionId : null,
+          }),
+        )
       }
       setAttachedFiles((current) => [...current, ...uploadedFiles])
     } catch (error) {

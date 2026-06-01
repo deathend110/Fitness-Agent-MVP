@@ -4,6 +4,7 @@ import test from 'node:test'
 
 import {
   buildCoachHistoryView,
+  buildCoachSessionView,
   getCoachEmptyQuestionView,
   getVisibleStreamText,
 } from '../src/utils/coachView.js'
@@ -81,6 +82,43 @@ test('buildCoachHistoryView 在没有用户消息时返回空状态占位记录'
   assert.equal(view.groups.length, 1)
   assert.equal(view.groups[0].items[0].title, '开始新的对话')
   assert.equal(view.groups[0].items[0].isPlaceholder, true)
+})
+
+test('buildCoachSessionView 会按真实会话列表渲染侧栏，而不是按每条消息拆分', () => {
+  const view = buildCoachSessionView([
+    {
+      id: 12,
+      title: '腿日复盘',
+      updatedAt: '2026-06-01T10:00:00.000Z',
+    },
+    {
+      id: 9,
+      title: '背部训练',
+      updatedAt: '2026-06-01T09:30:00.000Z',
+    },
+  ])
+
+  assert.equal(view.groups.length, 1)
+  assert.equal(view.groups[0].label, '最近对话')
+  assert.equal(view.groups[0].items.length, 2)
+  assert.equal(view.groups[0].items[0].id, 12)
+  assert.equal(view.groups[0].items[0].title, '腿日复盘')
+  assert.equal(view.groups[0].items[0].isActive, true)
+  assert.equal(view.groups[0].items[1].id, 9)
+  assert.equal(view.groups[0].items[1].title, '背部训练')
+})
+
+test('buildCoachSessionView 会在 activeSessionId 变化时稳定高亮指定会话', () => {
+  const view = buildCoachSessionView(
+    [
+      { id: 12, title: '腿日复盘', updatedAt: '2026-06-01T10:00:00.000Z' },
+      { id: 9, title: '背部训练', updatedAt: '2026-06-01T09:30:00.000Z' },
+    ],
+    { activeSessionId: 9 },
+  )
+
+  assert.equal(view.groups[0].items[0].isActive, false)
+  assert.equal(view.groups[0].items[1].isActive, true)
 })
 
 test('getCoachEmptyQuestionView 返回固定四条空状态建议问题', () => {

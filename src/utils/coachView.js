@@ -14,6 +14,24 @@ function normalizeText(value, fallback) {
   return trimmed || fallback
 }
 
+function formatSessionUpdatedAt(updatedAt) {
+  if (!updatedAt) {
+    return ''
+  }
+
+  const date = new Date(updatedAt)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
 /**
  * 流式回复末尾可能带结构化 JSON，本函数只保留用户应该先看到的自然语言部分。
  */
@@ -74,6 +92,54 @@ export function buildCoachHistoryView(chatHistory = [], options = {}) {
       {
         label: '最近对话',
         items: sessions,
+      },
+    ],
+  }
+}
+
+export function buildCoachSessionView(sessions = [], options = {}) {
+  const activeSessionId = options.activeSessionId ?? null
+  const normalizedSessions = sessions
+    .map((session) => ({
+      id: session?.id,
+      title: normalizeText(session?.title, '新对话'),
+      updatedAt: session?.updatedAt ?? session?.updated_at ?? null,
+      updatedAtLabel: formatSessionUpdatedAt(session?.updatedAt ?? session?.updated_at ?? null),
+      isPlaceholder: false,
+    }))
+    .filter((session) => Number.isInteger(session.id))
+
+  if (!normalizedSessions.length) {
+    return {
+      groups: [
+        {
+          label: '最近对话',
+          items: [
+            {
+              id: 'session-empty',
+              title: '开始新的对话',
+              subtitle: '新建后会保留在这里',
+              isActive: true,
+              isPlaceholder: true,
+            },
+          ],
+        },
+      ],
+    }
+  }
+
+  return {
+    groups: [
+      {
+        label: '最近对话',
+        items: normalizedSessions.map((session, index) => ({
+          ...session,
+          isActive:
+            activeSessionId === null || activeSessionId === undefined
+              ? index === 0
+              : session.id === activeSessionId,
+          subtitle: session.updatedAtLabel || '最近更新',
+        })),
       },
     ],
   }

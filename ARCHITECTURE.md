@@ -13,7 +13,7 @@
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储
 - 后端配置固定从 `backend/.env` 读取；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据
-- AI 教练页发送消息走后端聊天代理，页面显示状态暂时仍复用 `fitloop_chatHistory`
+- AI 教练页发送消息走后端聊天代理，历史侧栏和消息恢复已切到后端 `chat_session / chat_message`
 
 ### 当前数据源分工
 
@@ -22,8 +22,8 @@
   - 本地缓存：浏览器 localStorage
 - `chatHistory`
   - 后端能力：`chat_session / chat_message` 已支持默认会话、全量消息读取、`suggestion` JSON 存储和 SSE 代理落库
-  - 前端现状：发送请求走后端代理，聊天展示仍使用浏览器 `localStorage`；离页时记录后台 task_id，回页查询成功结果并补齐 assistant 消息
-  - 后续计划：真实多会话 UI 与刷新后从后端拉取消息补齐继续拆任务推进
+  - 前端现状：侧栏从 `GET /api/chat/sessions` 读取真实会话；选中会话后从 `GET /api/chat/sessions/{id}/messages` 恢复消息；`fitloop_chatHistory` 仅作为当前会话展示缓存和旧导入导出兼容
+  - `fitloop:coach-active-session-id` 用于刷新后恢复当前会话；离页时记录后台 task_id，回页查询成功结果并补齐 assistant 消息
 
 ### 当前新增目录
 
@@ -138,8 +138,7 @@ src/
 
 当前不覆盖，留给 Phase 5 / V3：
 
-- AI 教练页真实多会话 UI 和刷新后从后端拉取消息补齐
-- 向量知识库、远端文件存储、完整 OCR/视觉理解、真实多会话 UI、完整知识库和周期计划引擎
+- 向量知识库、远端文件存储、完整 OCR/视觉理解、完整知识库和周期计划引擎
 
 ## 当前项目结构
 
@@ -313,8 +312,11 @@ docs/
 
 - `src/tabs/CoachTab.jsx`
   - 负责 AI 教练页状态协调
-  - 继续管理 `draft / errorMessage / isSending / streamingText`
-  - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
+  - 继续管理 `sessions / activeSessionId / draft / errorMessage / isSending / streamingText`
+  - 负责发送、流式回退、建议采纳 / 忽略、新建对话和真实会话选中态
+  - 首次进入会加载后端会话列表，优先恢复 `fitloop:coach-active-session-id`，否则打开最近会话
+  - 新建对话会调用 `POST /api/chat/sessions` 创建真实后端会话，旧会话不会被清空
+  - 切换会话会调用 `GET /api/chat/sessions/{id}/messages` 和 `GET /api/chat/sessions/{id}/draft` 恢复消息与草稿
   - assistant 消息会携带原始 `suggestion`，用于切页或组件重挂载后恢复采纳卡片；忽略或采纳成功后会把对应消息的 `suggestion` 清空以持久隐藏
   - 采纳动作按 `proposalId` 或旧版 `day + changes` 做 in-flight 去重，避免同一卡片快速重复点击触发二次提交
   - 页面隐藏或离开时中止前台请求并提交后台思考兜底；只有后台任务成功拿到 `task_id` 后才抑制前台错误
@@ -328,10 +330,10 @@ docs/
 
 - `src/components/coach/ChatSidebar.jsx`
   - 负责渲染“新建对话”和历史侧栏列表
-  - 当前只消费 `buildCoachHistoryView()` 生成的假多会话展示模型
+  - 当前消费 `buildCoachSessionView()` 生成的真实会话展示模型
 
 - `src/components/coach/ChatTopbar.jsx`
-  - 负责渲染当前对话标题、模型 badge、清空和导出操作
+  - 负责渲染当前对话标题、模型 badge、新建和导出操作
   - 顶部不再承载“上下文”切换
 
 - `src/components/coach/MessageList.jsx`
@@ -364,7 +366,7 @@ docs/
 
 - `src/utils/coachView.js`
   - 负责 AI 教练页视图层纯函数
-  - 提供流式文本剥离、假多会话历史模型和空状态建议问题模型
+  - 提供流式文本剥离、真实会话侧栏模型和空状态建议问题模型
 
 - `src/tabs/PlanTab.jsx`
   - 负责周计划页面组织
@@ -519,13 +521,17 @@ CoachTab
 
 ```text
 CoachTab
-  -> buildCoachHistoryView(chatHistory)
+  -> GET /api/chat/sessions
+  -> buildCoachSessionView(sessions)
+  -> 用户选中会话或首次恢复 activeSessionId
+  -> GET /api/chat/sessions/{id}/messages
+  -> GET /api/chat/sessions/{id}/draft
   -> 渲染 ChatSidebar + CoachLayout + MessageList + Composer
   -> 空状态展示欢迎文案、建议问题和底部输入区
   -> 已对话状态展示消息流、建议卡片和底部固定输入区
   -> 发送时优先流式输出，失败回退普通请求
-  -> 将结构化 suggestion 只保存在页面级易失状态
-  -> 将消息追加到 chatHistory
+  -> 后端成功回复后写入 chat_message，前端同步刷新当前会话展示缓存
+  -> 新建对话时 POST /api/chat/sessions，旧会话继续留在历史侧栏
 ```
 
 ### 6. 后端聊天与 SSE 流
@@ -825,7 +831,7 @@ CoachTab
 - 模型与 thinking 配置由后端 `/api/models` 收口，前端仅选择后端声明的可用项
 - 后台任务提交由 `backgroundTaskStartedRef` 去重，窗口 focus 回来后主动轮询，避免 Alt+Tab 或应用内 tab 切换时用户消息看起来丢失
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
-- AI 教练页历史侧栏若使用 `buildCoachHistoryView()`，其展示 id 需基于原始 `chatHistory` 下标生成，例如 `session-message-12`，保证新增消息后既有历史项 id 稳定可命中
+- AI 教练页历史侧栏使用后端真实 session id；`buildCoachHistoryView()` 只作为旧测试与兼容工具保留，不再驱动生产侧栏
 
 ## Task 4 已完成升级说明
 

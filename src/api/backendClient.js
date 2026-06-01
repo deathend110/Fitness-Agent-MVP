@@ -193,6 +193,18 @@ export function createBackendClient(options = {}) {
     getDefaultChatSession({ signal } = {}) {
       return request('/chat/sessions/default', { signal })
     },
+    getChatSessions({ signal } = {}) {
+      return request('/chat/sessions', { signal })
+    },
+    createChatSession(payload = {}, { signal } = {}) {
+      return request('/chat/sessions', { method: 'POST', body: payload, signal })
+    },
+    getChatMessages(sessionId, { signal } = {}) {
+      return request(`/chat/sessions/${sessionId}/messages`, { signal })
+    },
+    getFile(fileId, { signal } = {}) {
+      return request(`/files/${fileId}`, { signal })
+    },
     getCoachDraft(sessionId, { signal } = {}) {
       return request(`/chat/sessions/${sessionId}/draft`, { signal })
     },
