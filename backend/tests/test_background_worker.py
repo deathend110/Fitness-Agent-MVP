@@ -14,7 +14,7 @@ from backend.agent.adopt_plan import clear_plan_change_proposals
 from backend.agent.deepseek_client import DeepSeekChatResult
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
-from backend.db.models import Base
+from backend.db.models import Base, UploadedFile, utc_now
 from backend.main import app
 
 pytestmark = [
@@ -140,12 +140,40 @@ async def api_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, FakeDee
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        setattr(client, "_session_factory", session_factory)
         yield client, fake_client
 
     app.dependency_overrides.clear()
     clear_plan_change_proposals()
     chat_api.initialize_background_worker(None)
     await engine.dispose()
+
+
+async def seed_uploaded_file(session_factory: Any) -> dict[str, Any]:
+    async with session_factory() as session:
+        uploaded = UploadedFile(
+            original_name="减脂容量型计划.xlsx",
+            stored_name="background-message-attachment.xlsx",
+            mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            extension=".xlsx",
+            size_bytes=10321,
+            sha256="b" * 64,
+            storage_path="background-message-attachment.xlsx",
+            summary={"summary": "后台任务附件摘要"},
+            parser_status="parsed",
+            parser_error=None,
+            created_at=utc_now(),
+        )
+        session.add(uploaded)
+        await session.commit()
+        await session.refresh(uploaded)
+        return {
+            "fileId": uploaded.id,
+            "originalName": uploaded.original_name,
+            "mimeType": uploaded.mime_type,
+            "extension": uploaded.extension,
+            "sizeBytes": uploaded.size_bytes,
+        }
 
 
 def build_messages(user_content: str) -> list[dict[str, str]]:
@@ -226,6 +254,34 @@ async def test_background_task_finishes_and_persists_chat_turn(
         ("assistant", "建议周三降低容量。"),
     ]
     assert stored_messages[1]["suggestion"] == {"day": "Wednesday", "summary": "降容量"}
+
+
+@pytest.mark.asyncio
+async def test_background_task_with_file_ids_persists_attachment_snapshot(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+):
+    client, _fake_client = api_client
+    session_factory = getattr(client, "_session_factory")
+    uploaded_file = await seed_uploaded_file(session_factory)
+    session_id = (await client.post("/api/chat/sessions", json={"title": "附件后台"})).json()["id"]
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={
+            "userInput": "今天腿很累，周三怎么调？",
+            "fileIds": [uploaded_file["fileId"]],
+        },
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+
+    messages_response = await client.get(f"/api/chat/sessions/{session_id}/messages")
+    stored_messages = messages_response.json()
+    assert stored_messages[0]["attachments"] == [uploaded_file]
+    assert stored_messages[1]["attachments"] == []
 
 
 @pytest.mark.asyncio

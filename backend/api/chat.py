@@ -701,6 +701,7 @@ async def submit_background_chat_task(
 ) -> ChatBackgroundSubmitResponseSchema:
     user_content = read_user_input(payload.userInput)
     chat_session = await resolve_chat_session(session_id, session)
+    user_attachments: list[dict[str, Any]] = []
     if user_content is None:
         if payload.messages is None:
             raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
@@ -709,6 +710,7 @@ async def submit_background_chat_task(
     else:
         settings = get_settings()
         selected_model = payload.model or settings.default_model
+        user_attachments = await build_message_attachment_snapshots(session, payload.fileIds)
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
@@ -723,6 +725,7 @@ async def submit_background_chat_task(
         session_id=session_id,
         messages=request_messages,
         user_content=user_content,
+        user_attachments=user_attachments,
         model=payload.model,
         thinking=thinking_payload,
         reasoning_effort=reasoning_effort,

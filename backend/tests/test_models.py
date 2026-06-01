@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from backend.db.database import create_engine_and_session_factory
-from backend.db.models import Base, DailyLog, Profile, WeeklyPlanDay
+from backend.db.database import create_all_tables, create_engine_and_session_factory
+from backend.db.models import Base, ChatMessage, DailyLog, Profile, WeeklyPlanDay, utc_now
 from backend.db.seed import DEFAULT_PROFILE_ID, seed_if_empty
 
 
@@ -173,6 +173,74 @@ async def test_seed_if_empty_creates_blank_profile_weekdays_and_is_idempotent(tm
         }
         assert all(day.type == "rest" for day in weekly_days)
         assert all(day.exercises == [] for day in weekly_days)
+
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_create_all_tables_repairs_old_sqlite_chat_message_schema(tmp_path: Path):
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'old-chat.db'}"
+    engine, session_factory = create_engine_and_session_factory(database_url)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(
+                """
+                CREATE TABLE chat_session (
+                    id INTEGER PRIMARY KEY,
+                    title VARCHAR(128) NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+                """
+            )
+            await connection.exec_driver_sql(
+                """
+                CREATE TABLE chat_message (
+                    id INTEGER PRIMARY KEY,
+                    session_id INTEGER NOT NULL,
+                    role VARCHAR(16) NOT NULL,
+                    content TEXT NOT NULL,
+                    suggestion JSON,
+                    created_at DATETIME NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES chat_session(id) ON DELETE CASCADE
+                )
+                """
+            )
+            await connection.exec_driver_sql(
+                "INSERT INTO chat_session (id, title, created_at, updated_at) VALUES (1, '默认对话', '2026-06-01 00:00:00', '2026-06-01 00:00:00')"
+            )
+
+        await create_all_tables(engine)
+
+        async with session_factory() as session:
+            session.add(
+                ChatMessage(
+                    session_id=1,
+                    role="user",
+                    content="附件消息",
+                    suggestion=None,
+                    attachments=[
+                        {
+                            "fileId": 3,
+                            "originalName": "减脂容量型计划.xlsx",
+                            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "extension": ".xlsx",
+                            "sizeBytes": 10321,
+                        }
+                    ],
+                    created_at=utc_now(),
+                )
+            )
+            await session.commit()
+
+        async with session_factory() as session:
+            stored_message = await session.get(ChatMessage, 1)
+
+        assert stored_message is not None
+        assert stored_message.attachments[0]["originalName"] == "减脂容量型计划.xlsx"
+        assert stored_message.attachments[0]["fileId"] == 3
 
     finally:
         await engine.dispose()

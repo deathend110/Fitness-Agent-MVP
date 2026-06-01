@@ -45,6 +45,7 @@ class BackgroundWorker:
         session_id: int,
         messages: list[dict[str, Any]],
         user_content: str,
+        user_attachments: list[dict[str, Any]] | None = None,
         model: str | None = None,
         thinking: dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
@@ -57,6 +58,7 @@ class BackgroundWorker:
                 record=record,
                 messages=messages,
                 user_content=user_content,
+                user_attachments=user_attachments,
                 model=model or self.default_model,
                 thinking=thinking,
                 reasoning_effort=reasoning_effort,
@@ -83,6 +85,7 @@ class BackgroundWorker:
         record: BackgroundTaskRecord,
         messages: list[dict[str, Any]],
         user_content: str,
+        user_attachments: list[dict[str, Any]] | None,
         model: str,
         thinking: dict[str, Any] | None,
         reasoning_effort: str | None,
@@ -134,6 +137,7 @@ class BackgroundWorker:
             await self._persist_successful_chat_turn(
                 session_id=record.session_id,
                 user_content=user_content,
+                user_attachments=user_attachments,
                 assistant_text=parsed_reply["text"],
                 suggestion=suggestion,
             )
@@ -153,6 +157,7 @@ class BackgroundWorker:
         *,
         session_id: int,
         user_content: str,
+        user_attachments: list[dict[str, Any]] | None,
         assistant_text: str,
         suggestion: dict[str, Any] | None,
     ) -> None:
@@ -170,6 +175,7 @@ class BackgroundWorker:
                         role="user",
                         content=user_content,
                         suggestion=None,
+                        attachments=user_attachments or [],
                         created_at=now,
                     ),
                     ChatMessage(
