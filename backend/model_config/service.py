@@ -15,9 +15,18 @@ class ModelProviderConfigService:
         config_path: Path | str | None = None,
         legacy_settings: Mapping[str, Any] | None = None,
     ) -> None:
-        settings = get_settings()
-        self.config_path = Path(config_path or settings.model_provider_config_path)
+        settings = None
+        if config_path is None or legacy_settings is None:
+            settings = get_settings()
+
+        if config_path is None:
+            assert settings is not None
+            self.config_path = Path(settings.model_provider_config_path)
+        else:
+            self.config_path = Path(config_path)
+
         if legacy_settings is None:
+            assert settings is not None
             self.legacy_settings = self._build_live_legacy_settings(settings)
         else:
             self.legacy_settings = dict(legacy_settings)
@@ -79,7 +88,7 @@ class ModelProviderConfigService:
         for provider in incoming.providers:
             existing_provider = existing_by_id.get(provider.id)
             api_key = provider.api_key
-            if "api_key" not in provider.model_fields_set and existing_provider and existing_provider.api_key:
+            if "api_key" not in provider.model_fields_set and existing_provider and existing_provider.api_key is not None:
                 api_key = existing_provider.api_key
             merged_providers.append(
                 ProviderConfig(

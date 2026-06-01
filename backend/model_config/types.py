@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 MODEL_PROVIDER_CONFIG_VERSION = 1
+
+
+def _parse_default_model_ref(default_model_ref: str) -> tuple[str, str]:
+    """把 defaultModelRef 解析成 provider 和模型 ID，便于做一致性校验。"""
+
+    if default_model_ref.count("::") != 1:
+        raise ValueError("defaultModelRef 必须采用 provider_id::remote_id 格式")
+    provider_id, remote_id = default_model_ref.split("::", 1)
+    if not provider_id or not remote_id:
+        raise ValueError("defaultModelRef 必须同时包含 provider_id 和 remote_id")
+    return provider_id, remote_id
 
 
 def mask_api_key(api_key: str | None) -> str | None:
@@ -55,6 +66,19 @@ class ProviderConfig(BaseModel):
         payload.pop("apiKeyPreview", None)
         return payload
 
+    @model_validator(mode="after")
+    def validate_selected_models_unique(self) -> "ProviderConfig":
+        """同一个 provider 内的模型远端 ID 必须唯一，避免默认模型和列表出现歧义。"""
+
+        seen_remote_ids: set[str] = set()
+        for selected_model in self.selected_models:
+            if selected_model.remote_id in seen_remote_ids:
+                raise ValueError(
+                    f"provider {self.id} 的 selectedModels.remoteId 重复: {selected_model.remote_id}"
+                )
+            seen_remote_ids.add(selected_model.remote_id)
+        return self
+
 
 class ModelProviderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -76,3 +100,30 @@ class ModelProviderConfig(BaseModel):
         payload = self.model_dump(by_alias=True, exclude_none=True)
         payload["providers"] = [provider.to_persisted_dict() for provider in self.providers]
         return payload
+
+    @model_validator(mode="after")
+    def validate_consistency(self) -> "ModelProviderConfig":
+        """配置写盘前先校验结构一致性，避免保存出无法回放的模型配置。"""
+
+        if not self.providers:
+            raise ValueError("providers 不能为空")
+
+        providers_by_id: dict[str, ProviderConfig] = {}
+        for provider in self.providers:
+            if provider.id in providers_by_id:
+                raise ValueError(f"provider id 重复: {provider.id}")
+            providers_by_id[provider.id] = provider
+
+        if not self.default_model_ref:
+            raise ValueError("defaultModelRef 不能为空")
+
+        provider_id, remote_id = _parse_default_model_ref(self.default_model_ref)
+        provider = providers_by_id.get(provider_id)
+        if provider is None:
+            raise ValueError(f"defaultModelRef 指向不存在的 provider: {provider_id}")
+
+        selected_ids = {selected_model.remote_id for selected_model in provider.selected_models}
+        if remote_id not in selected_ids:
+            raise ValueError(f"defaultModelRef 指向不存在的 selectedModels.remoteId: {remote_id}")
+
+        return self
