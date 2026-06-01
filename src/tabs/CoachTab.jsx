@@ -9,6 +9,8 @@ import { buildAdoptCardModel } from '../utils/adoptCard.js'
 import {
   getSuggestionCommitKey,
   mergeMessageMeta,
+  persistDismissedSuggestionKey,
+  readDismissedSuggestionKeys,
 } from '../utils/chatSuggestionState.js'
 import { mergeCommittedWeeklyPlan } from '../utils/weeklyPlanCommit.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
@@ -243,7 +245,11 @@ function CoachTab({
   )
 
   useEffect(() => {
-    setMessageMeta((currentMeta) => mergeMessageMeta(chatHistory, currentMeta))
+    setMessageMeta((currentMeta) =>
+      mergeMessageMeta(chatHistory, currentMeta, {
+        hiddenCommitKeys: new Set(readDismissedSuggestionKeys(activeSessionIdRef.current)),
+      }),
+    )
     chatHistoryRef.current = chatHistory
   }, [chatHistory])
 
@@ -311,7 +317,11 @@ function CoachTab({
       }
 
       chatHistoryRef.current = nextHistory
-      setMessageMeta(mergeMessageMeta(nextHistory))
+      setMessageMeta(
+        mergeMessageMeta(nextHistory, [], {
+          hiddenCommitKeys: new Set(readDismissedSuggestionKeys(sessionId)),
+        }),
+      )
       onChatHistoryChange(nextHistory)
       setIsBackgroundThinking(hasPendingBackgroundTaskForSession(nextHistory, sessionId))
       setDraft(draftPayload?.content || '')
@@ -437,7 +447,9 @@ function CoachTab({
       }))
 
       setMessageMeta((currentMeta) => {
-        const nextMeta = mergeMessageMeta(nextHistory, currentMeta)
+        const nextMeta = mergeMessageMeta(nextHistory, currentMeta, {
+          hiddenCommitKeys: new Set(readDismissedSuggestionKeys(activeSessionIdRef.current)),
+        })
 
         nextMeta[mergeResult.assistantIndex] = {
           ...nextMeta[mergeResult.assistantIndex],
@@ -665,6 +677,7 @@ function CoachTab({
       return
     }
 
+    persistDismissedSuggestionKey(activeSessionIdRef.current, targetSuggestion)
     const nextHistory = chatHistoryRef.current.map((message) =>
       getSuggestionCommitKey(message?.suggestion) === commitKey
         ? { ...message, suggestion: null }
@@ -767,7 +780,11 @@ function CoachTab({
     backgroundTaskStartedRef.current = false
     pendingRequestRef.current = requestPayload
     setStreamingText('')
-    setMessageMeta((currentMeta) => mergeMessageMeta(nextHistory, currentMeta))
+    setMessageMeta((currentMeta) =>
+      mergeMessageMeta(nextHistory, currentMeta, {
+        hiddenCommitKeys: new Set(readDismissedSuggestionKeys(activeSessionIdRef.current)),
+      }),
+    )
     onChatHistoryChange(nextHistory)
 
     try {
@@ -784,8 +801,12 @@ function CoachTab({
       const finalHistory = appendChatMessages(nextHistory, [assistantMessage])
 
       setMessageMeta((currentMeta) => {
-        const baseMeta = mergeMessageMeta(nextHistory, currentMeta)
-        const nextMeta = mergeMessageMeta(finalHistory, baseMeta)
+        const baseMeta = mergeMessageMeta(nextHistory, currentMeta, {
+          hiddenCommitKeys: new Set(readDismissedSuggestionKeys(activeSessionIdRef.current)),
+        })
+        const nextMeta = mergeMessageMeta(finalHistory, baseMeta, {
+          hiddenCommitKeys: new Set(readDismissedSuggestionKeys(activeSessionIdRef.current)),
+        })
         const assistantIndex = finalHistory.length - 1
 
         nextMeta[assistantIndex] = {

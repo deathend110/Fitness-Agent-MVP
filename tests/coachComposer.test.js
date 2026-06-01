@@ -143,3 +143,11 @@ test('CoachTab 会用 mergeCommittedWeeklyPlan 安全合并后端写回结果', 
   assert.match(source, /mergeCommittedWeeklyPlan/)
   assert.match(source, /onWeeklyPlanChange\(\(currentPlan\) => mergeCommittedWeeklyPlan\(currentPlan, adoptResult\.plan\)\)/)
 })
+
+test('CoachTab 会持久记录已处理 suggestion，并在恢复消息时继续隐藏', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /persistDismissedSuggestionKey/)
+  assert.match(source, /readDismissedSuggestionKeys/)
+  assert.match(source, /hiddenCommitKeys: new Set\(readDismissedSuggestionKeys\(activeSessionIdRef\.current\)\)/)
+})
