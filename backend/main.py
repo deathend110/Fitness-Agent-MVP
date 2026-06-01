@@ -18,6 +18,7 @@ from backend.api.weekly_plan import router as weekly_plan_router
 from backend.config import get_settings
 from backend.db.database import create_all_tables, session_factory
 from backend.db.seed import seed_if_empty
+from backend.model_config.runtime import ProviderRuntimeCache
 
 settings = get_settings()
 
@@ -26,6 +27,8 @@ settings = get_settings()
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await create_all_tables()
     await seed_if_empty(session_factory)
+    # 先把模型配置缓存挂到 app.state，后续接口可直接热刷新而不用重启进程。
+    _app.state.provider_runtime = ProviderRuntimeCache.from_path(settings.model_provider_config_path)
     initialize_background_worker(
         session_factory=session_factory,
         default_model=settings.default_model,
