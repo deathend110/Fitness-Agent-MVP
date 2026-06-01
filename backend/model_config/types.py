@@ -48,6 +48,13 @@ class ProviderConfig(BaseModel):
         payload.pop("apiKey", None)
         return payload
 
+    def to_persisted_dict(self) -> dict[str, Any]:
+        """返回写入磁盘的结构，必须保留真实 apiKey，但不能把预览值写进去。"""
+
+        payload = self.model_dump(by_alias=True, exclude_none=True)
+        payload.pop("apiKeyPreview", None)
+        return payload
+
 
 class ModelProviderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -61,4 +68,11 @@ class ModelProviderConfig(BaseModel):
 
         payload = self.model_dump(by_alias=True, exclude_none=True)
         payload["providers"] = [provider.to_masked_dict() for provider in self.providers]
+        return payload
+
+    def to_persisted_dict(self) -> dict[str, Any]:
+        """把完整配置转成磁盘结构，保留真实密钥但剔除所有预览字段。"""
+
+        payload = self.model_dump(by_alias=True, exclude_none=True)
+        payload["providers"] = [provider.to_persisted_dict() for provider in self.providers]
         return payload

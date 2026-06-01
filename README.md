@@ -103,12 +103,16 @@ VITE_API_BASE_URL=http://127.0.0.1:8000/api
 ```bash
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db
+MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
 ```
 
 配置说明：
 
 - 前端不再直接读取或暴露 DeepSeek API Key
-- AI 教练相关能力从 `backend/.env` 读取 `DEEPSEEK_API_KEY`
+- AI 教练相关能力仍会从 `backend/.env` 读取 `DEEPSEEK_API_KEY` 作为旧版兼容与首份配置 bootstrap 来源
+- 模型提供方配置已经开始迁移到独立 JSON 文件，默认落在 `backend/config/model_providers.json`
+- `MODEL_PROVIDER_CONFIG_PATH` 用来覆盖模型配置 JSON 的路径，缺失文件时会自动根据当前后端设置生成首份文件
+- 保存模型配置时会保留真实 `apiKey`，但返回给前端的是脱敏预览值
 - 未配置 API Key 时，除 AI 教练外的大部分本地功能仍可使用
 - 不要提交真实 API Key
 

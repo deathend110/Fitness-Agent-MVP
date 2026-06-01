@@ -12,7 +12,7 @@
 - Phase 3 已完成 Agent Orchestrator：后端可在只收到 `userInput` 时读取 SQLite 状态、拼装 DeepSeek messages、执行只读工具循环，并生成需用户确认的计划修改 proposal
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储
-- 后端配置固定从 `backend/.env` 读取；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据
+- 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据
 - AI 教练页发送消息走后端聊天代理，历史侧栏和消息恢复已切到后端 `chat_session / chat_message`
 
 ### 当前数据源分工
@@ -62,6 +62,10 @@ backend/
       md_parser.py
   metrics/
     daily_metrics.py
+  model_config/
+    bootstrap.py
+    service.py
+    types.py
   db/
     database.py
     models.py
@@ -618,6 +622,12 @@ FileAttachmentTray
 ### 8. Phase 4 模型配置流
 
 ```text
+Settings / backend/.env
+  -> MODEL_PROVIDER_CONFIG_PATH
+  -> backend/model_config/service.py
+      -> 优先读取 backend/config/model_providers.json
+      -> 缺失时按 deepseek_* 旧字段 bootstrap 首份 JSON
+      -> 保存时保留真实 apiKey，但返回脱敏 apiKeyPreview
 CoachTab
   -> backendClient.getModels()
   -> GET /api/models
