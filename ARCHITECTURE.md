@@ -72,6 +72,7 @@ backend/
     base.py
     gemini_client.py
     gemini_native.py
+    openai_compatible_client.py
     openai_compatible.py
   db/
     database.py
@@ -322,7 +323,13 @@ docs/
 
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
   - 定义 Provider 适配层的最小公共接口和统一错误类型
-  - 已落地 OpenAI-compatible `/models` 发现与 OpenAI function tools schema 转换，为 DeepSeek 和同类接口复用打基础
+  - OpenAI-compatible provider 现在显式支持 `wireApi(chat_completions / responses)` 与 `apiPathMode(raw_root / append_v1)` 两个运行时参数
+  - `/models`、`/chat/completions`、`/responses` 的 endpoint 都通过统一 builder 构造，`append_v1` 会自动避免 `.../v1/v1/...` 双拼接
+  - 工具循环会按 wire 差异分别处理 `assistant.tool_calls -> tool` 与 `function_call -> function_call_output` 两条 follow-up 链路
+
+- `backend/providers/openai_compatible_client.py`
+  - 抽出了真正的 OpenAI-compatible HTTP client，统一处理 base URL 规范化、headers、超时、错误映射和 endpoint builder
+  - provider test/discover 以及后续 OpenAI-compatible 直连聊天都复用这一层，避免把 DeepSeek 风格 URL 规则写死在 provider 适配层
 
 - `backend/providers/gemini_native.py`
   - 负责 Gemini 原生 `/models` 发现、`functionDeclarations` schema 生成、函数调用归一化以及 tool result 回灌消息格式转换

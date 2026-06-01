@@ -35,8 +35,15 @@ class ProviderAdapter(ABC):
         self.client_factory = client_factory
 
     @abstractmethod
-    async def list_remote_models(self, *, api_key: str, base_url: str) -> list[dict[str, Any]]:
-        """从供应商远端接口发现可选模型。"""
+    async def list_remote_models(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        wire_api: str | None = None,
+        api_path_mode: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """从供应商远端接口发现可选模型，并兼容需要额外路径协议参数的供应商。"""
 
     @abstractmethod
     def build_tool_schema(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:

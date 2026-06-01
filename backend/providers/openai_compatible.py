@@ -6,30 +6,43 @@ from typing import Any
 import httpx
 
 from backend.providers.base import ProviderAdapter, ProviderAdapterError
+from backend.providers.openai_compatible_client import (
+    OPENAI_COMPATIBLE_DEFAULT_TIMEOUT,
+    OpenAICompatibleClient,
+)
 
 
 class OpenAICompatibleProvider(ProviderAdapter):
-    """兼容 OpenAI /models 与 chat tools 结构，供 DeepSeek 和同类接口复用。"""
+    """统一适配 OpenAI 兼容供应商的模型发现、文本读取与工具回环结构。"""
 
-    def __init__(self, client_factory=httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        *,
+        client_factory=httpx.AsyncClient,
+        wire_api: str = "chat_completions",
+        api_path_mode: str = "raw_root",
+        timeout: float = OPENAI_COMPATIBLE_DEFAULT_TIMEOUT,
+    ) -> None:
         super().__init__(client_factory=client_factory)
+        self.wire_api = wire_api
+        self.api_path_mode = api_path_mode
+        self.timeout = timeout
 
-    async def list_remote_models(self, *, api_key: str, base_url: str) -> list[dict[str, Any]]:
-        try:
-            async with self.client_factory() as client:
-                response = await client.get(
-                    f"{base_url.rstrip('/')}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-        except httpx.HTTPError as exc:
-            raise ProviderAdapterError(
-                f"OpenAI 兼容模型列表请求失败：{exc}",
-                code="network_error",
-            ) from exc
-
-        self._raise_for_error_response(response)
-
-        payload = response.json()
+    async def list_remote_models(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        wire_api: str | None = None,
+        api_path_mode: str | None = None,
+    ) -> list[dict[str, Any]]:
+        client = self._build_http_client(
+            api_key=api_key,
+            base_url=base_url,
+            wire_api=wire_api,
+            api_path_mode=api_path_mode,
+        )
+        payload = await client.get_json("/models", action_label="OpenAI 兼容模型列表请求")
         data = payload.get("data") if isinstance(payload, dict) else []
         if not isinstance(data, list):
             raise ProviderAdapterError(
@@ -53,6 +66,19 @@ class OpenAICompatibleProvider(ProviderAdapter):
             )
         return models
 
+    def build_request_url(
+        self,
+        *,
+        base_url: str,
+        path: str,
+        api_path_mode: str | None = None,
+    ) -> str:
+        return OpenAICompatibleClient.build_request_url(
+            base_url=base_url,
+            path=path,
+            api_path_mode=api_path_mode or self.api_path_mode,
+        )
+
     def build_tool_schema(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             {
@@ -66,7 +92,127 @@ class OpenAICompatibleProvider(ProviderAdapter):
             for tool in tools
         ]
 
-    def normalize_tool_call_response(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    async def generate_chat(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        wire_api: str | None = None,
+        api_path_mode: str | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        active_wire_api = wire_api or self.wire_api
+        client = self._build_http_client(
+            api_key=api_key,
+            base_url=base_url,
+            wire_api=active_wire_api,
+            api_path_mode=api_path_mode,
+        )
+        payload = self._build_generate_payload(
+            wire_api=active_wire_api,
+            messages=messages,
+            model=model,
+            tools=tools,
+            tool_choice=tool_choice,
+            extra=kwargs,
+        )
+        raw_payload = await client.post_json(
+            client.build_chat_path(),
+            payload=payload,
+            action_label="OpenAI 兼容聊天请求",
+        )
+        return {
+            "text": self.read_text_response(raw_payload, wire_api=active_wire_api),
+            "toolCalls": self.normalize_tool_call_response(raw_payload, wire_api=active_wire_api),
+            "raw": raw_payload,
+        }
+
+    def read_text_response(self, payload: Any, *, wire_api: str | None = None) -> str:
+        active_wire_api = wire_api or self.wire_api
+        if active_wire_api == "responses":
+            return self._read_responses_text(payload)
+        return self._read_chat_completions_text(payload)
+
+    def normalize_tool_call_response(
+        self,
+        payload: dict[str, Any],
+        *,
+        wire_api: str | None = None,
+    ) -> list[dict[str, Any]]:
+        active_wire_api = wire_api or self.wire_api
+        if active_wire_api == "responses":
+            return self._normalize_responses_function_calls(payload)
+        return self._normalize_chat_completions_tool_calls(payload)
+
+    def build_followup_messages_after_tool_result(
+        self,
+        messages: list[dict[str, Any]],
+        tool_call: dict[str, Any],
+        tool_result: Any,
+    ) -> list[dict[str, Any]]:
+        if self._resolve_wire_api_from_tool_call(tool_call) == "responses":
+            return self._build_responses_followup_messages(messages, tool_call, tool_result)
+        return self._build_chat_completions_followup_messages(messages, tool_call, tool_result)
+
+    def _build_http_client(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        wire_api: str | None = None,
+        api_path_mode: str | None = None,
+    ) -> OpenAICompatibleClient:
+        return OpenAICompatibleClient(
+            api_key=api_key,
+            base_url=base_url,
+            wire_api=wire_api or self.wire_api,
+            api_path_mode=api_path_mode or self.api_path_mode,
+            timeout=self.timeout,
+            client_factory=self.client_factory,
+        )
+
+    def _build_generate_payload(
+        self,
+        *,
+        wire_api: str,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        extra: dict[str, Any],
+    ) -> dict[str, Any]:
+        if wire_api == "responses":
+            payload: dict[str, Any] = {
+                "model": model,
+                "input": messages,
+            }
+            if tools is not None:
+                payload["tools"] = tools
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
+            for key, value in extra.items():
+                if value is not None:
+                    payload[key] = value
+            return payload
+
+        payload = {
+            "model": model,
+            "messages": messages,
+        }
+        if tools is not None:
+            payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+        for key, value in extra.items():
+            if value is not None:
+                payload[key] = value
+        return payload
+
+    def _normalize_chat_completions_tool_calls(self, payload: Any) -> list[dict[str, Any]]:
         message = self._read_first_message(payload)
         if not isinstance(message, dict):
             return []
@@ -85,20 +231,11 @@ class OpenAICompatibleProvider(ProviderAdapter):
             name = function.get("name")
             if not isinstance(name, str) or not name.strip():
                 continue
-            raw_arguments = function.get("arguments") or "{}"
-            if isinstance(raw_arguments, dict):
-                arguments = raw_arguments
-            else:
-                try:
-                    parsed = json.loads(raw_arguments)
-                except json.JSONDecodeError:
-                    parsed = {}
-                arguments = parsed if isinstance(parsed, dict) else {}
             normalized_calls.append(
                 {
                     "toolName": name,
                     "callId": str(tool_call.get("id") or name),
-                    "arguments": arguments,
+                    "arguments": self._parse_function_arguments(function.get("arguments")),
                     "rawProviderPayload": {
                         "toolCall": tool_call,
                         "assistantMessage": message,
@@ -107,7 +244,34 @@ class OpenAICompatibleProvider(ProviderAdapter):
             )
         return normalized_calls
 
-    def build_followup_messages_after_tool_result(
+    def _normalize_responses_function_calls(self, payload: Any) -> list[dict[str, Any]]:
+        output_items = payload.get("output") if isinstance(payload, dict) else None
+        if not isinstance(output_items, list):
+            return []
+
+        normalized_calls: list[dict[str, Any]] = []
+        for output_item in output_items:
+            if not isinstance(output_item, dict):
+                continue
+            if output_item.get("type") != "function_call":
+                continue
+            name = output_item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized_calls.append(
+                {
+                    "toolName": name,
+                    "callId": str(output_item.get("call_id") or name),
+                    "arguments": self._parse_function_arguments(output_item.get("arguments")),
+                    "rawProviderPayload": {
+                        "responseId": payload.get("id"),
+                        "functionCall": output_item,
+                    },
+                }
+            )
+        return normalized_calls
+
+    def _build_chat_completions_followup_messages(
         self,
         messages: list[dict[str, Any]],
         tool_call: dict[str, Any],
@@ -142,6 +306,30 @@ class OpenAICompatibleProvider(ProviderAdapter):
             }
         ]
 
+    def _build_responses_followup_messages(
+        self,
+        messages: list[dict[str, Any]],
+        tool_call: dict[str, Any],
+        tool_result: Any,
+    ) -> list[dict[str, Any]]:
+        updated_messages = list(messages)
+        raw_payload = tool_call.get("rawProviderPayload")
+        function_call = raw_payload.get("functionCall") if isinstance(raw_payload, dict) else None
+        if isinstance(function_call, dict) and not self._has_matching_trailing_response_item(
+            updated_messages,
+            function_call,
+        ):
+            updated_messages.append(function_call)
+
+        updated_messages.append(
+            {
+                "type": "function_call_output",
+                "call_id": tool_call["callId"],
+                "output": tool_result,
+            }
+        )
+        return updated_messages
+
     @staticmethod
     def _has_matching_trailing_assistant(
         messages: list[dict[str, Any]],
@@ -164,35 +352,53 @@ class OpenAICompatibleProvider(ProviderAdapter):
             and candidate.get("reasoning_content") == assistant_message.get("reasoning_content")
         )
 
-    def _raise_for_error_response(self, response: Any) -> None:
-        if getattr(response, "is_success", False):
-            return
+    @staticmethod
+    def _has_matching_trailing_response_item(
+        messages: list[dict[str, Any]],
+        function_call: dict[str, Any],
+    ) -> bool:
+        if not messages:
+            return False
+        candidate = messages[-1]
+        return candidate == function_call
 
-        status = getattr(response, "status_code", None)
-        reason = self._read_error_detail(response)
-        reason_text = f"：{reason}" if reason else ""
-        raise ProviderAdapterError(
-            f"OpenAI 兼容模型列表请求失败（HTTP {status}）{reason_text}",
-            status=status,
-            code="http_error",
-            reason=reason,
-        )
+    def _read_chat_completions_text(self, payload: Any) -> str:
+        message = self._read_first_message(payload)
+        if not isinstance(message, dict):
+            return ""
+        content = message.get("content")
+        return content.strip() if isinstance(content, str) else ""
 
-    def _read_error_detail(self, response: Any) -> str:
-        try:
-            payload = response.json()
-        except Exception:
-            payload = None
+    def _read_responses_text(self, payload: Any) -> str:
+        if not isinstance(payload, dict):
+            return ""
 
-        if isinstance(payload, dict):
-            error = payload.get("error")
-            if isinstance(error, dict) and isinstance(error.get("message"), str):
-                return error["message"].strip()
-            if isinstance(payload.get("message"), str):
-                return payload["message"].strip()
+        output_text = payload.get("output_text")
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
 
-        reason_phrase = getattr(response, "reason_phrase", "")
-        return reason_phrase.strip() if isinstance(reason_phrase, str) else ""
+        output_items = payload.get("output")
+        if not isinstance(output_items, list):
+            return ""
+
+        collected: list[str] = []
+        for output_item in output_items:
+            if not isinstance(output_item, dict):
+                continue
+            if output_item.get("type") != "message":
+                continue
+            content_items = output_item.get("content")
+            if not isinstance(content_items, list):
+                continue
+            for content_item in content_items:
+                if not isinstance(content_item, dict):
+                    continue
+                if content_item.get("type") != "output_text":
+                    continue
+                text = content_item.get("text")
+                if isinstance(text, str) and text:
+                    collected.append(text)
+        return "".join(collected).strip()
 
     def _read_first_message(self, payload: Any) -> dict[str, Any] | None:
         if not isinstance(payload, dict):
@@ -208,3 +414,25 @@ class OpenAICompatibleProvider(ProviderAdapter):
 
         message = first_choice.get("message")
         return message if isinstance(message, dict) else None
+
+    def _resolve_wire_api_from_tool_call(self, tool_call: dict[str, Any]) -> str:
+        raw_payload = tool_call.get("rawProviderPayload")
+        if isinstance(raw_payload, dict) and (
+            "responseId" in raw_payload or "functionCall" in raw_payload
+        ):
+            return "responses"
+        return self.wire_api
+
+    @staticmethod
+    def _parse_function_arguments(raw_arguments: Any) -> dict[str, Any]:
+        if isinstance(raw_arguments, dict):
+            return raw_arguments
+
+        if not isinstance(raw_arguments, str) or not raw_arguments.strip():
+            return {}
+
+        try:
+            parsed = json.loads(raw_arguments)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
