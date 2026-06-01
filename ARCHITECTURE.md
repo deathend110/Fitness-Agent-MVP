@@ -303,6 +303,7 @@ docs/
   - Phase 4 新增 `UploadedFile / CoachDraft`，分别承载本地文件缓存 metadata 与 AI 教练草稿
   - `WeeklyPlanDay.exercises` 以 JSON 保存动作数组，计划采纳成功后只更新目标日动作列表
   - `ChatMessage.suggestion` 以 JSON 可空列保存结构化建议，供前端渲染采纳卡片
+  - `ChatMessage.attachments` 以 JSON 保存用户消息附件快照，保证刷新、切换历史会话和源文件删除后仍可回显最小附件信息
 
 - `src/api/coachBackend.js`
   - 负责调用 `/api/chat/stream`、`/api/chat/reply` 和后台任务提交 / 查询接口
@@ -323,6 +324,7 @@ docs/
   - 页面恢复可见且后台任务仍处于 `pending/running` 时，若源 user 消息仍存在，则恢复消息区“正在整理上下文”等待态
   - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
   - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`；proposal 采纳按钮通过 `/api/tools/plan/commit` 写回计划，旧 suggestion 仍兼容 `/api/weekly-plan/adopt`
+  - 发送带附件的问题时会先从 `attachedFiles` 生成消息级附件快照，写入本地 `userMessage.attachments`；历史恢复时对旧消息补 `attachments: []` 兼容
 
 - `src/components/coach/CoachLayout.jsx`
   - 负责历史侧栏 + 主聊天区的两列布局
@@ -339,6 +341,10 @@ docs/
 - `src/components/coach/MessageList.jsx`
   - 负责空状态和消息流切换
   - 承担自动滚动与流式回复追底逻辑
+
+- `src/components/coach/MessageAttachmentCard.jsx`
+  - 负责渲染用户消息附件卡片
+  - 展示文件图标、文件名与类型/大小，不承担预览、下载或删除交互
 
 - `src/components/coach/MarkdownMessage.jsx` 与 `src/utils/markdownMessage.js`
   - 负责 assistant 回复的安全 Markdown 渲染
@@ -786,6 +792,7 @@ Phase 4 新增：
 
 - `uploaded_file`：保存本地上传文件 metadata、相对缓存路径、sha256、解析状态、解析错误和摘要 JSON。它是本地缓存资料，不等同长期 memory。
 - `coach_draft`：按 `session_id` 唯一保存 AI 教练输入草稿、模型、thinking 配置和附件 id 列表。
+- `chat_message.attachments`：保存消息级附件快照，字段为 `fileId / originalName / mimeType / extension / sizeBytes`。它只负责聊天记录回显，不负责再次打开原文件。
 
 可解析文本上传会额外生成 `knowledge_item(kind="uploaded_file")`，供 Agent 上下文检索；完整文件内容仍保留在本地缓存和 `UploadedFile.summary` 中，进入 prompt 前只注入裁剪摘要。
 
