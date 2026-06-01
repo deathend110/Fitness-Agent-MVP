@@ -105,6 +105,13 @@
 - 两到三个边界情况。
 - 一个失败场景。
 
+涉及浏览器真实交互、页面切换、焦点变化、localStorage 持久化或 UI 回归的问题时，必须补充浏览器自动化验证：
+
+- Python 浏览器自动化依赖统一通过 `uv` 管理和执行。
+- 优先使用 `uv run python ...` 运行 Playwright 脚本，不依赖全局 Python 环境。
+- 如缺少浏览器内核，使用 `uv run python -m playwright install chromium` 安装。
+- 本地 Web 自动化优先使用 Playwright，并通过自动启动 dev server 的方式验证真实页面行为。
+
 验证结果应能用于课程报告中的 TDD 或最小验证方案，包括测试记录、手动验收清单、截图或日志。
 
 ## 协作要求

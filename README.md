@@ -308,6 +308,15 @@ uv run pytest backend\tests\test_chat_files_context.py backend\tests\test_models
 node --test tests/backendClient.test.js tests/coachComposer.test.js tests/markdownMessage.test.js tests/coachChat.test.js
 ```
 
+浏览器自动化冒烟测试：
+
+```powershell
+uv run python -m playwright install chromium
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_browser_smoke.py
+```
+
+该脚本会用 Playwright 打开真实 Vite 页面，并 mock 本地后端 API，覆盖 AI 教练页切换后仍显示“正在整理上下文...”以及采纳卡片可提交的核心浏览器路径。
+
 最小验证记录见 [docs/verification.md](/g:/VSCODE-G/Fitness Agent MVP/docs/verification.md)。
 V2.3 Phase 1 验收记录见 [task/V2.3/V2.3 Phase 1 验收记录.md](/g:/VSCODE-G/Fitness Agent MVP/task/V2.3/V2.3 Phase 1 验收记录.md)。
 

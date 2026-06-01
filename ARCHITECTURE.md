@@ -93,6 +93,13 @@ backend/
 - `pyproject.toml` 中的 `tool.pytest.ini_options.pythonpath = ["."]` 让 `uv run pytest ...` 与 `uv run python -m pytest ...` 的导入根路径保持一致。
 - 后端测试文件直接使用 `from backend...` 导入，不再在测试体内手动插入项目根目录。
 
+### 浏览器自动化验证
+
+- `tests/e2e/coach_browser_smoke.py`
+  - 使用 Python Playwright 打开真实 Vite 页面，后端 API 通过浏览器路由 mock。
+  - 覆盖 AI 教练页后台任务恢复、切换 tab 后“正在整理上下文...”继续展示、采纳卡片持久展示与 `/api/tools/plan/commit` 提交参数。
+  - 通过 `uv run python ...` 运行，避免依赖全局 Python 环境。
+
 ### 当前新增前端接口层
 
 ```text
