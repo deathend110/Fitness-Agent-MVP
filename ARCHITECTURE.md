@@ -294,6 +294,10 @@ docs/
   - 负责模型配置运行时缓存、`default_model_ref` 暴露、`modelRef` 解析、启用模型列表生成与配置热刷新入口
   - 当前对外返回 provider 副本，避免后续路由或适配层误改共享缓存内部状态
 
+- `backend/api/model_config.py`
+  - 提供 `GET /api/model-config` 与 `PUT /api/model-config`
+  - 读取时返回脱敏后的 provider 配置；保存时写回 JSON 后立刻调用 runtime refresh，确保设置页改动无需重启服务
+
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
   - 定义 Provider 适配层的最小公共接口和统一错误类型
   - 已落地 OpenAI-compatible `/models` 发现与 OpenAI function tools schema 转换，为 DeepSeek 和同类接口复用打基础

@@ -23,7 +23,7 @@
 - Phase 3 Tool Calls：只读工具、工具循环、工具结果瘦身、工具审计日志
 - Phase 3 计划修改安全闸门：`propose` 只生成建议卡，`commit` 必须来自用户确认路径
 - Phase 4 文件上传解析：Markdown/TXT、DOCX、Excel 和图片保存到本地缓存，摘要进入 `UploadedFile / KnowledgeItem`
-- Phase 4 模型配置：`GET /api/models` 优先读取 DeepSeek `/models`，失败时回退本地白名单
+- Phase 4 模型配置：`/api/models` 已切到运行时启用模型集合，`/api/model-config` 支持读取、保存与热刷新多供应商配置
 - Phase 4 Coach 草稿：会话级保存输入草稿、模型、thinking 和附件 id
 - Phase 4 指标服务：`GET /api/metrics/daily-summary` 返回 Python 版每日复杂指标摘要
 
@@ -179,6 +179,8 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `GET /api/files/{id}`
 - `DELETE /api/files/{id}`
 - `GET /api/models`
+- `GET /api/model-config`
+- `PUT /api/model-config`
 - `GET /api/chat/sessions/{id}/draft`
 - `PUT /api/chat/sessions/{id}/draft`
 - `GET /api/metrics/daily-summary?date=YYYY-MM-DD`
@@ -215,8 +217,9 @@ uv run alembic -c backend\alembic.ini upgrade head
 
 ### Phase 4 模型、草稿与指标
 
-- `GET /api/models` 成功时返回 DeepSeek `/models` 与本地 allowlist 的交集；缺 Key 或上游失败时仍返回 200 fallback，并带 `source="fallback"` 与 `warning`。
-- 默认推荐模型为 `deepseek-v4-flash`，`deepseek-v4-pro` 也在默认白名单内；legacy 名称只作为兼容，不作为默认推荐。
+- `GET /api/models` 现在返回运行时启用模型列表，核心字段为 `defaultModelRef`、`models[].id(modelRef)`、模型级 `thinking` 能力，以及给旧版 UI 兼容保留的顶层 `thinking`。
+- `GET /api/model-config` 返回脱敏后的 provider 配置；`PUT /api/model-config` 保存后会立即 refresh 进程内 runtime，无需重启后端。
+- 默认配置文件位于 `backend/config/model_providers.json`，路径可由 `MODEL_PROVIDER_CONFIG_PATH` 覆盖；缺失文件时会从旧版 DeepSeek 环境变量自动 bootstrap 首份 JSON。
 - `GET/PUT /api/chat/sessions/{id}/draft` 按会话保存草稿文本、模型、thinking 和附件 id。未知附件 id 会返回 422，避免 UI 误以为附件已恢复。
 - `GET /api/metrics/daily-summary` 读取 SQLite 中的 profile / weeklyPlan / dailyLog，返回 snake_case 指标字段；当前规则与前端固定样本对齐。
 
