@@ -171,3 +171,14 @@ test('ChatTopbar 会为右上角操作按钮提供 SVG 图标和 hover 提示', 
   assert.match(source, /<svg/)
   assert.doesNotMatch(source, /⌫|⇩/)
 })
+
+test('CoachLayout 会移除上下硬边线，并改为消息区上下渐隐遮罩', () => {
+  const source = readFileSync('src/components/coach/CoachLayout.jsx', 'utf-8')
+
+  assert.doesNotMatch(source, /<header className="[^"]*border-b/)
+  assert.doesNotMatch(source, /<footer className="[^"]*border-t/)
+  assert.match(source, /bg-gradient-to-b/)
+  assert.match(source, /bg-gradient-to-t/)
+  assert.match(source, /pointer-events-none absolute inset-x-0 top-0/)
+  assert.match(source, /pointer-events-none absolute inset-x-0 bottom-0/)
+})
