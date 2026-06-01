@@ -51,6 +51,57 @@ def test_resolves_model_ref_to_provider_and_remote_model(tmp_path: Path) -> None
     assert remote_model_id == "gemini-2.5-flash"
 
 
+def test_resolve_model_ref_rejects_invalid_format(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    _write_config(
+        config_file,
+        default_model_ref="provider_gemini_main::gemini-2.5-flash",
+        label="Gemini 主账号",
+    )
+
+    runtime = ProviderRuntimeCache.from_path(config_file)
+
+    try:
+        runtime.resolve_model_ref("gemini-2.5-flash")
+        raise AssertionError("应该抛出 ValueError")
+    except ValueError as exc:
+        assert "modelRef 必须采用 provider_id::remote_id 格式" in str(exc)
+
+
+def test_resolve_model_ref_rejects_unknown_provider(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    _write_config(
+        config_file,
+        default_model_ref="provider_gemini_main::gemini-2.5-flash",
+        label="Gemini 主账号",
+    )
+
+    runtime = ProviderRuntimeCache.from_path(config_file)
+
+    try:
+        runtime.resolve_model_ref("provider_unknown::gemini-2.5-flash")
+        raise AssertionError("应该抛出 ValueError")
+    except ValueError as exc:
+        assert "未找到 provider: provider_unknown" in str(exc)
+
+
+def test_resolve_model_ref_rejects_unknown_remote_model_id(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    _write_config(
+        config_file,
+        default_model_ref="provider_gemini_main::gemini-2.5-flash",
+        label="Gemini 主账号",
+    )
+
+    runtime = ProviderRuntimeCache.from_path(config_file)
+
+    try:
+        runtime.resolve_model_ref("provider_gemini_main::gemini-2.5-pro")
+        raise AssertionError("应该抛出 ValueError")
+    except ValueError as exc:
+        assert "provider provider_gemini_main 不包含 remote_id: gemini-2.5-pro" in str(exc)
+
+
 def test_refresh_reloads_updated_model_file(tmp_path: Path) -> None:
     config_file = tmp_path / "model_providers.json"
     _write_config(
@@ -91,3 +142,6 @@ def test_app_exposes_provider_runtime_on_startup(monkeypatch, tmp_path: Path) ->
     with TestClient(app):
         runtime = app.state.provider_runtime
         assert runtime.default_model_ref == "provider_gemini_main::gemini-2.5-flash"
+        provider, remote_model_id = runtime.resolve_model_ref("provider_gemini_main::gemini-2.5-flash")
+        assert provider.label == "启动时 Gemini 账号"
+        assert remote_model_id == "gemini-2.5-flash"

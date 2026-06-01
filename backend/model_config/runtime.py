@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from backend.model_config.service import ModelProviderConfigService
@@ -22,8 +23,8 @@ class ProviderRuntimeCache:
     def __init__(self, service: ModelProviderConfigService) -> None:
         self.service = service
         self.config_path = service.config_path
-        self.document = service.load()
-        self.providers_by_id = self._index_providers(self.document)
+        self._document = service.load()
+        self._providers_by_id = self._index_providers(self._document)
 
     @classmethod
     def from_path(
@@ -40,20 +41,32 @@ class ProviderRuntimeCache:
     def default_model_ref(self) -> str:
         """暴露当前默认模型引用，供后续路由和 UI 初始化直接读取。"""
 
-        return self.document.default_model_ref
+        return self._document.default_model_ref
+
+    @property
+    def document(self) -> ModelProviderConfig:
+        """只读暴露当前配置文档，避免外部直接改写缓存内部状态。"""
+
+        return ModelProviderConfig.model_validate(self._document.model_dump(by_alias=True, exclude_none=True))
+
+    @property
+    def providers_by_id(self) -> Mapping[str, ProviderConfig]:
+        """只读暴露 provider 索引，便于调用方查询但不直接持有内部字段。"""
+
+        return MappingProxyType(self._providers_by_id)
 
     def refresh(self) -> ModelProviderConfig:
         """重新读取磁盘 JSON，让保存后的配置无需重启即可生效。"""
 
-        self.document = self.service.load()
-        self.providers_by_id = self._index_providers(self.document)
-        return self.document
+        self._document = self.service.load()
+        self._providers_by_id = self._index_providers(self._document)
+        return self._document
 
     def resolve_model_ref(self, model_ref: str) -> tuple[ProviderConfig, str]:
         """把 provider::remote_model_id 解析成 provider 对象和远端模型 ID。"""
 
         provider_id, remote_model_id = _parse_model_ref(model_ref)
-        provider = self.providers_by_id.get(provider_id)
+        provider = self._providers_by_id.get(provider_id)
         if provider is None:
             raise ValueError(f"未找到 provider: {provider_id}")
 
