@@ -15,6 +15,7 @@ from backend.agent.session_title import update_session_title_from_user_prompt
 from backend.agent.tool_calling import build_default_tool_registry
 from backend.config import get_settings
 from backend.db.models import ChatMessage, ChatSession, utc_now
+from backend.providers.gemini_client import GeminiNativeClient
 
 BackgroundTaskStatus = Literal["pending", "running", "succeeded", "failed", "not_found"]
 
@@ -231,20 +232,31 @@ class BackgroundWorker:
         return {"provider": provider, "remote_model_id": remote_model_id}
 
     def _build_client_for_provider(self, provider: Any | None, fallback_client: Any) -> Any:
-        """OpenAI 兼容 provider 先复用 DeepSeekClient 封装，便于平滑承接多供应商。"""
+        """按 provider 类型构造后台任务客户端，避免 Gemini 继续错误回落到 DeepSeek。"""
 
         if not isinstance(fallback_client, DeepSeekClient):
             return fallback_client
 
-        if provider is None or getattr(provider, "type", "") != "openai_compatible":
+        if provider is None:
             return fallback_client
 
+        provider_type = getattr(provider, "type", "")
         api_key = str(getattr(provider, "api_key", "") or "").strip()
         base_url = str(getattr(provider, "base_url", "") or "").strip()
         if not api_key or not base_url:
             return fallback_client
 
         settings = get_settings()
+        if provider_type == "gemini_native":
+            return GeminiNativeClient(
+                api_key=api_key,
+                base_url=base_url,
+                timeout=settings.deepseek_timeout_seconds,
+            )
+
+        if provider_type != "openai_compatible":
+            return fallback_client
+
         return DeepSeekClient(
             api_key=api_key,
             base_url=base_url,

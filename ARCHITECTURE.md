@@ -70,6 +70,7 @@ backend/
     types.py
   providers/
     base.py
+    gemini_client.py
     gemini_native.py
     openai_compatible.py
   db/
@@ -243,6 +244,7 @@ docs/
   - 提供会话列表、创建会话、删除会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
   - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
+  - 当 `provider.type == "gemini_native"` 时，会在运行时直接构造 `GeminiNativeClient`，避免 Gemini 已发现可用模型但聊天阶段又错误回退到 DeepSeek
   - `/api/chat/stream` 将 DeepSeek 流式文本映射为 `delta / suggestion / done / error` 事件
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
   - 普通“新对话”会在首条 user prompt 成功落库后自动回填标题，历史侧栏不再长期显示占位文案
@@ -311,6 +313,10 @@ docs/
 - `backend/providers/gemini_native.py`
   - 负责 Gemini 原生 `/models` 发现、`functionDeclarations` schema 生成、函数调用归一化以及 tool result 回灌消息格式转换
   - 与 OpenAI-compatible provider 共用同一套本地工具描述，但保留 Gemini 原生消息结构
+
+- `backend/providers/gemini_client.py`
+  - 负责把 Gemini `generateContent` 包装成当前聊天主链路可复用的最小客户端
+  - 当前用于 `/api/chat/reply`、`/api/chat/stream` 和后台任务的 Gemini 文本请求，先解决“Gemini 模型名误发到 DeepSeek”这一运行时路由问题
 
 - `backend/api/drafts.py`
   - 提供会话级 Coach 草稿读取和 upsert

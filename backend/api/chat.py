@@ -27,6 +27,7 @@ from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
 from backend.db.models import ChatMessage, ChatSession, UploadedFile, utc_now
 from backend.model_config.runtime import get_provider_runtime
+from backend.providers.gemini_client import GeminiNativeClient
 from backend.schemas import (
     ChatMessageCreateSchema,
     ChatMessageSchema,
@@ -319,21 +320,32 @@ def resolve_selected_chat_model(model: str | None) -> tuple[str, Any | None, str
 def build_provider_bound_client(
     provider: Any | None,
     fallback_client: DeepSeekClient,
-) -> DeepSeekClient:
-    """OpenAI 兼容 provider 可直接复用现有 DeepSeek/OpenAI 格式客户端。"""
+) -> Any:
+    """按 provider 类型构造实际聊天客户端，避免把非 DeepSeek 模型错误路由到 fallback。"""
 
     if not isinstance(fallback_client, DeepSeekClient):
         return fallback_client
 
-    if provider is None or getattr(provider, "type", "") != "openai_compatible":
+    if provider is None:
         return fallback_client
 
+    provider_type = getattr(provider, "type", "")
     api_key = str(getattr(provider, "api_key", "") or "").strip()
     base_url = str(getattr(provider, "base_url", "") or "").strip()
     if not api_key or not base_url:
         return fallback_client
 
     settings = get_settings()
+    if provider_type == "gemini_native":
+        return GeminiNativeClient(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=settings.deepseek_timeout_seconds,
+        )
+
+    if provider_type != "openai_compatible":
+        return fallback_client
+
     return DeepSeekClient(
         api_key=api_key,
         base_url=base_url,

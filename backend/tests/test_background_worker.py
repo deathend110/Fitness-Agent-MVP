@@ -11,7 +11,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from backend.agent.adopt_plan import clear_plan_change_proposals
-from backend.agent.deepseek_client import DeepSeekChatResult
+from backend.agent.deepseek_client import DeepSeekChatResult, DeepSeekClient
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base, UploadedFile, utc_now
@@ -561,3 +561,43 @@ async def test_background_task_uses_runtime_default_model_ref_when_model_missing
 
     assert result["status"] == "succeeded"
     assert fake_client.calls[-1]["model"] == "deepseek-v4-pro"
+
+
+def test_background_worker_builds_gemini_client_for_gemini_provider(
+    monkeypatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeGeminiClient:
+        def __init__(self, *, api_key: str, base_url: str, timeout: float) -> None:
+            calls.append(
+                {
+                    "api_key": api_key,
+                    "base_url": base_url,
+                    "timeout": timeout,
+                    "constructed": True,
+                }
+            )
+
+    provider = type(
+        "Provider",
+        (),
+        {
+            "type": "gemini_native",
+            "api_key": "AIza-test",
+            "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        },
+    )()
+
+    monkeypatch.setattr("backend.agent.background_worker.GeminiNativeClient", FakeGeminiClient)
+    worker = chat_api.BackgroundWorker(
+        session_factory=None,  # type: ignore[arg-type]
+        client_factory=lambda: DeepSeekClient(api_key="sk-test", base_url="https://api.deepseek.com"),
+    )
+    client = worker._build_client_for_provider(
+        provider,
+        DeepSeekClient(api_key="sk-test", base_url="https://api.deepseek.com"),
+    )
+
+    assert isinstance(client, FakeGeminiClient)
+    assert calls[0]["constructed"] is True
