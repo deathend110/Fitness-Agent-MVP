@@ -7,6 +7,7 @@ import {
   mergeBackgroundCoachReply,
   requestCoachReply,
   requestCoachReplyStream,
+  shouldShowBackgroundCoachPendingIndicator,
   shouldFallbackCoachStream,
   startBackgroundCoachReply,
 } from '../src/utils/coachChat.js'
@@ -318,6 +319,71 @@ test('mergeBackgroundCoachReply 不会把旧后台结果合并到同文本的新
   assert.deepEqual(mergeResult.nextHistory, [
     { role: 'user', content: '离页后继续分析' },
   ])
+})
+
+test('shouldShowBackgroundCoachPendingIndicator 只在后台任务仍运行且源用户消息存在时显示等待态', () => {
+  const currentHistory = [
+    { role: 'assistant', content: '之前建议先保守一点。' },
+    { role: 'user', content: '离页后继续分析' },
+  ]
+  const storedTask = {
+    taskId: 'task-1',
+    sourceUserIndex: 1,
+    userContent: '离页后继续分析',
+  }
+
+  assert.equal(
+    shouldShowBackgroundCoachPendingIndicator({
+      currentHistory,
+      storedTask,
+      taskStatus: 'pending',
+    }),
+    true,
+  )
+  assert.equal(
+    shouldShowBackgroundCoachPendingIndicator({
+      currentHistory,
+      storedTask,
+      taskStatus: 'running',
+    }),
+    true,
+  )
+
+  for (const taskStatus of ['succeeded', 'failed', 'not_found']) {
+    assert.equal(
+      shouldShowBackgroundCoachPendingIndicator({
+        currentHistory,
+        storedTask,
+        taskStatus,
+      }),
+      false,
+    )
+  }
+
+  assert.equal(
+    shouldShowBackgroundCoachPendingIndicator({
+      currentHistory: [],
+      storedTask,
+      taskStatus: 'pending',
+    }),
+    false,
+  )
+  assert.equal(
+    shouldShowBackgroundCoachPendingIndicator({
+      currentHistory: [{ role: 'user', content: '离页后继续分析' }],
+      storedTask,
+      taskStatus: 'running',
+    }),
+    false,
+  )
+  assert.equal(
+    shouldShowBackgroundCoachPendingIndicator({
+      currentHistory,
+      storedTask: { ...storedTask, taskId: '' },
+      taskStatus: 'running',
+    }),
+    false,
+  )
 })
 
 test('getBackgroundCoachTask 会转交后台任务查询实现', async () => {

@@ -51,3 +51,13 @@ test('CoachTab 模型列表回包不会覆盖后端草稿恢复的模型和 thin
   assert.doesNotMatch(source, /setSelectedModel\(config\.defaultModel/)
   assert.doesNotMatch(source, /enabled: Boolean\(config\.thinking\?\.enabled\)/)
 })
+
+test('CoachTab 会把后台 pending/running 任务映射为教练思考中状态', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /shouldShowBackgroundCoachPendingIndicator/)
+  assert.match(source, /const \[isBackgroundThinking, setIsBackgroundThinking\] = useState\(false\)/)
+  assert.match(source, /const isCoachThinking = isSending \|\| isBackgroundThinking/)
+  assert.match(source, /isSending=\{isCoachThinking\}/)
+  assert.match(source, /autoScrollKey=\{`\$\{messageList\.length\}:\$\{isCoachThinking \? 'sending' : 'idle'\}`\}/)
+})

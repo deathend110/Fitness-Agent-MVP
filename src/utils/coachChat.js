@@ -91,9 +91,39 @@ export function buildBackgroundCoachTaskRecord(task, { sourceUserIndex = null, u
   }
 }
 
+function hasBackgroundTaskSourceUser(currentHistory = [], storedTask = {}) {
+  const userContent = typeof storedTask?.userContent === 'string' ? storedTask.userContent.trim() : ''
+  const sourceUserIndex = Number.isInteger(storedTask?.sourceUserIndex)
+    ? storedTask.sourceUserIndex
+    : null
+  const sourceUser = sourceUserIndex === null
+    ? null
+    : currentHistory[sourceUserIndex]
+
+  // 后台任务只能回填到原始用户消息仍存在的对话，避免旧任务污染新会话。
+  return sourceUserIndex === null
+    ? currentHistory.some((message) => message.role === 'user' && message.content === userContent)
+    : sourceUser?.role === 'user' && sourceUser.content === userContent
+}
+
+export function shouldShowBackgroundCoachPendingIndicator({
+  currentHistory = [],
+  storedTask,
+  taskStatus,
+} = {}) {
+  if (!storedTask?.taskId) {
+    return false
+  }
+
+  if (taskStatus !== 'pending' && taskStatus !== 'running') {
+    return false
+  }
+
+  return hasBackgroundTaskSourceUser(currentHistory, storedTask)
+}
+
 export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTask } = {}) {
   const assistantText = typeof reply?.text === 'string' ? reply.text.trim() : ''
-  const userContent = typeof storedTask?.userContent === 'string' ? storedTask.userContent.trim() : ''
 
   if (!assistantText) {
     return {
@@ -113,17 +143,7 @@ export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTa
     }
   }
 
-  const sourceUserIndex = Number.isInteger(storedTask?.sourceUserIndex)
-    ? storedTask.sourceUserIndex
-    : null
-  const sourceUser = sourceUserIndex === null
-    ? null
-    : currentHistory[sourceUserIndex]
-  const hasSourceUser = sourceUserIndex === null
-    ? currentHistory.some((message) => message.role === 'user' && message.content === userContent)
-    : sourceUser?.role === 'user' && sourceUser.content === userContent
-
-  if (!hasSourceUser) {
+  if (!hasBackgroundTaskSourceUser(currentHistory, storedTask)) {
     return {
       nextHistory: currentHistory,
       status: 'source_user_missing',

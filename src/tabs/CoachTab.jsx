@@ -12,6 +12,7 @@ import {
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
+  shouldShowBackgroundCoachPendingIndicator,
   getBackgroundCoachTask,
   mergeBackgroundCoachReply,
   startBackgroundCoachReply,
@@ -104,6 +105,7 @@ function CoachTab({
   const [backendSessionId, setBackendSessionId] = useState(null)
   const [draft, setDraft] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [isBackgroundThinking, setIsBackgroundThinking] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [messageMeta, setMessageMeta] = useState(() => mergeMessageMeta(chatHistory))
@@ -322,6 +324,7 @@ function CoachTab({
       const storedTask = readStoredTask()
 
       if (!storedTask?.taskId) {
+        setIsBackgroundThinking(false)
         return
       }
 
@@ -329,20 +332,30 @@ function CoachTab({
         const task = await getBackgroundCoachTask(storedTask.taskId)
 
         if (task.status === 'succeeded') {
+          setIsBackgroundThinking(false)
           appendBackgroundReply(task.result, storedTask)
           clearStoredTask()
           return
         }
 
         if (task.status === 'failed' || task.status === 'not_found') {
+          setIsBackgroundThinking(false)
           setErrorMessage(task.message || '后台 AI 教练任务未完成，请重新发送。')
           clearStoredTask()
         }
 
         if (task.status === 'pending' || task.status === 'running') {
+          setIsBackgroundThinking(
+            shouldShowBackgroundCoachPendingIndicator({
+              currentHistory: chatHistoryRef.current,
+              storedTask,
+              taskStatus: task.status,
+            }),
+          )
           pollTimer = window.setTimeout(pollStoredTask, 1500)
         }
       } catch (error) {
+        setIsBackgroundThinking(false)
         setErrorMessage(error?.message || '后台 AI 教练任务查询失败，请稍后重试。')
       }
     }
@@ -624,6 +637,8 @@ function CoachTab({
     }
   }
 
+  const isCoachThinking = isSending || isBackgroundThinking
+
   return (
     <CoachLayout
       composer={
@@ -631,7 +646,7 @@ function CoachTab({
           attachedFiles={attachedFiles}
           draft={draft}
           errorMessage={errorMessage}
-          isSending={isSending}
+          isSending={isCoachThinking}
           isUploading={isUploading}
           modelOptions={modelConfig.models}
           onDraftChange={setDraft}
@@ -649,12 +664,12 @@ function CoachTab({
       messages={
         <MessageList
           emptyQuestions={emptyQuestions}
-          isSending={isSending}
+          isSending={isCoachThinking}
           messages={messageList}
           onAdopt={handleAdoptSuggestion}
           onDismissSuggestion={handleDismissSuggestion}
           onSuggestionClick={handleSuggestionQuestion}
-          autoScrollKey={`${messageList.length}:${isSending ? 'sending' : 'idle'}`}
+          autoScrollKey={`${messageList.length}:${isCoachThinking ? 'sending' : 'idle'}`}
           streamingText={streamingText}
         />
       }

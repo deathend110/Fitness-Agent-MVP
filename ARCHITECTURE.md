@@ -301,6 +301,7 @@ docs/
   - 继续管理 `draft / errorMessage / isSending / streamingText`
   - 负责发送、流式回退、建议采纳 / 忽略、新建对话和假多会话选中态
   - 页面隐藏或离开时中止前台请求并提交后台思考兜底；只有后台任务成功拿到 `task_id` 后才抑制前台错误
+  - 页面恢复可见且后台任务仍处于 `pending/running` 时，若源 user 消息仍存在，则恢复消息区“正在整理上下文”等待态
   - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
   - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`；proposal 采纳按钮通过 `/api/tools/plan/commit` 写回计划，旧 suggestion 仍兼容 `/api/weekly-plan/adopt`
 
