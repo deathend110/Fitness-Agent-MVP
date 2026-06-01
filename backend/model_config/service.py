@@ -28,12 +28,11 @@ class ModelProviderConfigService:
         if self.config_path.exists():
             return self._read_config()
 
-        if self.legacy_settings.get("deepseek_api_key"):
-            config = bootstrap_legacy_deepseek_config(self.legacy_settings)
-            self._write_config(config)
-            return config
-
-        return ModelProviderConfig()
+        # 只要独立 JSON 不存在，就用当前 legacy 配置生成首份文件；
+        # 这样即使 API key 为空，也能先把默认模型和 allowlist 落盘。
+        config = bootstrap_legacy_deepseek_config(self.legacy_settings)
+        self._write_config(config)
+        return config
 
     def save(self, payload: Mapping[str, Any] | ModelProviderConfig) -> dict[str, Any]:
         """保存完整密钥到磁盘，但返回给调用方的是脱敏后的安全结构。"""
@@ -80,7 +79,7 @@ class ModelProviderConfigService:
         for provider in incoming.providers:
             existing_provider = existing_by_id.get(provider.id)
             api_key = provider.api_key
-            if not api_key and existing_provider and existing_provider.api_key:
+            if "api_key" not in provider.model_fields_set and existing_provider and existing_provider.api_key:
                 api_key = existing_provider.api_key
             merged_providers.append(
                 ProviderConfig(

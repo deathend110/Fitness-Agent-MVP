@@ -87,6 +87,33 @@ def test_bootstraps_live_settings_when_legacy_settings_not_provided(
     assert config_file.exists()
 
 
+def test_bootstraps_live_settings_even_when_deepseek_api_key_is_empty(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_file = tmp_path / "missing.json"
+    fake_settings = SimpleNamespace(
+        model_provider_config_path=str(config_file),
+        deepseek_api_key="",
+        deepseek_base_url="https://api.deepseek.com",
+        default_model="deepseek-v4-flash",
+        model_allowlist=["deepseek-v4-flash", "deepseek-v4-pro"],
+        default_thinking_enabled=False,
+        default_thinking_budget="auto",
+    )
+    monkeypatch.setattr(model_config_service_module, "get_settings", lambda: fake_settings)
+
+    service = ModelProviderConfigService()
+    config = service.load()
+
+    assert config.providers[0].base_url == "https://api.deepseek.com"
+    assert [model.remote_id for model in config.providers[0].selected_models] == [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+    ]
+    assert config_file.exists()
+
+
 def test_save_masks_api_key_in_response_but_persists_full_value(tmp_path: Path) -> None:
     config_file = tmp_path / "model_providers.json"
     service = ModelProviderConfigService(config_path=config_file)
@@ -169,3 +196,60 @@ def test_save_preserves_existing_api_key_and_ignores_preview_only_payload(tmp_pa
     assert "apiKeyPreview" not in file_text
     assert saved["providers"][0]["apiKeyPreview"] == "old-***-key"
     assert "apiKey" not in saved["providers"][0]
+
+
+def test_save_clears_existing_api_key_when_empty_string_is_explicitly_provided(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "defaultModelRef": "provider_gemini_main::gemini-2.5-flash",
+                "providers": [
+                    {
+                        "id": "provider_gemini_main",
+                        "type": "gemini_native",
+                        "label": "Gemini 主账号",
+                        "enabled": True,
+                        "apiKey": "old-real-key",
+                        "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+                        "selectedModels": [
+                            {
+                                "remoteId": "gemini-2.5-flash",
+                                "label": "Gemini 2.5 Flash",
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = ModelProviderConfigService(config_path=config_file)
+    payload = {
+        "version": 1,
+        "defaultModelRef": "provider_gemini_main::gemini-2.5-flash",
+        "providers": [
+            {
+                "id": "provider_gemini_main",
+                "type": "gemini_native",
+                "label": "Gemini 主账号（清空密钥）",
+                "enabled": True,
+                "apiKey": "",
+                "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+                "selectedModels": [
+                    {"remoteId": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "enabled": True}
+                ],
+            }
+        ],
+    }
+
+    saved = service.save(payload)
+    persisted = config_file.read_text(encoding="utf-8")
+    loaded = service.load()
+
+    assert "old-real-key" not in persisted
+    assert '"apiKey": ""' in persisted
+    assert loaded.providers[0].api_key == ""
+    assert "apiKeyPreview" not in saved["providers"][0]
