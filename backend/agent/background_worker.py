@@ -8,7 +8,11 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.agent.chat_session import run_tool_calling_chat
+from backend.agent.chat_session import (
+    build_provider_bound_client,
+    provider_client_supports_tool_loop,
+    run_tool_calling_chat,
+)
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.session_title import update_session_title_from_user_prompt
@@ -16,7 +20,6 @@ from backend.agent.tool_calling import build_default_tool_registry
 from backend.config import get_settings
 from backend.db.models import ChatMessage, ChatSession, utc_now
 from backend.providers.gemini_client import GeminiNativeClient
-
 BackgroundTaskStatus = Literal["pending", "running", "succeeded", "failed", "not_found"]
 
 
@@ -102,14 +105,18 @@ class BackgroundWorker:
 
         try:
             fallback_client = self.client_factory()
-            client = self._build_client_for_provider(provider, fallback_client)
+            client = build_provider_bound_client(
+                provider,
+                fallback_client,
+                timeout=get_settings().deepseek_timeout_seconds,
+            )
             thinking_kwargs: dict[str, Any] = {}
             if thinking is not None:
                 thinking_kwargs["thinking"] = thinking
             if reasoning_effort is not None:
                 thinking_kwargs["reasoning_effort"] = reasoning_effort
             proposal: dict[str, Any] | None = None
-            if hasattr(client, "request_chat_with_usage"):
+            if provider_client_supports_tool_loop(client):
                 async with self.session_factory() as session:
                     # 后台任务也必须走同一套工具循环，否则离页后的计划卡片会退化成旧 suggestion。
                     tool_result = await run_tool_calling_chat(
@@ -232,33 +239,21 @@ class BackgroundWorker:
         return {"provider": provider, "remote_model_id": remote_model_id}
 
     def _build_client_for_provider(self, provider: Any | None, fallback_client: Any) -> Any:
-        """按 provider 类型构造后台任务客户端，避免 Gemini 继续错误回落到 DeepSeek。"""
+        """兼容旧测试入口，实际实现复用聊天主链路的 provider runtime。"""
 
-        if not isinstance(fallback_client, DeepSeekClient):
-            return fallback_client
+        if isinstance(fallback_client, DeepSeekClient) and provider is not None:
+            provider_type = getattr(provider, "type", "")
+            api_key = str(getattr(provider, "api_key", "") or "").strip()
+            base_url = str(getattr(provider, "base_url", "") or "").strip()
+            if provider_type == "gemini_native" and api_key and base_url:
+                return GeminiNativeClient(
+                    api_key=api_key,
+                    base_url=base_url,
+                    timeout=get_settings().deepseek_timeout_seconds,
+                )
 
-        if provider is None:
-            return fallback_client
-
-        provider_type = getattr(provider, "type", "")
-        api_key = str(getattr(provider, "api_key", "") or "").strip()
-        base_url = str(getattr(provider, "base_url", "") or "").strip()
-        if not api_key or not base_url:
-            return fallback_client
-
-        settings = get_settings()
-        if provider_type == "gemini_native":
-            return GeminiNativeClient(
-                api_key=api_key,
-                base_url=base_url,
-                timeout=settings.deepseek_timeout_seconds,
-            )
-
-        if provider_type != "openai_compatible":
-            return fallback_client
-
-        return DeepSeekClient(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=settings.deepseek_timeout_seconds,
+        return build_provider_bound_client(
+            provider,
+            fallback_client,
+            timeout=get_settings().deepseek_timeout_seconds,
         )

@@ -110,6 +110,57 @@ class FakeToolProposalClient:
         return DeepSeekChatResult(content="已生成一张训练计划调整卡，等你确认后写回。")
 
 
+class FakeOpenAICompatibleResponsesBackgroundClient:
+    def __init__(self, *, final_text: str = "已生成一张训练计划调整卡，等你确认后写回。") -> None:
+        self.final_text = final_text
+        self.response_calls: list[dict[str, Any]] = []
+
+    async def request_responses_with_usage(
+        self,
+        *,
+        input_items: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        self.response_calls.append(
+            {
+                "input_items": input_items,
+                "model": model,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+        )
+        if tools and len(self.response_calls) == 1:
+            return {
+                "output_text": "",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call_propose",
+                        "name": "propose_plan_change",
+                        "arguments": json.dumps(
+                            {
+                                "day": "Monday",
+                                "summary": "把深蹲百分比下调，给疲劳留余量。",
+                                "changes": [
+                                    {
+                                        "action": "update",
+                                        "exerciseName": "深蹲",
+                                        "field": "pct",
+                                        "newValue": 0.7,
+                                    }
+                                ],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                ],
+            }
+        return {"output_text": self.final_text, "output": []}
+
+
 class FakeDayPlanProposalClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -601,3 +652,119 @@ def test_background_worker_builds_gemini_client_for_gemini_provider(
 
     assert isinstance(client, FakeGeminiClient)
     assert calls[0]["constructed"] is True
+
+
+@pytest.mark.asyncio
+async def test_background_task_uses_openai_compatible_responses_runtime_for_proposal_flow(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+) -> None:
+    client, _legacy_client = api_client
+    fake_responses_client = FakeOpenAICompatibleResponsesBackgroundClient()
+
+    class FakeRuntime:
+        default_model_ref = "provider_openai_responses::gpt-4.1-mini"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_openai_responses::gpt-4.1-mini"
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-openai",
+                        "base_url": "https://api.openai.com",
+                        "wire_api": "responses",
+                        "api_path_mode": "append_v1",
+                    },
+                )(),
+                "gpt-4.1-mini",
+            )
+
+    chat_api.initialize_background_worker(
+        session_factory=chat_api.background_worker.session_factory,
+        client_factory=lambda: fake_responses_client,
+        runtime_provider=lambda: FakeRuntime(),
+    )
+    session_id = (await client.post("/api/chat/sessions", json={"title": "responses-proposal"})).json()["id"]
+    assert (await client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={
+            "userInput": "请根据我今天很累的状态，生成一张需要确认的深蹲调整卡。",
+            "model": "provider_openai_responses::gpt-4.1-mini",
+        },
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+    assert result["result"]["suggestion"]["proposalId"]
+    assert result["result"]["suggestion"]["changes"][0]["newValue"] == 0.7
+    assert fake_responses_client.response_calls[0]["model"] == "gpt-4.1-mini"
+
+
+@pytest.mark.asyncio
+async def test_background_task_returns_provider_aware_error_message_for_openai_provider(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+) -> None:
+    client, _legacy_client = api_client
+
+    class FakeFailureClient:
+        async def request_chat(
+            self,
+            *,
+            messages: list[dict[str, Any]],
+            model: str,
+            stream: bool = False,
+            **_: Any,
+        ) -> Any:
+            del messages, model, stream
+            raise chat_api.DeepSeekClientError(
+                "OpenAI 请求失败（HTTP 401）：invalid api key",
+                code="http_error",
+            )
+
+    class FakeRuntime:
+        default_model_ref = "provider_openai_chat::gpt-4.1-mini"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_openai_chat::gpt-4.1-mini"
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-openai",
+                        "base_url": "https://api.openai.com",
+                        "wire_api": "chat_completions",
+                        "api_path_mode": "append_v1",
+                    },
+                )(),
+                "gpt-4.1-mini",
+            )
+
+    chat_api.initialize_background_worker(
+        session_factory=chat_api.background_worker.session_factory,
+        client_factory=lambda: FakeFailureClient(),
+        runtime_provider=lambda: FakeRuntime(),
+    )
+    session_id = (await client.post("/api/chat/sessions", json={"title": "openai-failed"})).json()["id"]
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={
+            "messages": build_messages("第一条问题"),
+            "model": "provider_openai_chat::gpt-4.1-mini",
+        },
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "failed"
+    assert "OpenAI 请求失败" in result["message"]
+    assert "DeepSeek" not in result["message"]

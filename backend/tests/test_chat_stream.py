@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from backend.agent.deepseek_client import DeepSeekChatResult, DeepSeekClientError
+from backend.agent.deepseek_client import DeepSeekChatResult, DeepSeekClientError, DeepSeekStreamEvent
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base, UploadedFile, utc_now
@@ -77,6 +77,92 @@ class FakeReplyModelClient(FakeDeepSeekClient):
     ) -> str:
         self.calls.append({"messages": messages, "model": model})
         return await super().request_chat(messages=messages, model=model, stream=stream, **_)
+
+
+class FakeOpenAICompatibleChatCompletionsClient(FakeReplyModelClient):
+    def __init__(self, reply: str) -> None:
+        super().__init__(reply)
+        self.stream_calls: list[dict[str, Any]] = []
+
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        yield DeepSeekStreamEvent(text="兼容 chat_completions 流式回复。")
+
+
+class FakeOpenAICompatibleResponsesClient:
+    def __init__(
+        self,
+        *,
+        text_reply: str = "responses 文本回复。",
+        final_text: str = "已生成一张需要确认的训练计划调整卡。",
+    ) -> None:
+        self.text_reply = text_reply
+        self.final_text = final_text
+        self.response_calls: list[dict[str, Any]] = []
+        self.stream_calls: list[dict[str, Any]] = []
+
+    async def request_responses_with_usage(
+        self,
+        *,
+        input_items: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        **_: Any,
+    ) -> dict[str, Any]:
+        self.response_calls.append(
+            {
+                "input_items": input_items,
+                "model": model,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+        )
+        if tools:
+            if len(self.response_calls) == 1:
+                return {
+                    "output_text": "",
+                    "output": [
+                        {
+                            "type": "function_call",
+                            "call_id": "call_propose",
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "把深蹲 RPE 下调，降低疲劳风险。",
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "rpe",
+                                            "newValue": 7,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        }
+                    ],
+                }
+            return {"output_text": self.final_text, "output": []}
+        return {"output_text": self.text_reply, "output": []}
+
+    async def stream_responses_with_usage(
+        self,
+        *,
+        input_items: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[tuple[str | None, dict[str, Any] | None]]:
+        self.stream_calls.append({"input_items": input_items, "model": model})
+        yield ("兼容 responses 流式回复。", None)
 
 
 class FakeToolProposalClient:
@@ -603,3 +689,211 @@ async def test_chat_reply_resolves_model_ref_before_requesting_provider_client(
     assert response.status_code == 200
     assert resolved_model_refs == ["provider_deepseek_main::deepseek-v4-flash"]
     assert fake_client.calls[0]["model"] == "deepseek-v4-flash"
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_uses_openai_compatible_responses_client_without_falling_back_to_deepseek(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    fake_client = FakeOpenAICompatibleResponsesClient(text_reply="按 responses wire 返回。")
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    class FakeRuntime:
+        default_model_ref = "provider_openai_responses::gpt-4.1-mini"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_openai_responses::gpt-4.1-mini"
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-openai",
+                        "base_url": "https://api.openai.com",
+                        "wire_api": "responses",
+                        "api_path_mode": "append_v1",
+                    },
+                )(),
+                "gpt-4.1-mini",
+            )
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(
+        chat_api,
+        "build_provider_bound_client",
+        lambda provider, fallback_client, timeout=None: fake_client,
+    )
+
+    response = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages("走 responses wire"),
+            "model": "provider_openai_responses::gpt-4.1-mini",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["text"] == "按 responses wire 返回。"
+    assert fake_client.response_calls[0]["model"] == "gpt-4.1-mini"
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_uses_openai_compatible_chat_completions_stream_client(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    fake_client = FakeOpenAICompatibleChatCompletionsClient("不会走非流式。")
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    class FakeRuntime:
+        default_model_ref = "provider_openai_chat::gpt-4.1-mini"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_openai_chat::gpt-4.1-mini"
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-openai",
+                        "base_url": "https://api.openai.com",
+                        "wire_api": "chat_completions",
+                        "api_path_mode": "append_v1",
+                    },
+                )(),
+                "gpt-4.1-mini",
+            )
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(
+        chat_api,
+        "build_provider_bound_client",
+        lambda provider, fallback_client, timeout=None: fake_client,
+    )
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "messages": json.dumps(build_messages("走 chat_completions stream"), ensure_ascii=False),
+            "model": "provider_openai_chat::gpt-4.1-mini",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert [event["event"] for event in events] == ["delta", "suggestion", "done"]
+    assert events[0]["data"] == {"text": "兼容 chat_completions 流式回复。"}
+    assert fake_client.stream_calls[0]["model"] == "gpt-4.1-mini"
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_executes_tool_loop_with_openai_compatible_responses_wire(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    fake_client = FakeOpenAICompatibleResponsesClient()
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    class FakeRuntime:
+        default_model_ref = "provider_openai_responses::gpt-4.1-mini"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_openai_responses::gpt-4.1-mini"
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-openai",
+                        "base_url": "https://api.openai.com",
+                        "wire_api": "responses",
+                        "api_path_mode": "append_v1",
+                    },
+                )(),
+                "gpt-4.1-mini",
+            )
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(
+        chat_api,
+        "build_provider_bound_client",
+        lambda provider, fallback_client, timeout=None: fake_client,
+    )
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
+            "model": "provider_openai_responses::gpt-4.1-mini",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert [event["event"] for event in events] == ["delta", "proposal", "suggestion", "done"]
+    assert events[1]["data"]["proposal"]["proposalId"]
+    assert fake_client.response_calls[0]["tools"] is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_reports_provider_aware_error_message_for_openai_provider(
+    api_client: AsyncClient,
+    monkeypatch,
+) -> None:
+    fake_client = FakeDeepSeekClient(
+        error=DeepSeekClientError(
+            "OpenAI 请求失败（HTTP 401）：invalid api key",
+            code="http_error",
+        )
+    )
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    class FakeRuntime:
+        default_model_ref = "provider_openai_chat::gpt-4.1-mini"
+
+        def resolve_model_ref(self, model_ref: str):
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-openai",
+                        "base_url": "https://api.openai.com",
+                        "wire_api": "chat_completions",
+                        "api_path_mode": "append_v1",
+                        "label": "OpenAI 主账号",
+                    },
+                )(),
+                "gpt-4.1-mini",
+            )
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(
+        chat_api,
+        "build_provider_bound_client",
+        lambda provider, fallback_client, timeout=None: fake_client,
+    )
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "messages": json.dumps(build_messages("触发 OpenAI 错误"), ensure_ascii=False),
+            "model": "provider_openai_chat::gpt-4.1-mini",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert events[0]["event"] == "error"
+    assert "OpenAI 请求失败" in events[0]["data"]["message"]
+    assert "DeepSeek" not in events[0]["data"]["message"]

@@ -12,7 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.agent.background_worker import BackgroundTaskRecord, BackgroundWorker
-from backend.agent.chat_session import build_agent_request, run_tool_calling_chat
+from backend.agent.chat_session import (
+    build_agent_request,
+    build_provider_bound_client,
+    convert_messages_to_responses_input,
+    provider_client_supports_tool_loop,
+    run_tool_calling_chat,
+)
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.session_title import (
@@ -27,7 +33,6 @@ from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
 from backend.db.models import ChatMessage, ChatSession, UploadedFile, utc_now
 from backend.model_config.runtime import get_provider_runtime
-from backend.providers.gemini_client import GeminiNativeClient
 from backend.schemas import (
     ChatMessageCreateSchema,
     ChatMessageSchema,
@@ -317,42 +322,6 @@ def resolve_selected_chat_model(model: str | None) -> tuple[str, Any | None, str
     return selected_model, provider, remote_model_id
 
 
-def build_provider_bound_client(
-    provider: Any | None,
-    fallback_client: DeepSeekClient,
-) -> Any:
-    """按 provider 类型构造实际聊天客户端，避免把非 DeepSeek 模型错误路由到 fallback。"""
-
-    if not isinstance(fallback_client, DeepSeekClient):
-        return fallback_client
-
-    if provider is None:
-        return fallback_client
-
-    provider_type = getattr(provider, "type", "")
-    api_key = str(getattr(provider, "api_key", "") or "").strip()
-    base_url = str(getattr(provider, "base_url", "") or "").strip()
-    if not api_key or not base_url:
-        return fallback_client
-
-    settings = get_settings()
-    if provider_type == "gemini_native":
-        return GeminiNativeClient(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=settings.deepseek_timeout_seconds,
-        )
-
-    if provider_type != "openai_compatible":
-        return fallback_client
-
-    return DeepSeekClient(
-        api_key=api_key,
-        base_url=base_url,
-        timeout=settings.deepseek_timeout_seconds,
-    )
-
-
 def build_sse_frame(event: str, payload: dict[str, Any]) -> str:
     # SSE 的 data 始终写 JSON，前端只需要按 event 名称分派，不解析 DeepSeek 原始协议。
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -387,7 +356,7 @@ async def request_agent_tool_reply(
     thinking: dict[str, str] | None = None,
     reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
-    if not hasattr(deepseek_client, "request_chat_with_usage"):
+    if not provider_client_supports_tool_loop(deepseek_client):
         content, _usage = await request_deepseek_reply_with_usage(
             deepseek_client=deepseek_client,
             messages=messages,
@@ -472,6 +441,17 @@ async def request_deepseek_reply_with_usage(
     if reasoning_effort is not None:
         thinking_kwargs["reasoning_effort"] = reasoning_effort
 
+    if hasattr(deepseek_client, "request_responses_with_usage"):
+        result = await deepseek_client.request_responses_with_usage(
+            input_items=convert_messages_to_responses_input(messages),
+            model=model,
+            **thinking_kwargs,
+        )
+        if isinstance(result, dict):
+            output_text = result.get("output_text")
+            if isinstance(output_text, str):
+                return output_text, result.get("usage")
+
     if hasattr(deepseek_client, "request_chat_with_usage"):
         result = await deepseek_client.request_chat_with_usage(
             messages=messages,
@@ -508,6 +488,18 @@ async def stream_deepseek_reply_with_usage(
         thinking_kwargs["thinking"] = thinking
     if reasoning_effort is not None:
         thinking_kwargs["reasoning_effort"] = reasoning_effort
+
+    if hasattr(deepseek_client, "request_responses_with_usage"):
+        result = await deepseek_client.request_responses_with_usage(
+            input_items=convert_messages_to_responses_input(messages),
+            model=model,
+            **thinking_kwargs,
+        )
+        if isinstance(result, dict):
+            output_text = result.get("output_text")
+            if isinstance(output_text, str):
+                yield output_text, result.get("usage")
+                return
 
     if hasattr(deepseek_client, "stream_chat_with_usage"):
         async for event in deepseek_client.stream_chat_with_usage(
@@ -585,7 +577,11 @@ async def stream_chat_reply(
 ) -> StreamingResponse:
     chat_session = await resolve_chat_session(session_id, session)
     selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(model)
-    provider_client = build_provider_bound_client(selected_provider, deepseek_client)
+    provider_client = build_provider_bound_client(
+        selected_provider,
+        deepseek_client,
+        timeout=get_settings().deepseek_timeout_seconds,
+    )
     direct_user_input = read_user_input(user_input)
     selected_file_ids = parse_file_ids_query(file_ids)
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(parse_thinking_query(thinking))
@@ -692,7 +688,11 @@ async def request_chat_reply(
     user_content = read_payload_user_content(payload)
     chat_session = await resolve_chat_session(payload.sessionId, session)
     selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(payload.model)
-    provider_client = build_provider_bound_client(selected_provider, deepseek_client)
+    provider_client = build_provider_bound_client(
+        selected_provider,
+        deepseek_client,
+        timeout=get_settings().deepseek_timeout_seconds,
+    )
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
     user_attachments: list[dict[str, Any]] = []
     if payload.userInput is not None:
@@ -783,8 +783,6 @@ async def submit_background_chat_task(
         request_messages = payload.messages
     else:
         selected_model_ref = payload.model
-        if selected_model_ref is not None:
-            selected_model_ref, _selected_provider, _remote_model_id = resolve_selected_chat_model(payload.model)
         user_attachments = await build_message_attachment_snapshots(session, payload.fileIds)
         agent_request = await build_agent_request(
             session=session,

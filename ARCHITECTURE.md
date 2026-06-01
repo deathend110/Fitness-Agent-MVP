@@ -256,8 +256,8 @@ docs/
   - 提供会话列表、创建会话、删除会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
   - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
-  - 当 `provider.type == "gemini_native"` 时，会在运行时直接构造 `GeminiNativeClient`，避免 Gemini 已发现可用模型但聊天阶段又错误回退到 DeepSeek
-  - `/api/chat/stream` 将 DeepSeek 流式文本映射为 `delta / suggestion / done / error` 事件
+  - 通过 `backend/agent/chat_session.py` 里的共享 provider runtime 选择器，前台聊天与后台任务会使用同一套 provider-bound client：Gemini-native 继续直连 `GeminiNativeClient`，OpenAI-compatible 会按 `wireApi/apiPathMode` 选择 `chat_completions` 或 `responses` 运行时，不再错误回退到 DeepSeek
+  - `/api/chat/stream` 将统一聊天运行时的文本事件映射为 `delta / suggestion / proposal / done / error`
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
   - 普通“新对话”会在首条 user prompt 成功落库后自动回填标题，历史侧栏不再长期显示占位文案
 
@@ -274,8 +274,9 @@ docs/
 - `backend/agent/chat_session.py`
   - 定义 `build_agent_request()` 后端编排入口
   - 从 SQLite 读取 `profile / weekly_plan / daily_log / memory / knowledge / summary / recent_messages`
-  - 返回 DeepSeek messages、模型配置和上下文调试信息，并通过 `run_tool_calling_chat()` 执行工具调用循环
-  - 工具循环现在会按 client 类型选择 provider wrapper：DeepSeek/OpenAI-compatible 走 `_DeepSeekToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
+  - 返回 Agent messages、模型配置和上下文调试信息，并通过 `run_tool_calling_chat()` 执行工具调用循环
+  - 同时承载共享 provider runtime 接线：把运行时 provider 配置映射成实际聊天 client，并在工具循环里按 wire 选择 provider wrapper
+  - 工具循环现在会按 client/wire 类型选择 provider wrapper：DeepSeek 与 OpenAI-compatible `chat_completions` 走 `_DeepSeekToolLoopProvider`，OpenAI-compatible `responses` 走 `_OpenAIResponsesToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
 
 - `backend/agent/usage_ledger.py`
   - 负责规范化 DeepSeek `usage` 字段并写入 `UsageRecord`
@@ -292,7 +293,7 @@ docs/
 
 - `backend/agent/tool_loop.py`
   - 负责协议无关的工具调用编排：执行本地工具、控制轮次、记录 `ToolCallLog`、收集 proposal，并委托 provider 处理 schema 与 follow-up message 格式
-  - 当前 DeepSeek/OpenAI-compatible 与 Gemini-native provider 都开始对接这套统一回环
+  - 当前 DeepSeek、OpenAI-compatible `chat_completions`、OpenAI-compatible `responses` 与 Gemini-native 都对接到这套统一回环；proposal 工具逻辑不再区分前台聊天和后台任务
 
 - `backend/api/memory.py`
   - 提供长期记忆查询、候选确认和候选忽略接口，供后续前端 memory 面板接入
@@ -363,7 +364,8 @@ docs/
   - 负责离页后台思考的进程内任务表和 `asyncio.create_task` 调度
   - 后台任务使用独立 SQLAlchemy session factory 写库，不复用请求生命周期内的 DB session
   - 当请求未显式传模型时，会优先使用运行时默认 `modelRef`，再解析到真实远端模型 ID，保证前台聊天与后台思考使用同一套模型来源
-  - 成功任务解析 `suggestion` 后写入本轮 user + assistant；失败任务只记录友好状态，不写脏 assistant
+  - 后台任务与前台聊天复用同一套 provider-bound client 选择与工具回环，避免“前台可聊但后台 proposal 失效”的漂移
+  - 成功任务解析 `suggestion` 后写入本轮 user + assistant；失败任务只记录 provider-aware 友好状态，不写脏 assistant
 
 - `backend/db/models.py`
   - 定义 `Profile / WeeklyPlanDay / DailyLog / ChatSession / ChatMessage`
@@ -938,7 +940,8 @@ CoachTab
 - memory 保存用户长期事实，knowledge 保存外部资料或上传文件知识，两者不会混写；单日状态不晋升长期 memory
 - 上传文件只通过 `fileIds` 和摘要进入 Agent，不把本机路径或完整大文件塞进请求
 - 模型与 thinking 配置由后端 `/api/models` 收口，前端仅选择后端声明的可用项
-- 聊天、草稿和后台任务共享 `modelRef -> ProviderRuntimeCache -> remote_model_id` 解析链路，避免前端、SSE 与后台任务各自维护一套默认模型逻辑
+- 聊天、草稿和后台任务共享 `modelRef -> ProviderRuntimeCache -> provider-bound client/runtime -> remote_model_id` 解析链路，避免前端、SSE 与后台任务各自维护一套默认模型逻辑
+- OpenAI-compatible provider 在聊天阶段还会继续细分成两条 wire：`chat_completions` 使用传统 `messages/tool_calls` 消息回环，`responses` 使用 `input/function_call/function_call_output` 回环；两者都通过统一 tool loop 驱动 proposal 工具
 - 后台任务提交由 `backgroundTaskStartedRef` 去重，窗口 focus 回来后主动轮询，避免 Alt+Tab 或应用内 tab 切换时用户消息看起来丢失
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 - AI 教练页历史侧栏使用后端真实 session id；`buildCoachHistoryView()` 只作为旧测试与兼容工具保留，不再驱动生产侧栏
