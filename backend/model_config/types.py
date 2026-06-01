@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 MODEL_PROVIDER_CONFIG_VERSION = 1
+OPENAI_COMPATIBLE_WIRE_APIS = {"chat_completions", "responses"}
+OPENAI_COMPATIBLE_API_PATH_MODES = {"raw_root", "append_v1"}
 
 
 def _parse_default_model_ref(default_model_ref: str) -> tuple[str, str]:
@@ -47,6 +49,8 @@ class ProviderConfig(BaseModel):
     api_key: str | None = Field(default=None, alias="apiKey")
     api_key_preview: str | None = Field(default=None, alias="apiKeyPreview")
     base_url: str = Field(default="", alias="baseUrl")
+    wire_api: str | None = Field(default=None, alias="wireApi")
+    api_path_mode: str | None = Field(default=None, alias="apiPathMode")
     selected_models: list[SelectedModelConfig] = Field(default_factory=list, alias="selectedModels")
 
     def to_masked_dict(self) -> dict[str, Any]:
@@ -69,6 +73,24 @@ class ProviderConfig(BaseModel):
     @model_validator(mode="after")
     def validate_selected_models_unique(self) -> "ProviderConfig":
         """同一个 provider 内的模型远端 ID 必须唯一，避免默认模型和列表出现歧义。"""
+
+        if self.type == "openai_compatible":
+            if self.wire_api is None:
+                self.wire_api = "chat_completions"
+            if self.api_path_mode is None:
+                self.api_path_mode = "raw_root"
+
+            if self.wire_api not in OPENAI_COMPATIBLE_WIRE_APIS:
+                raise ValueError(
+                    f"provider {self.id} 的 wireApi 不合法: {self.wire_api}"
+                )
+            if self.api_path_mode not in OPENAI_COMPATIBLE_API_PATH_MODES:
+                raise ValueError(
+                    f"provider {self.id} 的 apiPathMode 不合法: {self.api_path_mode}"
+                )
+        else:
+            self.wire_api = None
+            self.api_path_mode = None
 
         seen_remote_ids: set[str] = set()
         for selected_model in self.selected_models:

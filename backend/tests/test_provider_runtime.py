@@ -51,6 +51,45 @@ def test_resolves_model_ref_to_provider_and_remote_model(tmp_path: Path) -> None
     assert remote_model_id == "gemini-2.5-flash"
 
 
+def test_masked_runtime_config_keeps_openai_wire_api_fields(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
+                "providers": [
+                    {
+                        "id": "provider_deepseek_main",
+                        "type": "openai_compatible",
+                        "label": "DeepSeek 主账号",
+                        "enabled": True,
+                        "apiKey": "sk-real-key",
+                        "baseUrl": "https://api.deepseek.com",
+                        "wireApi": "responses",
+                        "apiPathMode": "append_v1",
+                        "selectedModels": [
+                            {
+                                "remoteId": "deepseek-v4-flash",
+                                "label": "DeepSeek V4 Flash",
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runtime = ProviderRuntimeCache.from_path(config_file)
+    masked = runtime.get_masked_config()
+
+    assert masked["providers"][0]["wireApi"] == "responses"
+    assert masked["providers"][0]["apiPathMode"] == "append_v1"
+    assert "apiKey" not in masked["providers"][0]
+
+
 def test_resolve_model_ref_rejects_invalid_format(tmp_path: Path) -> None:
     config_file = tmp_path / "model_providers.json"
     _write_config(

@@ -312,11 +312,13 @@ docs/
 - `backend/model_config/runtime.py`
   - 负责模型配置运行时缓存、`default_model_ref` 暴露、`modelRef` 解析、启用模型列表生成与配置热刷新入口
   - 当前对外返回 provider 副本，避免后续路由或适配层误改共享缓存内部状态
+  - OpenAI-compatible provider 的 `wireApi` 与 `apiPathMode` 会随脱敏配置和运行时视图一并暴露，确保设置页回显与运行时解析使用同一份结构
 
 - `backend/api/model_config.py`
   - 提供 `GET /api/model-config`、`PUT /api/model-config`、`POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models`
   - 读取时返回脱敏后的 provider 配置；保存时写回 JSON 后立刻调用 runtime refresh，确保设置页改动无需重启服务
   - provider 测试连接与模型发现统一通过适配层转发到 OpenAI-compatible / Gemini-native 两套协议
+  - 对 OpenAI-compatible 请求体会额外透传 `wireApi` / `apiPathMode`，但仍兼容未声明这两个参数的旧适配器签名
 
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
   - 定义 Provider 适配层的最小公共接口和统一错误类型
@@ -424,13 +426,16 @@ docs/
 - `src/components/coach/ModelConfigDialog.jsx`
   - 负责模型设置弹窗，承接 provider 列表编辑、默认模型选择和保存动作
   - 当前版本支持在页面内维护多 provider 的基础字段和 selectedModels 列表
+  - 保存 openai_compatible provider 时会显式带上 `wireApi` 与 `apiPathMode`
 
 - `src/components/coach/ProviderConfigEditor.jsx` 与 `src/components/coach/ProviderModelPicker.jsx`
   - 把单个 provider 的字段编辑与模型列表维护拆开，避免 `CoachTab` 直接承担大表单逻辑
+  - 当 provider.type 为 `openai_compatible` 时，额外展示 `wireApi` 与 `apiPathMode` 两个显式设置项；Gemini-native 不展示这两个字段
 
 - `src/utils/modelConfigView.js`
   - 负责把后端模型运行时返回值与脱敏配置文档映射成前端可直接消费的视图模型
   - 统一生成 `modelRef`、provider 标签、默认模型下拉项与模型级 thinking 能力
+  - 对 openai_compatible provider 缺失的 `wireApi/apiPathMode` 做前端默认补值，兼容旧配置文件回显
 
 - `src/components/coach/FileAttachmentTray.jsx`
   - 负责文件选择、上传状态、附件 chip 和删除交互
@@ -704,6 +709,12 @@ CoachTab
       -> 按 MODEL_ALLOWLIST 过滤
       -> 失败时返回 fallback 白名单和 warning
   -> ModelSelector 更新 selectedModel / thinking
+  -> 打开 ModelConfigDialog
+      -> GET /api/model-config
+      -> buildProviderConfigView() 把 openai_compatible 缺失的 `wireApi/apiPathMode` 归一成 `chat_completions/raw_root`
+      -> ProviderConfigEditor 允许显式编辑 `wireApi/apiPathMode`
+      -> POST /api/model-config/providers/test` / `discover-models` 透传新字段
+      -> PUT /api/model-config` 保存后刷新 runtime
   -> coachBackend 发送到 /api/chat/stream 或 /api/chat/reply
 ```
 

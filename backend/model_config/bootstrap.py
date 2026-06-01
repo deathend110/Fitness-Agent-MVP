@@ -34,6 +34,8 @@ def bootstrap_legacy_deepseek_config(legacy_settings: Mapping[str, Any]) -> Mode
         enabled=bool(api_key),
         api_key=api_key or None,
         base_url=base_url,
+        wire_api="chat_completions",
+        api_path_mode="raw_root",
         selected_models=[
             SelectedModelConfig(remote_id=model_id, label=model_id, enabled=True) for model_id in model_ids
         ],

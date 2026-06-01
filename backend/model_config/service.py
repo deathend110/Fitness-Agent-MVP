@@ -98,6 +98,8 @@ class ModelProviderConfigService:
                     enabled=provider.enabled,
                     api_key=api_key,
                     base_url=provider.base_url,
+                    wire_api=provider.wire_api,
+                    api_path_mode=provider.api_path_mode,
                     selected_models=provider.selected_models,
                 )
             )

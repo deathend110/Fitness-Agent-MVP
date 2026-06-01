@@ -28,6 +28,11 @@ function sanitizeProviderForSave(provider) {
       : [],
   }
 
+  if (nextProvider.type === 'openai_compatible') {
+    nextProvider.wireApi = provider?.wireApi || 'chat_completions'
+    nextProvider.apiPathMode = provider?.apiPathMode || 'raw_root'
+  }
+
   // 如果前端只展示了脱敏预览且用户没有重新填写，就不要把 apiKey 字段发回去，
   // 这样后端保存时会沿用现有真实密钥，而不是被空字符串覆盖。
   const apiKey = (provider?.apiKey || '').trim()

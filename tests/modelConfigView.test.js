@@ -63,6 +63,8 @@ test('buildProviderConfigView keeps masked preview but not invent real apiKey', 
         enabled: true,
         apiKeyPreview: 'sk-t***1234',
         baseUrl: 'https://api.deepseek.com',
+        wireApi: 'responses',
+        apiPathMode: 'append_v1',
         selectedModels: [{ remoteId: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', enabled: true }],
       },
     ],
@@ -70,6 +72,38 @@ test('buildProviderConfigView keeps masked preview but not invent real apiKey', 
 
   assert.equal(configView.providers[0].apiKey, '')
   assert.equal(configView.providers[0].apiKeyPreview, 'sk-t***1234')
+  assert.equal(configView.providers[0].wireApi, 'responses')
+  assert.equal(configView.providers[0].apiPathMode, 'append_v1')
+})
+
+test('buildProviderConfigView fills openai-compatible defaults for missing wire fields', () => {
+  const configView = buildProviderConfigView({
+    version: 1,
+    defaultModelRef: 'provider_deepseek_main::deepseek-v4-flash',
+    providers: [
+      {
+        id: 'provider_deepseek_main',
+        type: 'openai_compatible',
+        label: 'DeepSeek 主账号',
+        enabled: true,
+        baseUrl: 'https://api.deepseek.com',
+        selectedModels: [{ remoteId: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', enabled: true }],
+      },
+      {
+        id: 'provider_gemini_main',
+        type: 'gemini_native',
+        label: 'Gemini 主账号',
+        enabled: true,
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        selectedModels: [{ remoteId: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', enabled: true }],
+      },
+    ],
+  })
+
+  assert.equal(configView.providers[0].wireApi, 'chat_completions')
+  assert.equal(configView.providers[0].apiPathMode, 'raw_root')
+  assert.equal(configView.providers[1].wireApi, '')
+  assert.equal(configView.providers[1].apiPathMode, '')
 })
 
 test('listProviderModelRefs builds provider-qualified labels', () => {

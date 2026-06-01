@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -21,6 +22,8 @@ class ProviderConnectionPayload(BaseModel):
     type: str
     apiKey: str = ""
     baseUrl: str = ""
+    wireApi: str | None = None
+    apiPathMode: str | None = None
 
 
 def get_model_config_path() -> Path:
@@ -48,6 +51,24 @@ def raise_provider_http_error(error: ProviderAdapterError) -> None:
     raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
+async def list_remote_models_with_payload(
+    adapter: ProviderAdapter,
+    payload: ProviderConnectionPayload,
+) -> list[dict[str, Any]]:
+    """按适配器签名选择性透传新字段，兼容旧实现与新增 OpenAI 兼容扩展。"""
+
+    kwargs: dict[str, Any] = {
+        "api_key": payload.apiKey.strip(),
+        "base_url": payload.baseUrl.strip(),
+    }
+    parameters = inspect.signature(adapter.list_remote_models).parameters
+    if "wire_api" in parameters:
+        kwargs["wire_api"] = payload.wireApi
+    if "api_path_mode" in parameters:
+        kwargs["api_path_mode"] = payload.apiPathMode
+    return await adapter.list_remote_models(**kwargs)
+
+
 @router.get("")
 async def get_model_config() -> dict[str, Any]:
     """返回脱敏后的当前模型配置，供前端设置页直接回显。"""
@@ -71,10 +92,7 @@ async def test_provider_connection(payload: ProviderConnectionPayload) -> dict[s
 
     adapter = get_provider_adapter(payload.type)
     try:
-        models = await adapter.list_remote_models(
-            api_key=payload.apiKey.strip(),
-            base_url=payload.baseUrl.strip(),
-        )
+        models = await list_remote_models_with_payload(adapter, payload)
     except ProviderAdapterError as error:
         raise_provider_http_error(error)
 
@@ -90,10 +108,7 @@ async def discover_provider_models(payload: ProviderConnectionPayload) -> dict[s
 
     adapter = get_provider_adapter(payload.type)
     try:
-        models = await adapter.list_remote_models(
-            api_key=payload.apiKey.strip(),
-            base_url=payload.baseUrl.strip(),
-        )
+        models = await list_remote_models_with_payload(adapter, payload)
     except ProviderAdapterError as error:
         raise_provider_http_error(error)
 

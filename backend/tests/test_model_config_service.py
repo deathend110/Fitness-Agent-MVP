@@ -62,6 +62,8 @@ def test_bootstraps_legacy_deepseek_env_when_json_missing(tmp_path: Path) -> Non
     config = service.load()
 
     assert config.providers[0].id == "provider_deepseek_default"
+    assert config.providers[0].wire_api == "chat_completions"
+    assert config.providers[0].api_path_mode == "raw_root"
     assert config.default_model_ref == "provider_deepseek_default::deepseek-v4-flash"
     assert config_file.exists()
 
@@ -280,6 +282,41 @@ def test_save_masks_api_key_in_response_but_persists_full_value(tmp_path: Path) 
     assert saved["providers"][0]["apiKeyPreview"].startswith("AIza")
     assert "apiKey" not in saved["providers"][0]
     assert "AIza-real-key" in config_file.read_text(encoding="utf-8")
+
+
+def test_save_persists_openai_compatible_wire_api_fields(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    service = ModelProviderConfigService(config_path=config_file)
+    payload = {
+        "version": 1,
+        "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
+        "providers": [
+            {
+                "id": "provider_deepseek_main",
+                "type": "openai_compatible",
+                "label": "DeepSeek 主账号",
+                "enabled": True,
+                "apiKey": "sk-test",
+                "baseUrl": "https://api.deepseek.com",
+                "wireApi": "responses",
+                "apiPathMode": "append_v1",
+                "selectedModels": [
+                    {"remoteId": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "enabled": True}
+                ],
+            }
+        ],
+    }
+
+    saved = service.save(payload)
+    loaded = service.load()
+    persisted = json.loads(config_file.read_text(encoding="utf-8"))
+
+    assert saved["providers"][0]["wireApi"] == "responses"
+    assert saved["providers"][0]["apiPathMode"] == "append_v1"
+    assert loaded.providers[0].wire_api == "responses"
+    assert loaded.providers[0].api_path_mode == "append_v1"
+    assert persisted["providers"][0]["wireApi"] == "responses"
+    assert persisted["providers"][0]["apiPathMode"] == "append_v1"
 
 
 def test_save_preserves_existing_api_key_and_ignores_preview_only_payload(tmp_path: Path) -> None:

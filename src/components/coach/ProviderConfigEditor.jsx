@@ -96,6 +96,36 @@ function ProviderConfigEditor({
             value={provider?.baseUrl || ''}
           />
         </label>
+
+        {providerType === 'openai_compatible' ? (
+          <label className="space-y-1.5 text-xs text-slate-500">
+            <span>接口协议</span>
+            <select
+              className="h-10 w-full rounded-xl border border-fitloop-line bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-fitloop-orange"
+              disabled={disabled}
+              onChange={(event) => updateProvider({ wireApi: event.target.value })}
+              value={provider?.wireApi || 'chat_completions'}
+            >
+              <option value="chat_completions">Chat Completions</option>
+              <option value="responses">Responses</option>
+            </select>
+          </label>
+        ) : null}
+
+        {providerType === 'openai_compatible' ? (
+          <label className="space-y-1.5 text-xs text-slate-500">
+            <span>Base URL 拼接模式</span>
+            <select
+              className="h-10 w-full rounded-xl border border-fitloop-line bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-fitloop-orange"
+              disabled={disabled}
+              onChange={(event) => updateProvider({ apiPathMode: event.target.value })}
+              value={provider?.apiPathMode || 'raw_root'}
+            >
+              <option value="raw_root">直接使用 Base URL</option>
+              <option value="append_v1">自动补 /v1</option>
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <label className="block space-y-1.5 text-xs text-slate-500">

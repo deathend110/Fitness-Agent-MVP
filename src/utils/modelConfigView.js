@@ -20,6 +20,13 @@ function normalizeThinkingCapability(thinking = {}, supportsThinking = false) {
   }
 }
 
+function buildOpenAiCompatibleConfig(provider = {}) {
+  return {
+    wireApi: provider?.wireApi || 'chat_completions',
+    apiPathMode: provider?.apiPathMode || 'raw_root',
+  }
+}
+
 export function buildSelectableModelView(model = {}) {
   const thinking = normalizeThinkingCapability(model.thinking, model.supportsThinking)
 
@@ -56,6 +63,7 @@ export function buildModelRuntimeView(payload = {}) {
 export function buildProviderConfigView(payload = {}) {
   const providers = Array.isArray(payload?.providers)
     ? payload.providers.map((provider, index) => ({
+        ...(provider?.type === 'openai_compatible' ? buildOpenAiCompatibleConfig(provider) : { wireApi: '', apiPathMode: '' }),
         id: provider?.id || `provider_${index + 1}`,
         type: provider?.type || 'openai_compatible',
         label: provider?.label || '',
@@ -113,6 +121,8 @@ export function createEmptyProviderConfig(providerType = 'openai_compatible', in
     baseUrl: isGemini
       ? 'https://generativelanguage.googleapis.com/v1beta'
       : 'https://api.deepseek.com',
+    wireApi: isGemini ? '' : 'chat_completions',
+    apiPathMode: isGemini ? '' : 'raw_root',
     selectedModels: [],
   }
 }
