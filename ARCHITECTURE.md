@@ -18,6 +18,7 @@
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储
 - 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件。新版 bootstrap 默认生成 `https://api.deepseek.com/v1 + chat_completions + append_v1`；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据。保存模型配置后会立刻刷新运行时缓存，前台聊天、流式输出与后台任务都无需重启即可生效
+- 当前仓库内对 DeepSeek 的默认口径也已同步固化到 `/v1` 形态：`.env.example` 默认值使用 `https://api.deepseek.com/v1`，README 与运行时文档都以 `chat_completions + append_v1` 为主说明；`DeepSeekClient` 不再承担主路径，只作为 provider runtime 缺失时的 fallback
 - AI 教练页发送消息走后端聊天代理，历史侧栏和消息恢复已切到后端 `chat_session / chat_message`
 
 ### 当前数据源分工
