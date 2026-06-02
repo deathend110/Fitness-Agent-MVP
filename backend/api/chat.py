@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 import json
 from json import JSONDecodeError
 from typing import Any
@@ -85,6 +86,17 @@ class ChatBackgroundTaskResponseSchema(BaseModel):
     status: str
     result: dict[str, Any] | None = None
     message: str = ""
+
+
+@dataclass(frozen=True)
+class NormalizedChatRequest:
+    session_id: int | None
+    user_content: str
+    model: str | None
+    file_ids: list[int]
+    thinking: dict[str, Any] | None
+    source: str
+    messages: list[dict[str, Any]] | None = None
 
 
 background_worker: BackgroundWorker | None = None
@@ -224,6 +236,72 @@ def read_payload_user_content(payload: ChatReplyRequestSchema) -> str:
         raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
 
     return read_last_user_message(payload.messages)
+
+
+def normalize_chat_request_payload(
+    payload: ChatReplyRequestSchema | ChatBackgroundRequestSchema,
+) -> NormalizedChatRequest:
+    """把 Agent 新契约和 legacy messages 契约归一到统一内部结构。"""
+
+    direct_user_input = read_user_input(payload.userInput)
+    if direct_user_input is not None:
+        return NormalizedChatRequest(
+            session_id=payload.sessionId,
+            user_content=direct_user_input,
+            model=payload.model,
+            file_ids=list(dict.fromkeys(file_id for file_id in payload.fileIds if file_id > 0)),
+            thinking=payload.thinking,
+            source="agent",
+            messages=None,
+        )
+
+    if payload.messages is None:
+        raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
+
+    return NormalizedChatRequest(
+        session_id=payload.sessionId,
+        user_content=read_last_user_message(payload.messages),
+        model=payload.model,
+        file_ids=[],
+        thinking=payload.thinking,
+        source="legacy_messages",
+        messages=payload.messages,
+    )
+
+
+def normalize_stream_chat_request(
+    *,
+    session_id: int | None,
+    user_input: str | None,
+    model: str | None,
+    thinking: dict[str, Any] | None,
+    file_ids: list[int],
+    messages: list[dict[str, Any]] | None,
+) -> NormalizedChatRequest:
+    direct_user_input = read_user_input(user_input)
+    if direct_user_input is not None:
+        return NormalizedChatRequest(
+            session_id=session_id,
+            user_content=direct_user_input,
+            model=model,
+            file_ids=file_ids,
+            thinking=thinking,
+            source="agent",
+            messages=None,
+        )
+
+    if messages is None:
+        raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
+
+    return NormalizedChatRequest(
+        session_id=session_id,
+        user_content=read_last_user_message(messages),
+        model=model,
+        file_ids=[],
+        thinking=thinking,
+        source="legacy_messages",
+        messages=messages,
+    )
 
 
 def parse_messages_query(raw_messages: str) -> list[dict[str, Any]]:
@@ -666,41 +744,51 @@ async def stream_chat_reply(
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
-    chat_session = await resolve_chat_session(session_id, session)
-    selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(model)
+    parsed_messages = parse_messages_query(messages) if messages is not None else None
+    thinking_query = parse_thinking_query(thinking)
+    normalized_request = normalize_stream_chat_request(
+        session_id=session_id,
+        user_input=user_input,
+        model=model,
+        thinking=thinking_query,
+        file_ids=parse_file_ids_query(file_ids),
+        messages=parsed_messages,
+    )
+    chat_session = await resolve_chat_session(normalized_request.session_id, session)
+    selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(
+        normalized_request.model
+    )
     provider_client = build_provider_bound_client(
         selected_provider,
         deepseek_client,
         timeout=get_settings().deepseek_timeout_seconds,
     )
-    direct_user_input = read_user_input(user_input)
-    selected_file_ids = parse_file_ids_query(file_ids)
-    thinking_payload, reasoning_effort = normalize_deepseek_thinking(parse_thinking_query(thinking))
+    thinking_payload, reasoning_effort = normalize_deepseek_thinking(normalized_request.thinking)
     user_attachments: list[dict[str, Any]] = []
 
-    if direct_user_input is not None:
-        user_content = direct_user_input
-        user_attachments = await build_message_attachment_snapshots(session, selected_file_ids)
+    if normalized_request.source == "agent":
+        user_attachments = await build_message_attachment_snapshots(
+            session, normalized_request.file_ids
+        )
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
-            user_input=user_content,
-            file_ids=selected_file_ids,
+            user_input=normalized_request.user_content,
+            file_ids=normalized_request.file_ids,
             model_config={"model": selected_model_ref},
         )
         request_messages = agent_request.messages
     else:
-        if messages is None:
-            raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
-        request_messages = parse_messages_query(messages)
-        user_content = read_last_user_message(request_messages)
+        request_messages = normalized_request.messages or []
+
+    user_content = normalized_request.user_content
 
     async def event_stream() -> AsyncIterator[str]:
         chunks: list[str] = []
         usage: dict[str, Any] | None = None
 
         try:
-            if direct_user_input is not None:
+            if normalized_request.source == "agent":
                 assistant_text, suggestion, proposal = await request_agent_tool_reply(
                     deepseek_client=provider_client,
                     messages=request_messages,
@@ -779,35 +867,38 @@ async def request_chat_reply(
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> ChatReplyResponseSchema:
-    user_content = read_payload_user_content(payload)
-    chat_session = await resolve_chat_session(payload.sessionId, session)
-    selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(payload.model)
+    normalized_request = normalize_chat_request_payload(payload)
+    chat_session = await resolve_chat_session(normalized_request.session_id, session)
+    selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(
+        normalized_request.model
+    )
     provider_client = build_provider_bound_client(
         selected_provider,
         deepseek_client,
         timeout=get_settings().deepseek_timeout_seconds,
     )
-    thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
+    thinking_payload, reasoning_effort = normalize_deepseek_thinking(normalized_request.thinking)
     user_attachments: list[dict[str, Any]] = []
-    if payload.userInput is not None:
-        user_attachments = await build_message_attachment_snapshots(session, payload.fileIds)
+    if normalized_request.source == "agent":
+        user_attachments = await build_message_attachment_snapshots(
+            session, normalized_request.file_ids
+        )
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
-            user_input=user_content,
-            file_ids=payload.fileIds,
+            user_input=normalized_request.user_content,
+            file_ids=normalized_request.file_ids,
             model_config={"model": selected_model_ref},
         )
         request_messages = agent_request.messages
     else:
-        if payload.messages is None:
-            raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
-        request_messages = payload.messages
+        request_messages = normalized_request.messages or []
+    user_content = normalized_request.user_content
 
     try:
         proposal = None
         usage = None
-        if payload.userInput is not None:
+        if normalized_request.source == "agent":
             assistant_text, suggestion, proposal = await request_agent_tool_reply(
                 deepseek_client=provider_client,
                 messages=request_messages,
@@ -870,33 +961,32 @@ async def submit_background_chat_task(
     payload: ChatBackgroundRequestSchema,
     session: AsyncSession = Depends(get_db_session),
 ) -> ChatBackgroundSubmitResponseSchema:
-    user_content = read_user_input(payload.userInput)
+    normalized_request = normalize_chat_request_payload(payload)
     chat_session = await resolve_chat_session(session_id, session)
     user_attachments: list[dict[str, Any]] = []
-    if user_content is None:
-        if payload.messages is None:
-            raise HTTPException(status_code=422, detail="必须提供 userInput 或 messages")
-        user_content = read_last_user_message(payload.messages)
-        request_messages = payload.messages
+    if normalized_request.source == "legacy_messages":
+        request_messages = normalized_request.messages or []
     else:
-        selected_model_ref = payload.model
-        user_attachments = await build_message_attachment_snapshots(session, payload.fileIds)
+        selected_model_ref = normalized_request.model
+        user_attachments = await build_message_attachment_snapshots(
+            session, normalized_request.file_ids
+        )
         agent_request = await build_agent_request(
             session=session,
             session_id=chat_session.id,
-            user_input=user_content,
-            file_ids=payload.fileIds,
+            user_input=normalized_request.user_content,
+            file_ids=normalized_request.file_ids,
             model_config={"model": selected_model_ref} if selected_model_ref is not None else None,
         )
         request_messages = agent_request.messages
-    thinking_payload, reasoning_effort = normalize_deepseek_thinking(payload.thinking)
+    thinking_payload, reasoning_effort = normalize_deepseek_thinking(normalized_request.thinking)
     worker = get_background_worker()
     record = await worker.submit(
         session_id=session_id,
         messages=request_messages,
-        user_content=user_content,
+        user_content=normalized_request.user_content,
         user_attachments=user_attachments,
-        model=payload.model,
+        model=normalized_request.model,
         thinking=thinking_payload,
         reasoning_effort=reasoning_effort,
     )

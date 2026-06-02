@@ -222,6 +222,44 @@ async def test_reply_endpoint_keeps_phase2_messages_request_compatible(
     assert fake_client.calls[-1] == legacy_messages
 
 
+def test_normalize_chat_request_payload_unifies_agent_and_legacy_contracts() -> None:
+    agent_payload = chat_api.normalize_chat_request_payload(
+        payload=chat_api.ChatReplyRequestSchema(
+            sessionId=7,
+            userInput="  只看今天疲劳，明天要降容量吗？  ",
+            model="deepseek-chat",
+            fileIds=[3, 5],
+        )
+    )
+    legacy_payload = chat_api.normalize_chat_request_payload(
+        payload=chat_api.ChatReplyRequestSchema(
+            sessionId=7,
+            messages=[
+                {"role": "system", "content": "SYSTEM_PROMPT"},
+                {"role": "user", "content": "旧路径仍然可用吗？"},
+            ],
+            model="deepseek-chat",
+        )
+    )
+
+    assert agent_payload.source == "agent"
+    assert agent_payload.user_content == "只看今天疲劳，明天要降容量吗？"
+    assert agent_payload.session_id == 7
+    assert agent_payload.model == "deepseek-chat"
+    assert agent_payload.file_ids == [3, 5]
+    assert agent_payload.messages is None
+
+    assert legacy_payload.source == "legacy_messages"
+    assert legacy_payload.user_content == "旧路径仍然可用吗？"
+    assert legacy_payload.session_id == 7
+    assert legacy_payload.model == "deepseek-chat"
+    assert legacy_payload.file_ids == []
+    assert legacy_payload.messages == [
+        {"role": "system", "content": "SYSTEM_PROMPT"},
+        {"role": "user", "content": "旧路径仍然可用吗？"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_build_agent_request_includes_committed_proposal_status_in_recent_history(
     db_session: AsyncSession,
