@@ -214,6 +214,28 @@ def test_builds_tool_schema_in_openai_format() -> None:
     assert schema[0]["function"]["parameters"] == {"type": "object", "properties": {}}
 
 
+def test_builds_tool_schema_in_responses_format() -> None:
+    provider = OpenAICompatibleProvider(wire_api="responses")
+    schema = provider.build_tool_schema(
+        [
+            {
+                "name": "get_profile",
+                "description": "读取档案",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
+    )
+
+    assert schema == [
+        {
+            "type": "function",
+            "name": "get_profile",
+            "description": "读取档案",
+            "parameters": {"type": "object", "properties": {}},
+        }
+    ]
+
+
 def test_normalizes_chat_completions_tool_calls() -> None:
     provider = OpenAICompatibleProvider()
 

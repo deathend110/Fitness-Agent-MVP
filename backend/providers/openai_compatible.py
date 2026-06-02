@@ -87,6 +87,19 @@ class OpenAICompatibleProvider(ProviderAdapter):
         )
 
     def build_tool_schema(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # responses API 需要扁平的 function schema，不能继续复用 chat_completions
+        # 的嵌套 function 结构，否则中转站会直接返回 400。
+        if self.wire_api == "responses":
+            return [
+                {
+                    "type": "function",
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["parameters"],
+                }
+                for tool in tools
+            ]
+
         return [
             {
                 "type": "function",
