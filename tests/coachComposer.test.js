@@ -161,6 +161,13 @@ test('CoachTab 会从 message.suggestion 恢复采纳卡片并在处理后持久
   assert.match(source, /handleDismissSuggestion\(targetSuggestion\)/)
 })
 
+test('CoachTab 采纳成功后只做本地隐藏，不会再复用忽略接口请求', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /persistHideSuggestion\(targetSuggestion\)/)
+  assert.doesNotMatch(source, /await handleDismissSuggestion\(targetSuggestion\)/)
+})
+
 test('CoachTab 对同一卡片采纳请求有 in-flight 去重保护', () => {
   const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
 

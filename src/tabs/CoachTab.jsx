@@ -845,6 +845,19 @@ function CoachTab({
     )
   }
 
+  function hideSuggestionLocally(targetSuggestion) {
+    const commitKey = getSuggestionCommitKey(targetSuggestion)
+
+    persistHideSuggestion(targetSuggestion)
+    setMessageMeta((currentMeta) =>
+      currentMeta.map((entry) =>
+        getSuggestionCommitKey(entry?.suggestion) === commitKey
+          ? { ...entry, isDismissed: true, suggestion: null }
+          : entry,
+      ),
+    )
+  }
+
   function persistHideSuggestion(targetSuggestion) {
     const commitKey = getSuggestionCommitKey(targetSuggestion)
 
@@ -892,7 +905,7 @@ function CoachTab({
 
       onWeeklyPlanChange((currentPlan) => mergeCommittedWeeklyPlan(currentPlan, adoptResult.plan))
       setErrorMessage('')
-      await handleDismissSuggestion(targetSuggestion)
+      hideSuggestionLocally(targetSuggestion)
     } catch (error) {
       setErrorMessage(error?.message || '采纳建议失败，请确认本地后端服务已启动。')
     } finally {
