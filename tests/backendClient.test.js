@@ -35,6 +35,15 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
     day: 'Monday',
     changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.7 }],
   })
+  await client.commitCoachSuggestion({
+    proposalId: 'proposal-compat-1',
+    day: 'Monday',
+    changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.7 }],
+  })
+  await client.commitCoachSuggestion({
+    day: 'Tuesday',
+    changes: [{ action: 'update', exerciseName: '卧推', field: 'pct', newValue: 0.72 }],
+  })
   await client.proposePlanChange({
     sessionId: 1,
     day: 'Monday',
@@ -69,31 +78,40 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
     day: 'Monday',
     changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.7 }],
   })
-  assert.equal(requests[3].url, 'http://127.0.0.1:8000/api/tools/plan/propose')
+  assert.equal(requests[3].url, 'http://127.0.0.1:8000/api/tools/plan/commit')
   assert.equal(requests[3].options.method, 'POST')
-  assert.equal(requests[4].url, 'http://127.0.0.1:8000/api/tools/plan/commit')
-  assert.deepEqual(JSON.parse(requests[4].options.body), { proposalId: 'proposal-1' })
-  assert.equal(requests[5].url, 'http://127.0.0.1:8000/api/daily-log/2026-05-31')
-  assert.equal(requests[5].options.method, 'PUT')
-  assert.deepEqual(JSON.parse(requests[5].options.body), { tdeeManual: 2600 })
-  assert.equal(requests[6].url, 'http://127.0.0.1:8000/api/models')
-  assert.equal(requests[6].options.method, 'GET')
-  assert.equal(requests[7].url, 'http://127.0.0.1:8000/api/chat/sessions/default')
-  assert.equal(requests[8].url, 'http://127.0.0.1:8000/api/chat/sessions')
+  assert.deepEqual(JSON.parse(requests[3].options.body), { proposalId: 'proposal-compat-1' })
+  assert.equal(requests[4].url, 'http://127.0.0.1:8000/api/weekly-plan/adopt')
+  assert.equal(requests[4].options.method, 'POST')
+  assert.deepEqual(JSON.parse(requests[4].options.body), {
+    day: 'Tuesday',
+    changes: [{ action: 'update', exerciseName: '卧推', field: 'pct', newValue: 0.72 }],
+  })
+  assert.equal(requests[5].url, 'http://127.0.0.1:8000/api/tools/plan/propose')
+  assert.equal(requests[5].options.method, 'POST')
+  assert.equal(requests[6].url, 'http://127.0.0.1:8000/api/tools/plan/commit')
+  assert.deepEqual(JSON.parse(requests[6].options.body), { proposalId: 'proposal-1' })
+  assert.equal(requests[7].url, 'http://127.0.0.1:8000/api/daily-log/2026-05-31')
+  assert.equal(requests[7].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(requests[7].options.body), { tdeeManual: 2600 })
+  assert.equal(requests[8].url, 'http://127.0.0.1:8000/api/models')
   assert.equal(requests[8].options.method, 'GET')
-  assert.equal(requests[9].url, 'http://127.0.0.1:8000/api/chat/sessions')
-  assert.equal(requests[9].options.method, 'POST')
-  assert.deepEqual(JSON.parse(requests[9].options.body), { title: '训练复盘' })
-  assert.equal(requests[10].url, 'http://127.0.0.1:8000/api/chat/sessions/12')
-  assert.equal(requests[10].options.method, 'DELETE')
-  assert.equal(requests[11].url, 'http://127.0.0.1:8000/api/chat/sessions/12/messages')
-  assert.equal(requests[11].options.method, 'GET')
-  assert.equal(requests[12].url, 'http://127.0.0.1:8000/api/files/99')
-  assert.equal(requests[13].url, 'http://127.0.0.1:8000/api/chat/sessions/12/draft')
-  assert.equal(requests[14].url, 'http://127.0.0.1:8000/api/chat/sessions/12/draft')
-  assert.equal(requests[14].options.method, 'PUT')
-  assert.deepEqual(JSON.parse(requests[14].options.body), { content: 'hello', attachedFileIds: [1] })
-  assert.equal(requests[15].url, 'http://127.0.0.1:8000/api/metrics/daily-summary?date=2026-06-01')
+  assert.equal(requests[9].url, 'http://127.0.0.1:8000/api/chat/sessions/default')
+  assert.equal(requests[10].url, 'http://127.0.0.1:8000/api/chat/sessions')
+  assert.equal(requests[10].options.method, 'GET')
+  assert.equal(requests[11].url, 'http://127.0.0.1:8000/api/chat/sessions')
+  assert.equal(requests[11].options.method, 'POST')
+  assert.deepEqual(JSON.parse(requests[11].options.body), { title: '训练复盘' })
+  assert.equal(requests[12].url, 'http://127.0.0.1:8000/api/chat/sessions/12')
+  assert.equal(requests[12].options.method, 'DELETE')
+  assert.equal(requests[13].url, 'http://127.0.0.1:8000/api/chat/sessions/12/messages')
+  assert.equal(requests[13].options.method, 'GET')
+  assert.equal(requests[14].url, 'http://127.0.0.1:8000/api/files/99')
+  assert.equal(requests[15].url, 'http://127.0.0.1:8000/api/chat/sessions/12/draft')
+  assert.equal(requests[16].url, 'http://127.0.0.1:8000/api/chat/sessions/12/draft')
+  assert.equal(requests[16].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(requests[16].options.body), { content: 'hello', attachedFileIds: [1] })
+  assert.equal(requests[17].url, 'http://127.0.0.1:8000/api/metrics/daily-summary?date=2026-06-01')
 })
 
 test('createBackendClient 会把 HTTP 错误归一成可展示异常', async () => {

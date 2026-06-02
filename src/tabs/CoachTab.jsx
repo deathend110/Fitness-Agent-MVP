@@ -891,12 +891,7 @@ function CoachTab({
 
     try {
       const client = createBackendClient()
-      const adoptResult = targetSuggestion?.proposalId
-        ? await client.commitPlanChange({ proposalId: targetSuggestion.proposalId })
-        : await client.adoptWeeklyPlanChange({
-            day: targetSuggestion?.day,
-            changes: targetSuggestion?.changes,
-          })
+      const adoptResult = await client.commitCoachSuggestion(targetSuggestion)
 
       if (!adoptResult.ok) {
         setErrorMessage(adoptResult.message)

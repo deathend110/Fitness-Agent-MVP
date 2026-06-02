@@ -179,6 +179,25 @@ export function createBackendClient(options = {}) {
     adoptWeeklyPlanChange(payload, { signal } = {}) {
       return request('/weekly-plan/adopt', { method: 'POST', body: payload, signal })
     },
+    commitCoachSuggestion(suggestion, { signal } = {}) {
+      // AI 教练主流程统一优先走 proposal commit；只有历史 suggestion 缺少 proposalId 时才回退 legacy adopt 壳。
+      if (suggestion?.proposalId) {
+        return request('/tools/plan/commit', {
+          method: 'POST',
+          body: { proposalId: suggestion.proposalId },
+          signal,
+        })
+      }
+
+      return request('/weekly-plan/adopt', {
+        method: 'POST',
+        body: {
+          day: suggestion?.day,
+          changes: Array.isArray(suggestion?.changes) ? suggestion.changes : [],
+        },
+        signal,
+      })
+    },
     proposePlanChange(payload, { signal } = {}) {
       return request('/tools/plan/propose', { method: 'POST', body: payload, signal })
     },
