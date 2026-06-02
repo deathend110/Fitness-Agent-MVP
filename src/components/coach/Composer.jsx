@@ -47,7 +47,6 @@ function Composer({
       <div className="rounded-[22px] border border-fitloop-line bg-fitloop-panel shadow-[0_4px_24px_rgba(30,40,80,0.09)] transition hover:border-fitloop-orange/35 focus-within:border-fitloop-orange focus-within:shadow-[0_0_0_4px_rgba(109,94,252,0.10),0_4px_24px_rgba(30,40,80,0.09)]">
         <textarea
           className="min-h-[48px] max-h-[160px] w-full resize-none border-0 bg-transparent px-5 pb-2 pt-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
-          disabled={isSending}
           onChange={(event) => onDraftChange?.(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
@@ -59,7 +58,7 @@ function Composer({
         <div className="flex items-center justify-between gap-3 px-3 pb-3">
           <FileAttachmentTray
             attachedFiles={attachedFiles}
-            disabled={isSending || isUploading}
+            disabled={isUploading}
             isUploading={isUploading}
             onFilesSelected={onFilesSelected}
             onRemoveFile={onRemoveFile}
@@ -67,7 +66,6 @@ function Composer({
 
           <div className="flex items-center gap-1.5">
             <ModelSelector
-              disabled={isSending}
               models={modelOptions}
               onModelChange={onModelChange}
               onThinkingChange={onThinkingChange}

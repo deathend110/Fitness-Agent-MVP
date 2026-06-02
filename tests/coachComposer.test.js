@@ -23,6 +23,16 @@ test('FileAttachmentTray 源码包含上传状态、文件 chip 和删除契约'
   assert.match(source, /parserStatus/)
 })
 
+test('Composer 发送中不再锁定输入框、模型选择、思考开关和已挂载附件操作', () => {
+  const source = readFileSync('src/components/coach/Composer.jsx', 'utf-8')
+
+  assert.doesNotMatch(source, /<textarea[\s\S]*disabled=\{isSending\}/)
+  assert.doesNotMatch(source, /<ModelSelector[\s\S]*disabled=\{isSending\}/)
+  assert.doesNotMatch(source, /<FileAttachmentTray[\s\S]*disabled=\{isSending \|\| isUploading\}/)
+  assert.match(source, /<FileAttachmentTray[\s\S]*disabled=\{isUploading\}/)
+  assert.match(source, /disabled=\{!draft\.trim\(\) \|\| isSending \|\| isUploading\}/)
+})
+
 test('Coach 请求会携带模型和 thinking 配置', async () => {
   await requestCoachReply(
     {
