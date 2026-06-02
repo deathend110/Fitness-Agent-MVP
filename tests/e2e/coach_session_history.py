@@ -159,6 +159,11 @@ def install_backend_mock(page, sessions, created_sessions):
     page.route("http://127.0.0.1:8000/api/**", handle_api)
 
 
+def session_switch_button(page, title):
+    # 仅匹配会话卡片里可见的标题文本，避免误命中带同名 aria-label 的删除按钮。
+    return page.get_by_role("button").filter(has_text=title)
+
+
 def main():
     sessions = [dict(item) for item in SESSIONS]
     created_sessions = []
@@ -172,19 +177,19 @@ def main():
         page.goto(APP_URL)
         page.get_by_role("button", name="AI 教练").click()
 
-        expect(page.get_by_role("button", name="腿日复盘")).to_be_visible(timeout=10_000)
-        expect(page.get_by_role("button", name="默认对话")).to_be_visible(timeout=10_000)
+        expect(session_switch_button(page, "腿日复盘")).to_be_visible(timeout=10_000)
+        expect(session_switch_button(page, "默认对话")).to_be_visible(timeout=10_000)
         expect(page.get_by_text("腿日复盘的问题")).to_be_visible(timeout=10_000)
         expect(page.get_by_text("腿日复盘的回答")).to_be_visible(timeout=10_000)
 
-        page.get_by_role("button", name="默认对话").click()
+        session_switch_button(page, "默认对话").click()
         expect(page.get_by_text("默认会话的问题")).to_be_visible(timeout=10_000)
         expect(page.get_by_text("腿日复盘的问题")).not_to_be_visible(timeout=10_000)
 
         page.get_by_role("button", name="新建对话").click()
-        expect(page.get_by_role("button", name="新对话")).to_be_visible(timeout=10_000)
-        expect(page.get_by_role("button", name="腿日复盘")).to_be_visible(timeout=10_000)
-        expect(page.get_by_role("button", name="默认对话")).to_be_visible(timeout=10_000)
+        expect(session_switch_button(page, "新对话")).to_be_visible(timeout=10_000)
+        expect(session_switch_button(page, "腿日复盘")).to_be_visible(timeout=10_000)
+        expect(session_switch_button(page, "默认对话")).to_be_visible(timeout=10_000)
         expect(page.get_by_text("默认会话的问题")).not_to_be_visible(timeout=10_000)
 
         assert created_sessions == [
