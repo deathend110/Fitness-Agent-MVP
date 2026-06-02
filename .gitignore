@@ -10,6 +10,7 @@ dist/
 backend/.env
 backend/data/
 backend/config/model_providers.json
+backend/config/
 backend/__pycache__/
 backend/files/__pycache__/
 backend/files/parsers/__pycache__/
