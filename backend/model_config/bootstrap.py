@@ -23,7 +23,9 @@ def bootstrap_legacy_deepseek_config(legacy_settings: Mapping[str, Any]) -> Mode
     """把旧版平铺 DeepSeek 环境变量转换成首份独立 JSON 配置。"""
 
     api_key = str(legacy_settings.get("deepseek_api_key") or "").strip()
-    base_url = str(legacy_settings.get("deepseek_base_url") or "https://api.deepseek.com").strip()
+    # 迁移默认接入点到 /v1，便于新生成的 JSON 直接走 append_v1 规则；
+    # 但这里只影响首次 bootstrap，已有 JSON 仍按原文件内容读取，不会被强制改写。
+    base_url = str(legacy_settings.get("deepseek_base_url") or "https://api.deepseek.com/v1").strip()
     default_model = str(legacy_settings.get("default_model") or "deepseek-v4-flash").strip()
     model_ids = _normalize_model_ids(legacy_settings.get("model_allowlist"), default_model)
 
@@ -35,7 +37,7 @@ def bootstrap_legacy_deepseek_config(legacy_settings: Mapping[str, Any]) -> Mode
         api_key=api_key or None,
         base_url=base_url,
         wire_api="chat_completions",
-        api_path_mode="raw_root",
+        api_path_mode="append_v1",
         selected_models=[
             SelectedModelConfig(remote_id=model_id, label=model_id, enabled=True) for model_id in model_ids
         ],

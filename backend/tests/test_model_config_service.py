@@ -51,7 +51,6 @@ def test_bootstraps_legacy_deepseek_env_when_json_missing(tmp_path: Path) -> Non
         config_path=config_file,
         legacy_settings={
             "deepseek_api_key": "sk-legacy",
-            "deepseek_base_url": "https://api.deepseek.com",
             "default_model": "deepseek-v4-flash",
             "model_allowlist": ["deepseek-v4-flash", "deepseek-v4-pro"],
             "default_thinking_enabled": False,
@@ -63,7 +62,8 @@ def test_bootstraps_legacy_deepseek_env_when_json_missing(tmp_path: Path) -> Non
 
     assert config.providers[0].id == "provider_deepseek_default"
     assert config.providers[0].wire_api == "chat_completions"
-    assert config.providers[0].api_path_mode == "raw_root"
+    assert config.providers[0].api_path_mode == "append_v1"
+    assert config.providers[0].base_url == "https://api.deepseek.com/v1"
     assert config.default_model_ref == "provider_deepseek_default::deepseek-v4-flash"
     assert config_file.exists()
 
@@ -76,7 +76,7 @@ def test_bootstraps_live_settings_when_legacy_settings_not_provided(
     fake_settings = SimpleNamespace(
         model_provider_config_path=str(config_file),
         deepseek_api_key="sk-live",
-        deepseek_base_url="https://api.deepseek.com",
+        deepseek_base_url="https://api.deepseek.com/v1",
         default_model="deepseek-v4-flash",
         model_allowlist=["deepseek-v4-flash", "deepseek-v4-pro"],
         default_thinking_enabled=False,
@@ -88,6 +88,8 @@ def test_bootstraps_live_settings_when_legacy_settings_not_provided(
     config = service.load()
 
     assert config.providers[0].id == "provider_deepseek_default"
+    assert config.providers[0].api_path_mode == "append_v1"
+    assert config.providers[0].base_url == "https://api.deepseek.com/v1"
     assert config.default_model_ref == "provider_deepseek_default::deepseek-v4-flash"
     assert config_file.exists()
 
@@ -100,7 +102,7 @@ def test_bootstraps_live_settings_even_when_deepseek_api_key_is_empty(
     fake_settings = SimpleNamespace(
         model_provider_config_path=str(config_file),
         deepseek_api_key="",
-        deepseek_base_url="https://api.deepseek.com",
+        deepseek_base_url="https://api.deepseek.com/v1",
         default_model="deepseek-v4-flash",
         model_allowlist=["deepseek-v4-flash", "deepseek-v4-pro"],
         default_thinking_enabled=False,
@@ -111,12 +113,57 @@ def test_bootstraps_live_settings_even_when_deepseek_api_key_is_empty(
     service = ModelProviderConfigService()
     config = service.load()
 
-    assert config.providers[0].base_url == "https://api.deepseek.com"
+    assert config.providers[0].api_path_mode == "append_v1"
+    assert config.providers[0].base_url == "https://api.deepseek.com/v1"
     assert [model.remote_id for model in config.providers[0].selected_models] == [
         "deepseek-v4-flash",
         "deepseek-v4-pro",
     ]
     assert config_file.exists()
+
+
+def test_load_keeps_existing_legacy_json_unchanged(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    legacy_payload = {
+        "version": 1,
+        "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
+        "providers": [
+            {
+                "id": "provider_deepseek_main",
+                "type": "openai_compatible",
+                "label": "DeepSeek 旧配置",
+                "enabled": True,
+                "apiKey": "sk-legacy",
+                "baseUrl": "https://api.deepseek.com",
+                "wireApi": "chat_completions",
+                "apiPathMode": "raw_root",
+                "selectedModels": [
+                    {"remoteId": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "enabled": True}
+                ],
+            }
+        ],
+    }
+    original_text = json.dumps(legacy_payload, ensure_ascii=False, indent=2) + "\n"
+    config_file.write_text(original_text, encoding="utf-8")
+
+    service = ModelProviderConfigService(
+        config_path=config_file,
+        legacy_settings={
+            "deepseek_api_key": "sk-new",
+            "deepseek_base_url": "https://api.deepseek.com/v1",
+            "default_model": "deepseek-v4-flash",
+            "model_allowlist": ["deepseek-v4-flash", "deepseek-v4-pro"],
+            "default_thinking_enabled": False,
+            "default_thinking_budget": "auto",
+        },
+    )
+
+    config = service.load()
+
+    assert config.providers[0].base_url == "https://api.deepseek.com"
+    assert config.providers[0].api_path_mode == "raw_root"
+    assert config.providers[0].wire_api == "chat_completions"
+    assert config_file.read_text(encoding="utf-8") == original_text
 
 
 def test_constructor_skips_global_settings_when_explicit_inputs_are_provided(monkeypatch, tmp_path: Path) -> None:
