@@ -622,9 +622,12 @@ def build_provider_bound_client(
 ) -> Any:
     """按 provider 类型与 wire 配置选择真正的聊天客户端。"""
 
+    # 兼容旧测试替身和显式注入的新 runtime client：如果 fallback 不是 legacy DeepSeekClient，
+    # 说明调用方已经明确给出了要走的客户端实例，这里直接透传，不做二次路由。
     if not isinstance(fallback_client, DeepSeekClient):
         return fallback_client
 
+    # 没有 provider runtime 时继续保留旧链路，确保历史调用点与异常兜底不被破坏。
     if provider is None:
         return fallback_client
 
@@ -632,6 +635,7 @@ def build_provider_bound_client(
     api_key = str(getattr(provider, "api_key", "") or "").strip()
     base_url = str(getattr(provider, "base_url", "") or "").strip()
     provider_label = str(getattr(provider, "label", "") or "").strip()
+    # provider runtime 还没给出有效凭据时，不能强行切新 runtime，否则会把 fallback 能力也丢掉。
     if not api_key or not base_url:
         return fallback_client
 
@@ -646,19 +650,8 @@ def build_provider_bound_client(
         return fallback_client
 
     wire_api, api_path_mode = read_openai_compatible_provider_wire_config(provider)
-    lowered_base_url = base_url.lower()
-    is_legacy_deepseek = (
-        "deepseek.com" in lowered_base_url
-        and wire_api == "chat_completions"
-        and api_path_mode == "raw_root"
-    )
-    if is_legacy_deepseek:
-        return DeepSeekClient(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
-        )
-
+    # DeepSeek 也统一按 OpenAI-compatible runtime 绑定，前台聊天、流式输出和后台任务
+    # 都复用同一套 provider-aware 选路；legacy DeepSeekClient 仅作为没有 runtime 时的 fallback。
     return OpenAICompatibleRuntimeClient(
         api_key=api_key,
         base_url=base_url,

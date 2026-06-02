@@ -10,8 +10,10 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from backend.agent.chat_session import OpenAICompatibleRuntimeClient, build_provider_bound_client
 from backend.agent.adopt_plan import clear_plan_change_proposals
 from backend.agent.deepseek_client import DeepSeekChatResult, DeepSeekClient
+from backend.agent.tool_loop import ToolLoopResult
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base, UploadedFile, utc_now
@@ -159,6 +161,83 @@ class FakeOpenAICompatibleResponsesBackgroundClient:
                 ],
             }
         return {"output_text": self.final_text, "output": []}
+
+
+class FakeAsyncHttpxResponse:
+    def __init__(
+        self,
+        *,
+        payload: dict[str, Any] | None = None,
+        lines: list[str] | None = None,
+        status_code: int = 200,
+        reason_phrase: str = "OK",
+    ) -> None:
+        self._payload = payload or {}
+        self._lines = lines or []
+        self.status_code = status_code
+        self.reason_phrase = reason_phrase
+        self.is_success = 200 <= status_code < 300
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+class FakeAsyncHttpxStreamContext:
+    def __init__(self, response: FakeAsyncHttpxResponse) -> None:
+        self.response = response
+
+    async def __aenter__(self) -> FakeAsyncHttpxResponse:
+        return self.response
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+class FakeAsyncHttpxClient:
+    def __init__(
+        self,
+        *,
+        post_response: FakeAsyncHttpxResponse | None = None,
+        stream_response: FakeAsyncHttpxResponse | None = None,
+        recorder: list[dict[str, Any]] | None = None,
+        **_: Any,
+    ) -> None:
+        self.post_response = post_response or FakeAsyncHttpxResponse()
+        self.stream_response = stream_response or FakeAsyncHttpxResponse(lines=["data: [DONE]"])
+        self.recorder = recorder if recorder is not None else []
+
+    async def __aenter__(self) -> "FakeAsyncHttpxClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    async def post(self, url: str, *, json: dict[str, Any], headers: dict[str, Any]) -> FakeAsyncHttpxResponse:
+        self.recorder.append({"kind": "post", "url": url, "json": json, "headers": headers})
+        return self.post_response
+
+    def stream(
+        self,
+        method: str,
+        url: str,
+        *,
+        json: dict[str, Any],
+        headers: dict[str, Any],
+    ) -> FakeAsyncHttpxStreamContext:
+        self.recorder.append(
+            {
+                "kind": "stream",
+                "method": method,
+                "url": url,
+                "json": json,
+                "headers": headers,
+            }
+        )
+        return FakeAsyncHttpxStreamContext(self.stream_response)
 
 
 class FakeDayPlanProposalClient:
@@ -768,3 +847,160 @@ async def test_background_task_returns_provider_aware_error_message_for_openai_p
     assert result["status"] == "failed"
     assert "OpenAI 请求失败" in result["message"]
     assert "DeepSeek" not in result["message"]
+
+
+def test_background_worker_build_client_keeps_legacy_fallback_when_provider_missing() -> None:
+    fallback_client = DeepSeekClient(api_key="sk-test", base_url="https://api.deepseek.com")
+    worker = chat_api.BackgroundWorker(
+        session_factory=None,  # type: ignore[arg-type]
+        client_factory=lambda: fallback_client,
+    )
+
+    client = worker._build_client_for_provider(None, fallback_client)
+
+    assert client is fallback_client
+
+
+def test_build_provider_bound_client_prefers_openai_compatible_runtime_for_deepseek_provider_in_worker() -> None:
+    fallback_client = DeepSeekClient(api_key="sk-test", base_url="https://api.deepseek.com")
+    provider = type(
+        "Provider",
+        (),
+        {
+            "type": "openai_compatible",
+            "api_key": "sk-provider",
+            "base_url": "https://api.deepseek.com",
+            "wire_api": "chat_completions",
+            "api_path_mode": "raw_root",
+            "label": "DeepSeek 主账号",
+        },
+    )()
+
+    client = build_provider_bound_client(provider, fallback_client)
+
+    assert isinstance(client, OpenAICompatibleRuntimeClient)
+    assert not isinstance(client, DeepSeekClient)
+
+
+@pytest.mark.asyncio
+async def test_background_task_uses_openai_compatible_runtime_when_runtime_default_is_deepseek_model_ref(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+    monkeypatch,
+) -> None:
+    client, _legacy_client = api_client
+    session_id = (await client.post("/api/chat/sessions", json={"title": "deepseek-runtime-default"})).json()["id"]
+    observed_clients: list[Any] = []
+    runtime_requests: list[dict[str, Any]] = []
+    fallback_requests: list[dict[str, Any]] = []
+
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-chat"
+
+        def resolve_model_ref(self, model_ref: str):
+            assert model_ref == "provider_deepseek_main::deepseek-chat"
+            return (
+                type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-provider",
+                        "base_url": "https://api.deepseek.com",
+                        "wire_api": "chat_completions",
+                        "api_path_mode": "raw_root",
+                        "label": "DeepSeek 主账号",
+                    },
+                )(),
+                "deepseek-chat",
+            )
+
+    fallback_client = DeepSeekClient(
+        api_key="sk-fallback",
+        base_url="https://api.deepseek.com",
+        client_factory=lambda **kwargs: FakeAsyncHttpxClient(
+            recorder=fallback_requests,
+            post_response=FakeAsyncHttpxResponse(
+                payload={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "legacy fallback reply",
+                            }
+                        }
+                    ]
+                }
+            ),
+            **kwargs,
+        ),
+    )
+
+    async def fake_run_tool_calling_chat(
+        *,
+        deepseek_client: Any,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> ToolLoopResult:
+        observed_clients.append(deepseek_client)
+        result = await deepseek_client.request_chat_with_usage(
+            messages=messages,
+            model=model,
+        )
+        return ToolLoopResult(
+            content=result.content,
+            messages=messages,
+            tool_rounds=0,
+            proposals=[],
+        )
+
+    monkeypatch.setattr("backend.agent.background_worker.run_tool_calling_chat", fake_run_tool_calling_chat)
+    from backend.agent import background_worker as background_worker_module
+
+    original_build_provider_bound_client = background_worker_module.build_provider_bound_client
+
+    def build_runtime_client(provider, fallback_client, timeout=None):
+        runtime_client = original_build_provider_bound_client(
+            provider,
+            fallback_client,
+            timeout=timeout or 30.0,
+        )
+        if isinstance(runtime_client, OpenAICompatibleRuntimeClient):
+            runtime_client.client_factory = lambda **kwargs: FakeAsyncHttpxClient(
+                recorder=runtime_requests,
+                post_response=FakeAsyncHttpxResponse(
+                    payload={
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "DeepSeek 后台运行时回复。",
+                                }
+                            }
+                        ]
+                    }
+                ),
+                **kwargs,
+            )
+        return runtime_client
+
+    monkeypatch.setattr("backend.agent.background_worker.build_provider_bound_client", build_runtime_client)
+    chat_api.initialize_background_worker(
+        session_factory=chat_api.background_worker.session_factory,
+        client_factory=lambda: fallback_client,
+        runtime_provider=lambda: FakeRuntime(),
+    )
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={"messages": build_messages("第一条问题")},
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+    assert result["result"]["text"] == "DeepSeek 后台运行时回复。"
+    assert isinstance(observed_clients[0], OpenAICompatibleRuntimeClient)
+    assert runtime_requests[0]["kind"] == "post"
+    assert runtime_requests[0]["url"] == "https://api.deepseek.com/chat/completions"
+    assert runtime_requests[0]["json"]["model"] == "deepseek-chat"
+    assert fallback_requests == []
