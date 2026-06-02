@@ -129,6 +129,7 @@ HTTPS_PROXY=
 - `GET /api/models` 现在返回带 `provider::remoteModel` 形式的 `modelRef`，聊天、草稿和后台任务会统一按这个引用解析真实模型
 - 选择 Gemini 模型后，`/api/chat/reply` 与 `/api/chat/stream` 会直接实例化 Gemini 运行时客户端；如果仍看到 DeepSeek 模型名相关报错，通常说明当前进程还没有加载到最新代码
 - AI 教练工具调用现在分为两条运行时链路：OpenAI-compatible `chat_completions` 会按 `assistant(tool_calls) -> tool` 顺序补齐消息，OpenAI-compatible `responses` 会按 `function_call -> function_call_output` 回环，Gemini-native 会按官方 `functionCall -> functionResponse` 结构继续下一轮请求
+- Gemini-native 工具调用现在会把内部 `tool_choice` 映射到官方 `toolConfig.functionCallingConfig`，并兼容 Gemini 风格的单日计划字段（如 `exerciseName / time / unit`），避免计划卡存在但名称或时长信息写回丢失
 - `GET/PUT /api/model-config` 会读取和保存脱敏后的多供应商模型配置；保存后后端会立即刷新运行时缓存，不需要重启服务
 - `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表
 - OpenAI-compatible Provider 的测试连接、模型发现、配置保存与回显都会携带 `wireApi` / `apiPathMode`；旧版 DeepSeek bootstrap 默认补成 `chat_completions + raw_root`

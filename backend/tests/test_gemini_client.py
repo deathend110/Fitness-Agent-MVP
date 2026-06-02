@@ -91,6 +91,82 @@ async def test_gemini_native_client_requests_generate_content_and_reads_text() -
 
 
 @pytest.mark.asyncio
+async def test_gemini_native_client_maps_auto_tool_choice_to_function_calling_config() -> None:
+    request_snapshot: dict[str, object] = {}
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def post(
+            self,
+            url: str,
+            *,
+            params: dict[str, str] | None = None,
+            json: dict[str, object] | None = None,
+            headers: dict[str, str] | None = None,
+        ):
+            request_snapshot["url"] = url
+            request_snapshot["params"] = params or {}
+            request_snapshot["json"] = json or {}
+            request_snapshot["headers"] = headers or {}
+
+            class Response:
+                status_code = 200
+                is_success = True
+
+                def json(self) -> dict[str, object]:
+                    return {
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "functionCall": {
+                                                "name": "get_weekly_plan",
+                                                "args": {},
+                                                "id": "call_weekly",
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+
+            return Response()
+
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=lambda **_: FakeClient(),
+    )
+    await client.generate_content_raw(
+        messages=[{"role": "user", "content": "先读取本周计划"}],
+        model="gemini-2.5-flash",
+        tools=[
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "get_weekly_plan",
+                        "description": "读取当前周计划",
+                        "parameters": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        ],
+        tool_choice="auto",
+    )
+
+    assert request_snapshot["json"]["toolConfig"] == {
+        "functionCallingConfig": {"mode": "AUTO"}
+    }
+
+
+@pytest.mark.asyncio
 async def test_gemini_native_client_streams_single_full_text_event() -> None:
     class FakeClient:
         async def __aenter__(self) -> "FakeClient":
@@ -213,13 +289,22 @@ async def test_chat_reply_routes_gemini_model_ref_to_gemini_client(
                         "type": "gemini_native",
                         "api_key": "AIza-test",
                         "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                        "label": "Gemini",
                     },
                 )(),
                 "gemini-2.5-flash",
             )
 
-    monkeypatch.setattr(chat_api, "GeminiNativeClient", FakeGeminiClient)
     monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(
+        chat_api,
+        "build_provider_bound_client",
+        lambda provider, fallback_client, timeout=None: FakeGeminiClient(
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            timeout=timeout or 30.0,
+        ),
+    )
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: DeepSeekClient(
         api_key="sk-test",
         base_url="https://api.deepseek.com",

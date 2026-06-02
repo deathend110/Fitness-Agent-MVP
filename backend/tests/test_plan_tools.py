@@ -119,6 +119,32 @@ def build_day_plan_payload() -> dict:
     }
 
 
+def build_gemini_day_plan_payload() -> dict:
+    return {
+        "type": "active_recovery/aerobic_core",
+        "exercises": [
+            {
+                "exerciseName": "慢跑/快走",
+                "time": 30,
+                "unit": "分钟",
+                "sets": 1,
+            },
+            {
+                "exerciseName": "平板支撑",
+                "time": 60,
+                "unit": "秒",
+                "sets": 3,
+            },
+            {
+                "exerciseName": "俄罗斯转体",
+                "reps": 20,
+                "unit": "次",
+                "sets": 3,
+            },
+        ],
+    }
+
+
 @pytest.mark.asyncio
 async def test_plan_proposal_does_not_write_weekly_plan(api_client: AsyncClient) -> None:
     original_plan = build_weekly_plan()
@@ -196,6 +222,36 @@ def test_commit_day_plan_replace_overwrites_target_day() -> None:
     assert committed.next_plan["Monday"]["type"] == "腿日"
     assert committed.next_plan["Monday"]["exercises"][0]["sets"] == 3
     assert committed.next_plan["Monday"]["exercises"][0]["rpe"] == 7
+
+
+def test_gemini_style_day_plan_replace_preserves_name_and_duration_note() -> None:
+    plan = build_weekly_plan()
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="改成有氧加核心恢复",
+        day_plan=build_gemini_day_plan_payload(),
+    )
+
+    committed = commit_plan_proposal(
+        current_plan=plan,
+        proposal_id=proposal.proposal_id,
+        confirmed_by_user=True,
+    )
+
+    first_exercise = proposal.card["dayPlan"]["exercises"][0]
+    committed_first_exercise = committed.next_plan["Monday"]["exercises"][0]
+    committed_second_exercise = committed.next_plan["Monday"]["exercises"][1]
+
+    assert proposal.validation.ok is True
+    assert first_exercise["name"] == "慢跑/快走"
+    assert "30 分钟" in first_exercise["note"]
+    assert committed.ok is True
+    assert committed_first_exercise["name"] == "慢跑/快走"
+    assert "30 分钟" in committed_first_exercise["note"]
+    assert committed_second_exercise["name"] == "平板支撑"
+    assert "60 秒" in committed_second_exercise["note"]
 
 
 @pytest.mark.asyncio

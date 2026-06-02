@@ -243,8 +243,62 @@ class GeminiNativeClient:
                 payload["tools"] = [tools]
             else:
                 payload["tools"] = tools
-        del thinking, tool_choice, reasoning_effort
+        tool_config = self._build_tool_config(tool_choice)
+        if tool_config is not None:
+            payload["toolConfig"] = tool_config
+        del thinking, reasoning_effort
         return payload
+
+    @staticmethod
+    def _build_tool_config(tool_choice: str | dict[str, Any] | None) -> dict[str, Any] | None:
+        if tool_choice is None:
+            return None
+
+        function_calling_config = GeminiNativeClient._build_function_calling_config(tool_choice)
+        if function_calling_config is None:
+            return None
+        return {"functionCallingConfig": function_calling_config}
+
+    @staticmethod
+    def _build_function_calling_config(
+        tool_choice: str | dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if tool_choice is None:
+            return None
+
+        if isinstance(tool_choice, str):
+            normalized = tool_choice.strip().lower()
+            if not normalized:
+                return None
+            if normalized == "auto":
+                return {"mode": "AUTO"}
+            if normalized == "none":
+                return {"mode": "NONE"}
+            if normalized in {"required", "any"}:
+                return {"mode": "ANY"}
+            return None
+
+        if not isinstance(tool_choice, dict):
+            return None
+
+        choice_type = str(tool_choice.get("type") or "").strip().lower()
+        if choice_type == "function":
+            function_payload = tool_choice.get("function")
+            if not isinstance(function_payload, dict):
+                return {"mode": "ANY"}
+            function_name = str(function_payload.get("name") or "").strip()
+            if not function_name:
+                return {"mode": "ANY"}
+            # Gemini 原生接口通过 ANY + allowedFunctionNames 约束可调用函数。
+            return {
+                "mode": "ANY",
+                "allowedFunctionNames": [function_name],
+            }
+
+        if choice_type == "none":
+            return {"mode": "NONE"}
+
+        return None
 
     @staticmethod
     def _normalize_message_content(raw_content: Any) -> str:

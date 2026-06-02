@@ -341,6 +341,7 @@ docs/
   - 负责把 Gemini `generateContent` 包装成当前聊天主链路可复用的最小客户端
   - 当前用于 `/api/chat/reply`、`/api/chat/stream` 和后台任务的 Gemini 文本请求，先解决“Gemini 模型名误发到 DeepSeek”这一运行时路由问题
   - 现在额外暴露原始 `generateContent` 响应，供 Gemini-native 工具循环直接处理 `functionCall / functionResponse`
+  - 当前会把统一工具回环传入的 `tool_choice` 映射为 Gemini 官方 `toolConfig.functionCallingConfig`，避免 Gemini 路径只能“看模型心情”决定是否发起函数调用
 
 - `backend/api/drafts.py`
   - 提供会话级 Coach 草稿读取和 upsert
@@ -359,6 +360,7 @@ docs/
   - 负责 AI 计划建议的后端采纳校验、proposal store、动作字段更新、整日计划替换和动作结构归一化
   - `field_changes` 继续只支持 `action: "update"`；`day_plan_replace` 支持直接整日覆盖目标日期计划
   - 更新后保留 `template / instance` 与扁平兼容字段，确保后续 AI 建议仍能按字段定位
+  - 单日计划归一化已兼容 Gemini 常见字段形态，如 `exerciseName / time / unit / sets / reps`，会把动作名补齐到 `name`，并把时长信息落到 `repsText/note` 这类现有结构中，保证 proposal 卡与训练计划页都能正常展示
 
 - `backend/agent/background_worker.py`
   - 负责离页后台思考的进程内任务表和 `asyncio.create_task` 调度

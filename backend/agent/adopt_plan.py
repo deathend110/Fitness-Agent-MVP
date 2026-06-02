@@ -236,19 +236,30 @@ def _normalize_tier(exercise: dict[str, Any], note: str) -> str:
 def _normalize_planned_exercise(exercise: dict[str, Any], fallback_id: Any = None) -> dict[str, Any]:
     template = deepcopy(exercise.get("template")) if _is_plain_object(exercise.get("template")) else {}
     instance = deepcopy(exercise.get("instance")) if _is_plain_object(exercise.get("instance")) else {}
-    name = _read_string_value(exercise.get("name"))
+    name = _read_string_value(exercise.get("name"), exercise.get("exerciseName"))
     sets = _read_number_value(exercise.get("sets"), template.get("sets"))
     reps = _read_number_value(exercise.get("reps"))
-    note = _read_string_value(exercise.get("note"), instance.get("note"))
+    time_value = _read_number_value(exercise.get("time"))
+    unit_value = _read_string_value(exercise.get("unit"))
+    note = _build_normalized_exercise_note(
+        exercise=exercise,
+        instance=instance,
+        time_value=time_value,
+        unit_value=unit_value,
+    )
+    normalized_reps = reps
+    if normalized_reps is None and time_value is not None:
+        normalized_reps = time_value
     ref_1rm = _read_string_value(exercise.get("ref1RM"), template.get("ref1RM")) or None
     pct = _read_number_value(exercise.get("pct"), instance.get("pct"))
     kg = _read_number_value(exercise.get("kg"), instance.get("kg"))
     rpe = _normalize_rpe(_read_number_value(exercise.get("rpe"), instance.get("rpe")))
     reps_text = (
-        str(reps)
-        if "reps" in exercise and reps is not None
+        str(normalized_reps)
+        if "reps" in exercise and normalized_reps is not None
         else _read_string_value(template.get("repsText")) or (
-            str(reps) if reps is not None else ""
+            _format_duration_reps_text(time_value, unit_value)
+            or (str(normalized_reps) if normalized_reps is not None else "")
         )
     )
     load_mode = (
@@ -282,11 +293,57 @@ def _normalize_planned_exercise(exercise: dict[str, Any], fallback_id: Any = Non
         "pct": pct if load_mode == "percentage" else None,
         "kg": None if load_mode == "percentage" else kg,
         "sets": sets,
-        "reps": reps,
+        "reps": normalized_reps,
         "rpe": rpe,
         "note": note,
     }
     return normalized
+
+
+def _format_duration_reps_text(time_value: int | float | None, unit_value: str) -> str:
+    if time_value is None:
+        return ""
+    normalized_unit = _normalize_duration_unit(unit_value)
+    if normalized_unit:
+        return f"{_format_number_text(time_value)} {normalized_unit}"
+    return str(_format_number_text(time_value))
+
+
+def _normalize_duration_unit(unit_value: str) -> str:
+    normalized = unit_value.strip().lower() if isinstance(unit_value, str) else ""
+    if normalized in {"分钟", "分", "min", "mins", "minute", "minutes"}:
+        return "分钟"
+    if normalized in {"秒", "s", "sec", "secs", "second", "seconds"}:
+        return "秒"
+    if normalized in {"小时", "hr", "hrs", "hour", "hours"}:
+        return "小时"
+    return unit_value.strip() if isinstance(unit_value, str) else ""
+
+
+def _format_number_text(value: int | float) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _build_normalized_exercise_note(
+    *,
+    exercise: dict[str, Any],
+    instance: dict[str, Any],
+    time_value: int | float | None,
+    unit_value: str,
+) -> str:
+    direct_note = _read_string_value(exercise.get("note"), instance.get("note"))
+    duration_text = _format_duration_reps_text(time_value, unit_value)
+    if direct_note and duration_text:
+        if duration_text in direct_note:
+            return direct_note
+        return f"{direct_note}；时长：{duration_text}"
+    if direct_note:
+        return direct_note
+    if duration_text:
+        return f"时长：{duration_text}"
+    return ""
 
 
 def _find_exercise_index(exercises: list[dict[str, Any]], exercise_name: str) -> int:
