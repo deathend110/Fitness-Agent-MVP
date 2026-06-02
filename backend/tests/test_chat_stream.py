@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from backend.agent.chat_session import (
     OpenAICompatibleRuntimeClient,
+    _ChatCompletionsToolLoopProvider,
     _OpenAIResponsesToolLoopProvider,
     build_provider_bound_client,
 )
@@ -2553,6 +2554,11 @@ def test_build_provider_bound_client_prefers_openai_compatible_runtime_for_deeps
 
     assert isinstance(client, OpenAICompatibleRuntimeClient)
     assert not isinstance(client, DeepSeekClient)
+
+
+def test_chat_completions_tool_loop_provider_replaces_legacy_deepseek_specific_name() -> None:
+    provider = _ChatCompletionsToolLoopProvider(client=FakeReplyModelClient("ok"))
+    assert provider.__class__.__name__ == "_ChatCompletionsToolLoopProvider"
 
 
 @pytest.mark.asyncio

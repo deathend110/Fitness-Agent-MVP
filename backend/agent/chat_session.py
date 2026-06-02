@@ -1228,11 +1228,15 @@ def _build_tool_loop_provider(client: Any) -> Any:
         return _GeminiToolLoopProvider(client=client)
     if read_runtime_client_wire_api(client) == "responses":
         return _OpenAIResponsesToolLoopProvider(client=client)
-    return _DeepSeekToolLoopProvider(client=client)
+    return _ChatCompletionsToolLoopProvider(client=client)
 
 
-class _DeepSeekToolLoopProvider(OpenAICompatibleProvider):
-    """把现有 DeepSeekClient 包装成统一 provider 接口，供新工具循环复用。"""
+class _ChatCompletionsToolLoopProvider(OpenAICompatibleProvider):
+    """统一承接 chat_completions 风格工具回环。
+
+    它既服务 legacy DeepSeekClient fallback，也服务 OpenAI-compatible runtime 的
+    chat_completions wire，避免名称继续误导成“仅供 DeepSeek 使用”。
+    """
 
     def __init__(self, *, client: Any) -> None:
         super().__init__(client_factory=None)
