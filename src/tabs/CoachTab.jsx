@@ -818,8 +818,22 @@ function CoachTab({
     setErrorMessage('')
   }
 
-  function handleDismissSuggestion(targetSuggestion) {
+  async function handleDismissSuggestion(targetSuggestion) {
     const commitKey = getSuggestionCommitKey(targetSuggestion)
+
+    if (targetSuggestion?.proposalId) {
+      try {
+        const client = createBackendClient()
+        const ignoreResult = await client.ignorePlanChange({ proposalId: targetSuggestion.proposalId })
+        if (!ignoreResult?.ok) {
+          setErrorMessage(ignoreResult?.message || '忽略建议失败，请稍后重试。')
+          return
+        }
+      } catch (error) {
+        setErrorMessage(error?.message || '忽略建议失败，请确认本地后端服务已启动。')
+        return
+      }
+    }
 
     persistHideSuggestion(targetSuggestion)
     setMessageMeta((currentMeta) =>
@@ -878,7 +892,7 @@ function CoachTab({
 
       onWeeklyPlanChange((currentPlan) => mergeCommittedWeeklyPlan(currentPlan, adoptResult.plan))
       setErrorMessage('')
-      handleDismissSuggestion(targetSuggestion)
+      await handleDismissSuggestion(targetSuggestion)
     } catch (error) {
       setErrorMessage(error?.message || '采纳建议失败，请确认本地后端服务已启动。')
     } finally {

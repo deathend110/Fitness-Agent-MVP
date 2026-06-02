@@ -34,6 +34,7 @@ from backend.agent.session_title import (
 from backend.agent.context_manager import TokenBudgetConfig
 from backend.agent.tool_calling import build_default_tool_registry
 from backend.agent.tool_choice import (
+    has_explicit_plan_proposal_intent,
     requires_structured_plan_proposal,
     resolve_tool_choice_for_request,
 )
@@ -366,6 +367,21 @@ async def request_agent_tool_reply(
     thinking: dict[str, str] | None = None,
     reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+    allow_proposal_tools = has_explicit_plan_proposal_intent(user_content)
+    registry = build_default_tool_registry()
+    if not allow_proposal_tools:
+        # 只有用户本轮显式要求计划卡时，才向模型暴露 proposal 工具。
+        registry = registry.filter_tool_names(
+            {
+                "get_profile",
+                "get_weekly_plan",
+                "get_daily_log",
+                "calculate_metrics",
+                "search_memory",
+                "read_uploaded_file_summary",
+            }
+        )
+
     if not provider_client_supports_tool_loop(deepseek_client):
         content, _usage = await request_deepseek_reply_with_usage(
             deepseek_client=deepseek_client,
@@ -383,7 +399,7 @@ async def request_agent_tool_reply(
         messages=messages,
         model=model,
         deepseek_client=deepseek_client,
-        registry=build_default_tool_registry(),
+        registry=registry,
         tool_choice=resolve_tool_choice_for_request(
             user_content=user_content,
             provider_client=deepseek_client,

@@ -11,6 +11,7 @@ from backend.agent.adopt_plan import (
     build_day_plan_replace_proposal,
     build_plan_change_proposal,
     commit_plan_proposal,
+    ignore_plan_proposal,
 )
 from backend.api.weekly_plan import build_weekly_plan_response, dump_weekly_plan_response
 from backend.db.database import get_db_session
@@ -30,6 +31,10 @@ class PlanProposeRequestSchema(BaseModel):
 
 
 class PlanCommitRequestSchema(BaseModel):
+    proposalId: str
+
+
+class PlanIgnoreRequestSchema(BaseModel):
     proposalId: str
 
 
@@ -93,6 +98,25 @@ async def commit_plan_change(
     }
 
 
+@router.post("/plan/ignore")
+async def ignore_plan_change(
+    payload: PlanIgnoreRequestSchema,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, Any]:
+    proposal = ignore_plan_proposal(payload.proposalId)
+    if proposal is None:
+        return {
+            "ok": False,
+            "message": "未找到计划修改提议，无法忽略。",
+        }
+
+    await _sync_proposal_status(session, payload.proposalId, "ignored")
+    return {
+        "ok": True,
+        "message": "已忽略该计划建议卡。",
+    }
+
+
 async def _load_current_plan(session: AsyncSession) -> dict[str, Any]:
     result = await session.execute(select(WeeklyPlanDay))
     days = {item.day_key: item for item in result.scalars().all()}
@@ -121,6 +145,14 @@ async def _write_plan(session: AsyncSession, plan: dict[str, Any]) -> None:
 
 
 async def _sync_committed_proposal_status(session: AsyncSession, proposal_id: str) -> None:
+    await _sync_proposal_status(session, proposal_id, "committed")
+
+
+async def _sync_proposal_status(
+    session: AsyncSession,
+    proposal_id: str,
+    next_status: str,
+) -> None:
     result = await session.execute(select(ChatMessage).where(ChatMessage.role == "assistant"))
     updated = False
     for item in result.scalars().all():
@@ -129,9 +161,9 @@ async def _sync_committed_proposal_status(session: AsyncSession, proposal_id: st
             continue
         if str(suggestion.get("proposalId") or "").strip() != proposal_id:
             continue
-        if suggestion.get("status") == "committed":
+        if suggestion.get("status") == next_status:
             continue
-        item.suggestion = {**suggestion, "status": "committed"}
+        item.suggestion = {**suggestion, "status": next_status}
         updated = True
 
     if updated:

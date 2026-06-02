@@ -8,16 +8,35 @@ PLAN_PROPOSAL_REQUEST_MARKERS = (
     "待确认卡",
     "待确认建议卡",
     "修改卡",
+    "调整卡",
+    "建议卡",
+    "卡片",
+    "计划修改卡",
+    "生成新计划",
+    "改计划",
+    "修改计划",
+    "恢复型腿日卡",
+)
+
+PLAN_PROPOSAL_CONFIRMATION_MARKERS = (
+    "不要直接写回",
+    "待确认",
+    "proposal",
 )
 
 
-def requires_structured_plan_proposal(user_content: str) -> bool:
+def has_explicit_plan_proposal_intent(user_content: str) -> bool:
     normalized = str(user_content or "").strip().lower()
     if not normalized:
         return False
-    if not any(marker in normalized for marker in PLAN_PROPOSAL_REQUEST_MARKERS):
+    return any(marker in normalized for marker in PLAN_PROPOSAL_REQUEST_MARKERS)
+
+
+def requires_structured_plan_proposal(user_content: str) -> bool:
+    if not has_explicit_plan_proposal_intent(user_content):
         return False
-    return "不要直接写回" in user_content or "待确认" in user_content or "proposal" in normalized
+    normalized = str(user_content or "").strip().lower()
+    return any(marker in user_content or marker in normalized for marker in PLAN_PROPOSAL_CONFIRMATION_MARKERS)
 
 
 def _is_deepseek_openai_compatible_client(provider_client: Any) -> bool:

@@ -189,6 +189,22 @@ def commit_plan_proposal(
     return result
 
 
+def ignore_plan_proposal(proposal_id: str) -> StoredPlanProposal | None:
+    proposal = _proposal_store.get(proposal_id)
+    if proposal is None:
+        return None
+    if proposal.status != "pending":
+        return proposal
+
+    ignored = replace(
+        proposal,
+        card={**proposal.card, "status": "ignored"},
+        status="ignored",
+    )
+    _proposal_store[proposal_id] = ignored
+    return ignored
+
+
 def _build_failure_result(weekly_plan: dict[str, Any], message: str) -> AdoptPlanResult:
     return AdoptPlanResult(ok=False, message=message, next_plan=weekly_plan)
 

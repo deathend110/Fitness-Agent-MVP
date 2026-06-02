@@ -1038,6 +1038,45 @@ async def test_chat_reply_allows_second_plan_proposal_after_first_proposal_commi
 
 
 @pytest.mark.asyncio
+async def test_chat_reply_returns_to_normal_chat_after_proposal_commit_until_user_explicitly_reinvokes_plan_card(
+    api_client: AsyncClient,
+):
+    fake_client = FakeSequentialProposalClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    first_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "先给我一张周一深蹲降疲劳的计划卡。",
+        },
+    )
+    assert first_reply.status_code == 200
+    first_proposal = first_reply.json()["proposal"]
+
+    commit_response = await api_client.post(
+        "/api/tools/plan/commit",
+        json={"proposalId": first_proposal["proposalId"]},
+    )
+    assert commit_response.status_code == 200
+
+    normal_chat_response = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "解释一下你刚才这样调整的原因。",
+        },
+    )
+
+    assert normal_chat_response.status_code == 200
+    normal_payload = normal_chat_response.json()
+    assert normal_payload["proposal"] is None
+    assert normal_payload["suggestion"] is None
+
+
+@pytest.mark.asyncio
 async def test_chat_reply_same_session_can_switch_model_and_still_generate_second_plan_proposal(
     api_client: AsyncClient,
     monkeypatch,

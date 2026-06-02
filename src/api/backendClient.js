@@ -178,6 +178,9 @@ export function createBackendClient(options = {}) {
     commitPlanChange(payload, { signal } = {}) {
       return request('/tools/plan/commit', { method: 'POST', body: payload, signal })
     },
+    ignorePlanChange(payload, { signal } = {}) {
+      return request('/tools/plan/ignore', { method: 'POST', body: payload, signal })
+    },
     getDailyLog(query = {}, { signal } = {}) {
       return request('/daily-log', { query, signal })
     },

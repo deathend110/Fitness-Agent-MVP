@@ -115,6 +115,15 @@ class ToolRegistry:
     def to_deepseek_tools(self) -> list[dict[str, Any]]:
         return [tool.to_deepseek_tool() for tool in self._tools.values()]
 
+    def filter_tool_names(self, allowed_names: set[str] | None = None) -> "ToolRegistry":
+        if allowed_names is None:
+            return self
+        filtered = ToolRegistry()
+        for name, tool in self._tools.items():
+            if name in allowed_names:
+                filtered.register(tool)
+        return filtered
+
     async def execute(self, session: AsyncSession, name: str, arguments: dict[str, Any]) -> Any:
         tool = self.get(name)
         parsed_args = tool.args_model.model_validate(arguments)
