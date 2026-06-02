@@ -445,3 +445,11 @@ async def test_adopt_rejects_unknown_exercise_and_unknown_field_without_partial_
 
     persisted_response = await api_client.get("/api/weekly-plan")
     assert persisted_response.json() == original_plan
+
+
+def test_weekly_plan_adopt_route_is_marked_as_legacy_compatibility_shell() -> None:
+    import inspect
+    from backend.api import weekly_plan as weekly_plan_api
+
+    source = inspect.getsource(weekly_plan_api.adopt_weekly_plan_change)
+    assert "legacy" in source.lower()

@@ -114,6 +114,38 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
   assert.equal(requests[17].url, 'http://127.0.0.1:8000/api/metrics/daily-summary?date=2026-06-01')
 })
 
+test('commitCoachSuggestion 会优先走 proposal commit，缺少 proposalId 时才回退 legacy adopt', async () => {
+  const requests = []
+  const client = createBackendClient({
+    baseUrl: 'http://127.0.0.1:8000/api',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options })
+      return {
+        ok: true,
+        json: async () => ({ ok: true, plan: {} }),
+      }
+    },
+  })
+
+  await client.commitCoachSuggestion({
+    proposalId: 'proposal-123',
+    day: 'Monday',
+    changes: [{ action: 'update', exerciseName: '深蹲', field: 'pct', newValue: 0.68 }],
+  })
+  await client.commitCoachSuggestion({
+    day: 'Tuesday',
+    changes: [{ action: 'update', exerciseName: '卧推', field: 'pct', newValue: 0.72 }],
+  })
+
+  assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/tools/plan/commit')
+  assert.deepEqual(JSON.parse(requests[0].options.body), { proposalId: 'proposal-123' })
+  assert.equal(requests[1].url, 'http://127.0.0.1:8000/api/weekly-plan/adopt')
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    day: 'Tuesday',
+    changes: [{ action: 'update', exerciseName: '卧推', field: 'pct', newValue: 0.72 }],
+  })
+})
+
 test('createBackendClient 会把 HTTP 错误归一成可展示异常', async () => {
   const client = createBackendClient({
     fetchImpl: async () => ({

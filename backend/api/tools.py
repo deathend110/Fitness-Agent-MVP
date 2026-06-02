@@ -75,6 +75,7 @@ async def commit_plan_change(
     payload: PlanCommitRequestSchema,
     session: AsyncSession = Depends(get_db_session),
 ) -> dict[str, Any]:
+    # 当前 AI 教练 proposal 卡标准写回入口，优先于 legacy /api/weekly-plan/adopt。
     current_plan = await _load_current_plan(session)
     result = commit_plan_proposal(
         current_plan,

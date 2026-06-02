@@ -90,6 +90,9 @@ async def adopt_weekly_plan_change(
     payload: AdoptPlanRequestSchema,
     session: AsyncSession = Depends(get_db_session),
 ) -> AdoptPlanResponseSchema:
+    # legacy compatibility shell:
+    # 旧版 AI 采纳链路仍可能直接提交 day + changes，本轮保留兼容，
+    # 但当前 AI 教练主流程已经统一到 /api/tools/plan/commit。
     result = await session.execute(select(WeeklyPlanDay))
     existing_days = {item.day_key: item for item in result.scalars().all()}
     current_plan_schema = build_weekly_plan_response(existing_days)
