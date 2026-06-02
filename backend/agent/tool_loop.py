@@ -27,6 +27,17 @@ class ToolLoopOrchestrator:
         self.max_rounds = max_rounds
         self.slimmer = slimmer or ToolResultSlimmer()
 
+    @staticmethod
+    def _build_round_limit_content(proposals: list[dict[str, Any]]) -> str:
+        if not proposals:
+            return "工具调用次数过多，请稍后重试或缩小问题范围。"
+
+        latest_proposal = proposals[-1]
+        summary = str(latest_proposal.get("summary") or "").strip()
+        if summary:
+            return f"已生成待确认的训练计划调整建议：{summary}"
+        return "已生成一张待确认的训练计划调整建议卡，请确认后再决定是否写回。"
+
     async def run(
         self,
         *,
@@ -59,7 +70,7 @@ class ToolLoopOrchestrator:
 
             if round_index >= self.max_rounds:
                 return ToolLoopResult(
-                    content="工具调用次数过多，请稍后重试或缩小问题范围。",
+                    content=self._build_round_limit_content(proposals),
                     messages=active_messages,
                     tool_rounds=round_index,
                     proposals=proposals,
@@ -109,7 +120,7 @@ class ToolLoopOrchestrator:
                 await session.commit()
 
         return ToolLoopResult(
-            content="工具调用次数过多，请稍后重试或缩小问题范围。",
+            content=self._build_round_limit_content(proposals),
             messages=active_messages,
             tool_rounds=self.max_rounds,
             proposals=proposals,

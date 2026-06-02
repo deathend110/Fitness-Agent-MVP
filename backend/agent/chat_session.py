@@ -1160,6 +1160,7 @@ async def run_tool_calling_chat(
     model: str,
     deepseek_client: Any,
     registry: ToolRegistry,
+    tool_choice: str | dict[str, Any] | None = None,
     thinking: dict[str, Any] | None = None,
     reasoning_effort: str | None = None,
     max_tool_rounds: int = 4,
@@ -1179,7 +1180,7 @@ async def run_tool_calling_chat(
         model=model,
         thinking=thinking,
         reasoning_effort=reasoning_effort,
-        tool_choice=None if thinking and thinking.get("type") == "enabled" else "auto",
+        tool_choice=tool_choice if tool_choice is not None else (None if thinking and thinking.get("type") == "enabled" else "auto"),
     )
 
 

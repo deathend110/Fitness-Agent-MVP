@@ -134,6 +134,8 @@ HTTPS_PROXY=
 - 当 AI 生成的是待确认 proposal 卡时，后端会拦截“已采纳 / 已写入计划 / 已更新计划”这类误导性正文表述，统一保留“待确认、尚未写回”的真实语义；真正写回仍只会发生在 `/api/tools/plan/commit`
 - `/api/tools/plan/commit` 成功后，后端会同步把对应 assistant 历史消息里的 proposal 状态更新为 `committed`；后续同一会话继续追问或切换模型时，新的上下文也会显式带上该状态，避免模型把旧卡误判为仍待确认
 - Gemini-native 工具调用现在会把内部 `tool_choice` 映射到官方 `toolConfig.functionCallingConfig`，并兼容 Gemini 风格的单日计划字段（如 `exerciseName / time / unit`），避免计划卡存在但名称或时长信息写回丢失
+- 当用户这一轮明确要求“待确认计划卡 / proposal / 不要直接写回”时，Gemini-native 首轮会被强制切到 required function calling，避免它只输出正文却不返回结构化 proposal，导致计划卡无法渲染或采纳
+- DeepSeek `/v1` 兼容链路在 thinking 模式下不会强制发送 `tool_choice=required`；这是为了兼容 DeepSeek 对 thinking + required 的协议限制，同时保留非 thinking 场景下的结构化 proposal 保障
 - 对于 Gemini 偶尔把“休息日新增整天训练安排”误生成为 `propose_plan_change` 的情况，后端会在空训练日上把这类 `add/replace` proposal 自动升级成 `day_plan_replace`，尽量保证仍能产出可采纳的计划卡
 - `GET/PUT /api/model-config` 会读取和保存脱敏后的多供应商模型配置；保存后后端会立即刷新运行时缓存，前台聊天、流式输出和后台任务都会直接使用新配置，不需要重启服务
 - `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表

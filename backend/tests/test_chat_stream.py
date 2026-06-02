@@ -24,6 +24,7 @@ from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base, UploadedFile, utc_now
 from backend.main import app
+from backend.providers.gemini_client import GeminiNativeClient
 
 pytestmark = [
     pytest.mark.filterwarnings(
@@ -490,6 +491,170 @@ class FakeSequentialProposalClient:
                 ],
             )
         return DeepSeekChatResult(content=f"{model} 已生成第二张待确认计划卡。")
+
+
+class FakeTextOnlyPlanCardClient:
+    """模拟模型没有调用工具，只输出 markdown 计划卡文本。"""
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del messages, model, tools, tool_choice, stream
+        return DeepSeekChatResult(
+            content=(
+                "---\n\n"
+                "### 修改建议卡（待你确认）\n\n"
+                "| 动作 | 当前 | -> 修改后 |\n"
+                "|:----|:----:|:--------:|\n"
+                "| 平板支撑 | 3x45秒 | 2x45秒 |\n\n"
+                "如果没问题，跟我说“写入”即可生效。"
+            )
+        )
+
+
+class FakeDeepSeekTextOnlyUnlessRequiredProposalClient:
+    """模拟 OpenAI-compatible 模型在非 required 时只回正文。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del messages, model, tools, stream
+        self.calls.append({"tool_choice": tool_choice})
+        if len(self.calls) == 1 and tool_choice != "required":
+            return DeepSeekChatResult(
+                content="我建议把周一整体再轻一点，先生成一张待确认卡再说。"
+            )
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_propose_required",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "把深蹲组数降到 2 组，继续控制疲劳。",
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "sets",
+                                            "newValue": 2,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="已生成第二张待确认计划卡。")
+
+
+class FakeGeminiTextOnlyUnlessRequiredProposalClient(GeminiNativeClient):
+    """模拟 Gemini 在 AUTO 下只回正文，但在 required 下会正确走 proposal 工具。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            api_key="AIza-test",
+            base_url="https://generativelanguage.googleapis.com/v1beta",
+        )
+        self.calls: list[dict[str, Any]] = []
+
+    async def generate_content_raw(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        thinking: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | dict[str, Any] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict[str, Any]:
+        del messages, thinking, tools, reasoning_effort
+        self.calls.append({"model": model, "tool_choice": tool_choice})
+
+        if len(self.calls) == 1 and tool_choice != "required":
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": (
+                                        "我建议把周一训练量再降一点，先生成一张待确认卡片再决定是否写回。"
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+        if len(self.calls) == 1:
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "id": "gemini-call-propose-round-2",
+                                        "name": "propose_plan_change",
+                                        "args": {
+                                            "day": "Monday",
+                                            "summary": "把深蹲组数降到 2 组，继续控制疲劳。",
+                                            "changes": [
+                                                {
+                                                    "action": "update",
+                                                    "exerciseName": "深蹲",
+                                                    "field": "sets",
+                                                    "newValue": 2,
+                                                }
+                                            ],
+                                        },
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+        return {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": "Gemini 已生成第二张待确认计划卡。"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
 
 
 @pytest_asyncio.fixture
@@ -962,7 +1127,236 @@ async def test_chat_reply_same_session_can_switch_model_and_still_generate_secon
     assert second_payload["proposal"]["changes"][0]["field"] == "sets"
     assert second_payload["proposal"]["changes"][0]["newValue"] == 2
     assert observed_models[0] == "deepseek-v4-flash"
-    assert observed_models[-1] == "gemini-2.5-flash"
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_switching_to_gemini_requires_structured_proposal_tool_call(
+    api_client: AsyncClient,
+    monkeypatch,
+):
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-v4-flash"
+
+        def resolve_model_ref(self, model_ref: str):
+            provider_map = {
+                "provider_deepseek_main::deepseek-v4-flash": type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-provider",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "wire_api": "chat_completions",
+                        "api_path_mode": "append_v1",
+                        "label": "DeepSeek 主账号",
+                    },
+                )(),
+                "provider_gemini_main::gemini-2.5-flash": type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "gemini_native",
+                        "api_key": "sk-gemini",
+                        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                        "label": "Gemini 主账号",
+                    },
+                )(),
+            }
+            return provider_map[model_ref], model_ref.split("::", 1)[1]
+
+    deepseek_client = FakeSequentialProposalClient()
+    gemini_client = FakeGeminiTextOnlyUnlessRequiredProposalClient()
+
+    def build_runtime_client(provider, fallback_client, timeout=None):
+        del fallback_client, timeout
+        if provider.type == "gemini_native":
+            return gemini_client
+        return deepseek_client
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(chat_api, "build_provider_bound_client", build_runtime_client)
+
+    first_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "先给我一张周一深蹲降疲劳的计划卡。",
+            "model": "provider_deepseek_main::deepseek-v4-flash",
+        },
+    )
+    assert first_reply.status_code == 200
+    first_proposal = first_reply.json()["proposal"]
+
+    commit_response = await api_client.post(
+        "/api/tools/plan/commit",
+        json={"proposalId": first_proposal["proposalId"]},
+    )
+    assert commit_response.status_code == 200
+
+    second_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+            "model": "provider_gemini_main::gemini-2.5-flash",
+            "thinking": {"enabled": True, "budget": "max"},
+        },
+    )
+
+    assert second_reply.status_code == 200
+    second_payload = second_reply.json()
+    assert second_payload["proposal"] is not None
+    assert second_payload["proposal"]["status"] == "pending"
+    assert second_payload["proposal"]["changes"][0]["field"] == "sets"
+    assert second_payload["proposal"]["changes"][0]["newValue"] == 2
+    assert gemini_client.calls[0]["tool_choice"] == "required"
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_requires_structured_proposal_tool_call_for_openai_compatible_clients_too(
+    api_client: AsyncClient,
+    monkeypatch,
+):
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-v4-flash"
+
+        def resolve_model_ref(self, model_ref: str):
+            provider = type(
+                "Provider",
+                (),
+                {
+                    "type": "openai_compatible",
+                    "api_key": "sk-provider",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "wire_api": "chat_completions",
+                    "api_path_mode": "append_v1",
+                    "label": "DeepSeek 主账号",
+                },
+            )()
+            return provider, model_ref.split("::", 1)[1]
+
+    first_client = FakeSequentialProposalClient()
+    second_client = FakeDeepSeekTextOnlyUnlessRequiredProposalClient()
+    build_count = {"value": 0}
+
+    def build_runtime_client(provider, fallback_client, timeout=None):
+        del provider, fallback_client, timeout
+        build_count["value"] += 1
+        if build_count["value"] == 1:
+            return first_client
+        return second_client
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(chat_api, "build_provider_bound_client", build_runtime_client)
+
+    first_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "先给我一张周一深蹲降疲劳的计划卡。",
+            "model": "provider_deepseek_main::deepseek-v4-flash",
+        },
+    )
+    assert first_reply.status_code == 200
+    first_proposal = first_reply.json()["proposal"]
+
+    commit_response = await api_client.post(
+        "/api/tools/plan/commit",
+        json={"proposalId": first_proposal["proposalId"]},
+    )
+    assert commit_response.status_code == 200
+
+    second_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+            "model": "provider_deepseek_main::deepseek-v4-flash",
+        },
+    )
+
+    assert second_reply.status_code == 200
+    second_payload = second_reply.json()
+    assert second_payload["proposal"] is not None
+    assert second_payload["proposal"]["status"] == "pending"
+    assert second_payload["proposal"]["changes"][0]["field"] == "sets"
+    assert second_payload["proposal"]["changes"][0]["newValue"] == 2
+    assert second_client.calls[0]["tool_choice"] == "required"
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_deepseek_thinking_does_not_send_required_tool_choice(
+    api_client: AsyncClient,
+    monkeypatch,
+):
+    from backend.agent.tool_choice import resolve_tool_choice_for_request
+
+    provider_client = OpenAICompatibleRuntimeClient(
+        api_key="sk-provider",
+        base_url="https://api.deepseek.com/v1",
+        wire_api="chat_completions",
+        api_path_mode="append_v1",
+        provider_label="DeepSeek 主账号",
+    )
+
+    tool_choice = resolve_tool_choice_for_request(
+        user_content="继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+        provider_client=provider_client,
+        thinking={"type": "enabled"},
+    )
+
+    assert tool_choice is None
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_standard_openai_compatible_thinking_keeps_required_tool_choice(
+    api_client: AsyncClient,
+    monkeypatch,
+):
+    del api_client, monkeypatch
+    from backend.agent.tool_choice import resolve_tool_choice_for_request
+
+    provider_client = OpenAICompatibleRuntimeClient(
+        api_key="sk-provider",
+        base_url="https://api.openai.com/v1",
+        wire_api="chat_completions",
+        api_path_mode="append_v1",
+        provider_label="OpenAI 主账号",
+    )
+
+    tool_choice = resolve_tool_choice_for_request(
+        user_content="继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+        provider_client=provider_client,
+        thinking={"type": "enabled"},
+    )
+
+    assert tool_choice == "required"
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_rejects_text_only_plan_card_when_user_explicitly_requests_pending_proposal(
+    api_client: AsyncClient,
+):
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: FakeTextOnlyPlanCardClient()
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "继续调整周一，再给我一张待确认计划卡，不要直接写回。",
+        },
+    )
+
+    assert response.status_code == 503
+    assert "计划卡" in response.json()["detail"]
+    assert "tool" in response.json()["detail"].lower() or "工具" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

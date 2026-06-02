@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+from typing import Any
+
+PLAN_PROPOSAL_REQUEST_MARKERS = (
+    "proposal",
+    "计划卡",
+    "待确认卡",
+    "待确认建议卡",
+    "修改卡",
+)
+
+
+def requires_structured_plan_proposal(user_content: str) -> bool:
+    normalized = str(user_content or "").strip().lower()
+    if not normalized:
+        return False
+    if not any(marker in normalized for marker in PLAN_PROPOSAL_REQUEST_MARKERS):
+        return False
+    return "不要直接写回" in user_content or "待确认" in user_content or "proposal" in normalized
+
+
+def _is_deepseek_openai_compatible_client(provider_client: Any) -> bool:
+    provider_label = str(getattr(provider_client, "provider_label", "") or "").lower()
+    base_url = str(getattr(provider_client, "base_url", "") or "").lower()
+
+    if "deepseek" in provider_label:
+        return True
+    if "deepseek.com" in base_url:
+        return True
+    return False
+
+
+def resolve_tool_choice_for_request(
+    *,
+    user_content: str,
+    provider_client: Any,
+    thinking: dict[str, Any] | None,
+) -> str | dict[str, Any] | None:
+    requires_proposal = requires_structured_plan_proposal(user_content)
+    thinking_enabled = bool(thinking and thinking.get("type") == "enabled")
+
+    # 保留原有 thinking 默认行为：未显式要求 proposal 时，不主动强塞 tool_choice，
+    # 避免影响普通分析/恢复类请求的自然工具回环。
+    if thinking_enabled and not requires_proposal:
+        return None
+
+    if thinking_enabled and _is_deepseek_openai_compatible_client(provider_client):
+        return None
+
+    if requires_proposal:
+        # 只要本轮明确要求待确认 proposal，就先强制模型经由工具回环产出结构化卡片。
+        return "required"
+    return "auto"

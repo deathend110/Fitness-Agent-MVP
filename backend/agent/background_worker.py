@@ -18,6 +18,7 @@ from backend.agent.proposal_text import finalize_assistant_text
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.session_title import update_session_title_from_user_prompt
 from backend.agent.tool_calling import build_default_tool_registry
+from backend.agent.tool_choice import resolve_tool_choice_for_request
 from backend.config import get_settings
 from backend.db.models import ChatMessage, ChatSession, utc_now
 from backend.providers.gemini_client import GeminiNativeClient
@@ -127,6 +128,11 @@ class BackgroundWorker:
                         model=model,
                         deepseek_client=client,
                         registry=build_default_tool_registry(),
+                        tool_choice=resolve_tool_choice_for_request(
+                            user_content=user_content,
+                            provider_client=client,
+                            thinking=thinking,
+                        ),
                         **thinking_kwargs,
                     )
                 content = tool_result.content

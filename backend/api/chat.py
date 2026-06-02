@@ -33,6 +33,10 @@ from backend.agent.session_title import (
 )
 from backend.agent.context_manager import TokenBudgetConfig
 from backend.agent.tool_calling import build_default_tool_registry
+from backend.agent.tool_choice import (
+    requires_structured_plan_proposal,
+    resolve_tool_choice_for_request,
+)
 from backend.agent.usage_ledger import record_usage, summarize_session_usage
 from backend.config import get_settings
 from backend.db.database import get_db_session, session_factory
@@ -358,6 +362,7 @@ async def request_agent_tool_reply(
     model: str,
     session: AsyncSession,
     session_id: int,
+    user_content: str,
     thinking: dict[str, str] | None = None,
     reasoning_effort: str | None = None,
 ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
@@ -379,12 +384,32 @@ async def request_agent_tool_reply(
         model=model,
         deepseek_client=deepseek_client,
         registry=build_default_tool_registry(),
+        tool_choice=resolve_tool_choice_for_request(
+            user_content=user_content,
+            provider_client=deepseek_client,
+            thinking=thinking,
+        ),
         thinking=thinking,
         reasoning_effort=reasoning_effort,
     )
     parsed_reply = parse_ai_response(tool_result.content)
     proposal = tool_result.proposals[-1] if tool_result.proposals else None
     return parsed_reply["text"], parsed_reply["suggestion"], proposal
+
+
+def assert_required_plan_proposal(
+    *,
+    user_content: str,
+    proposal: dict[str, Any] | None,
+) -> None:
+    if proposal is not None:
+        return
+    if not requires_structured_plan_proposal(user_content):
+        return
+    raise DeepSeekClientError(
+        "本轮请求明确要求生成待确认计划卡，但模型没有通过工具返回结构化 proposal，请稍后重试或切换模型。",
+        code="missing_plan_proposal",
+    )
 
 
 async def persist_successful_chat_turn(
@@ -625,9 +650,11 @@ async def stream_chat_reply(
                     model=remote_model_id,
                     session=session,
                     session_id=chat_session.id,
+                    user_content=user_content,
                     thinking=thinking_payload,
                     reasoning_effort=reasoning_effort,
                 )
+                assert_required_plan_proposal(user_content=user_content, proposal=proposal)
                 assistant_text = finalize_assistant_text(assistant_text, proposal)
                 if assistant_text:
                     yield build_sse_frame("delta", {"text": assistant_text})
@@ -730,9 +757,11 @@ async def request_chat_reply(
                 model=remote_model_id,
                 session=session,
                 session_id=chat_session.id,
+                user_content=user_content,
                 thinking=thinking_payload,
                 reasoning_effort=reasoning_effort,
             )
+            assert_required_plan_proposal(user_content=user_content, proposal=proposal)
             assistant_text = finalize_assistant_text(assistant_text, proposal)
         else:
             content, usage = await request_deepseek_reply_with_usage(

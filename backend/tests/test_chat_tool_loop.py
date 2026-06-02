@@ -201,6 +201,72 @@ class FakeGeminiHttpClient:
         return self.responses.pop(0)
 
 
+class RepeatingProposalToolLoopClient:
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, tool_choice, stream
+        self.calls.append(messages)
+        return DeepSeekChatResult(
+            content="",
+            tool_calls=[
+                {
+                    "id": f"call_proposal_{len(self.calls)}",
+                    "type": "function",
+                    "function": {
+                        "name": "propose_day_plan_replace",
+                        "arguments": json.dumps(
+                            {
+                                "day": "Monday",
+                                "summary": "把周一继续压低成完全休息日。",
+                                "dayPlan": {
+                                    "type": "rest",
+                                    "exercises": [
+                                        {
+                                            "name": "睡前轻量拉伸",
+                                            "tier": "accessory",
+                                            "template": {
+                                                "loadMode": "fixed",
+                                                "setType": "straight",
+                                                "sets": 1,
+                                                "repsText": "10分钟",
+                                                "ref1RM": None,
+                                            },
+                                            "instance": {
+                                                "kg": None,
+                                                "pct": None,
+                                                "rpe": None,
+                                                "note": "仅保留极低强度放松。",
+                                            },
+                                            "ref1RM": None,
+                                            "pct": None,
+                                            "kg": None,
+                                            "sets": 1,
+                                            "reps": None,
+                                            "rpe": None,
+                                            "note": "仅保留极低强度放松。",
+                                        }
+                                    ],
+                                },
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
+                }
+            ],
+        )
+
+
 @pytest_asyncio.fixture
 async def db_session(tmp_path: Path) -> AsyncIterator[AsyncSession]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'tool-loop.db'}"
@@ -372,6 +438,33 @@ async def test_tool_loop_keeps_full_proposal_payload_in_chat_completions_followu
     assert tool_payload["proposal"]["proposalId"]
     assert tool_payload["proposal"]["status"] == "pending"
     assert tool_payload["validation"]["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_returns_latest_proposal_instead_of_round_limit_placeholder_when_model_repeats_proposals(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = ChatSession(title="tool-loop-repeat-proposal", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add(WeeklyPlanDay(day_key="Monday", type="active_recovery", exercises=[{"name": "散步", "sets": 1, "reps": 20}]))
+    await db_session.commit()
+
+    client = RepeatingProposalToolLoopClient()
+    result = await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "给我一张待确认的周一休息日 proposal 卡"}],
+        model="deepseek-chat",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+        max_tool_rounds=2,
+    )
+
+    assert result.proposals
+    assert result.proposals[-1]["proposalId"]
+    assert result.proposals[-1]["status"] == "pending"
+    assert result.content != "工具调用次数过多，请稍后重试或缩小问题范围。"
 
 
 @pytest.mark.asyncio
