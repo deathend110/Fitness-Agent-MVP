@@ -264,3 +264,62 @@ RepMind 已具备“日志 -> AI 建议 -> 采纳 -> 写回训练计划”的完
 
 截至 2026-06-03，AI 教练浏览器级自动化验证已经从“冒烟”扩展到“深度流程回归”。  
 当前脚本集已能稳定覆盖开源发布前验证计划中的 6 条高风险前端链路。
+
+## 9. 2026-06-03 发布前全矩阵复验
+
+### 9.1 本轮修正
+
+- `tests/prompt.test.js`
+- `tests/promptMetricsSection.test.js`
+- `tests/e2e/coach_session_history.py`
+
+修正说明：
+
+- prompt 指标相关测试原先仍断言旧口径 `calorie_status = balanced`
+- 当前实现实际输出已经稳定为 `calorie_delta_kcal = -195`、`calorie_status = deficit`、`protein_status = met`
+- 因此本轮修正属于“测试预期跟随现行实现更新”，不涉及生产逻辑改动
+- 会话历史浏览器脚本则改为按会话卡片可见标题定位主按钮，避免误命中 `删除对话：{title}` 按钮
+
+### 9.2 本轮完整执行结果
+
+- 命令：`npm test`
+- 结果：`231/231` 通过
+
+- 命令：`npm run build`
+- 结果：通过
+
+- 命令：`uv run pytest backend\tests -q`
+- 结果：`228/228` 通过，附带 `77` 条 FastAPI 依赖层 `DeprecationWarning`
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_browser_smoke.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_session_history.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_pending_restore.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_commit_full_flow.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_ignore_flow.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_attachment_flow.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_provider_switch.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_stream_fallback.py`
+- 结果：通过
+
+- 命令：`uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_model_config_flow.py`
+- 结果：通过
+
+### 9.3 复验结论
+
+- 发布计划中的前端、后端、构建与浏览器自动化主矩阵已在同一时点完成复验
+- 本轮未发现新的生产缺陷，新增问题全部收敛在测试脚本或过期断言层
+- 当前版本已经满足 `docs/verification_release_plan.md` 中自动化验证部分的发布前要求
