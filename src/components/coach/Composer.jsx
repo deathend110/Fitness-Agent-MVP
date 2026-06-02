@@ -46,12 +46,16 @@ function Composer({
     <form className="mx-auto w-full max-w-[720px]" onSubmit={onSubmit}>
       <div className="rounded-[22px] border border-fitloop-line bg-fitloop-panel shadow-[0_4px_24px_rgba(30,40,80,0.09)] transition hover:border-fitloop-orange/35 focus-within:border-fitloop-orange focus-within:shadow-[0_0_0_4px_rgba(109,94,252,0.10),0_4px_24px_rgba(30,40,80,0.09)]">
         <textarea
+          autoCapitalize="off"
+          autoCorrect="off"
           className="min-h-[48px] max-h-[160px] w-full resize-none border-0 bg-transparent px-5 pb-2 pt-4 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
           onChange={(event) => onDraftChange?.(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           ref={textareaRef}
           rows={1}
+          spellCheck={false}
+          translate="no"
           value={draft}
         />
 
