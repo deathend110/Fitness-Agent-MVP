@@ -18,13 +18,28 @@ export function buildSessionTitleFromPrompt(prompt = '') {
   return normalizeText(String(prompt || '').replace(/\s+/g, ' '), '新对话').slice(0, 48)
 }
 
-function formatSessionUpdatedAt(updatedAt) {
-  if (!updatedAt) {
-    return ''
+const COACH_UTC_WITHOUT_TIMEZONE_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/
+
+export function parseCoachTimestamp(value) {
+  if (!value) {
+    return null
   }
 
-  const date = new Date(updatedAt)
+  const normalizedValue =
+    typeof value === 'string' && COACH_UTC_WITHOUT_TIMEZONE_PATTERN.test(value) ? `${value}Z` : value
+  const date = new Date(normalizedValue)
+
   if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date
+}
+
+function formatSessionUpdatedAt(updatedAt) {
+  const date = parseCoachTimestamp(updatedAt)
+  if (!date) {
     return ''
   }
 

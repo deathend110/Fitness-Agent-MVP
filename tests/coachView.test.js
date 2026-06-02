@@ -7,6 +7,7 @@ import {
   buildCoachSessionView,
   getCoachEmptyQuestionView,
   getVisibleStreamText,
+  parseCoachTimestamp,
 } from '../src/utils/coachView.js'
 
 test('getVisibleStreamText 会剥离结构化 JSON 之后的流式内容', () => {
@@ -127,6 +128,32 @@ test('buildCoachSessionView 会给真实会话项暴露删除能力标记', () =
   ])
 
   assert.equal(view.groups[0].items[0].canDelete, true)
+})
+
+test('parseCoachTimestamp 会把无时区 UTC 字符串按 UTC 解析', () => {
+  const parsedDate = parseCoachTimestamp('2026-06-02T07:22:31.650760')
+
+  assert.equal(parsedDate?.toISOString(), '2026-06-02T07:22:31.650Z')
+})
+
+test('parseCoachTimestamp 会继续正确解析已带 Z 的时间字符串', () => {
+  const parsedDate = parseCoachTimestamp('2026-06-02T07:22:31.650Z')
+
+  assert.equal(parsedDate?.toISOString(), '2026-06-02T07:22:31.650Z')
+})
+
+test('buildCoachSessionView 会把无时区 UTC 的 updatedAtLabel 正确显示为本地时间', () => {
+  const updatedAt = '2026-06-02T07:22:31.650760'
+  const expectedLabel = new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(`${updatedAt}Z`))
+  const view = buildCoachSessionView([{ id: 12, title: '腿日复盘', updatedAt }])
+
+  assert.equal(view.groups[0].items[0].updatedAtLabel, expectedLabel)
+  assert.equal(view.groups[0].items[0].subtitle, expectedLabel)
 })
 
 test('getCoachEmptyQuestionView 返回固定四条空状态建议问题', () => {
