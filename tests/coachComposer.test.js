@@ -157,7 +157,7 @@ test('CoachTab 会持久记录已处理 suggestion，并在恢复消息时继续
   assert.match(source, /hiddenCommitKeys: new Set\(readDismissedSuggestionKeys\(activeSessionIdRef\.current\)\)/)
 })
 
-test('MessageList 和 MessageBubble 会把发送中的 assistant 占位态渲染成“思考中”紧凑气泡', () => {
+test('MessageList 和 MessageBubble 会把发送中的 assistant 占位态渲染成“思考中”三点动画气泡', () => {
   const listSource = readFileSync('src/components/coach/MessageList.jsx', 'utf-8')
   const bubbleSource = readFileSync('src/components/coach/MessageBubble.jsx', 'utf-8')
 
@@ -165,6 +165,10 @@ test('MessageList 和 MessageBubble 会把发送中的 assistant 占位态渲染
   assert.doesNotMatch(listSource, /正在整理上下文/)
   assert.match(bubbleSource, /const bubbleClassName =/)
   assert.match(bubbleSource, /isStreaming && !isUser/)
+  assert.match(bubbleSource, /思考中加载动效改成三个呼吸点/)
+  assert.match(bubbleSource, /animate-\[fitloop-thinking-dot/)
+  assert.match(bubbleSource, /h-2 w-2 rounded-full/)
+  assert.match(bubbleSource, /isStreaming \? <ThinkingDots \/> : null/)
 })
 
 test('ChatTopbar 会为右上角操作按钮提供 SVG 图标和 hover 提示', () => {

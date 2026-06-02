@@ -50,6 +50,20 @@ body {
   min-height: 100vh;
 }
 
+@keyframes fitloop-thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0) scale(0.9);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1);
+  }
+}
+
 .fitloop-shell__content {
   scrollbar-gutter: stable;
 }

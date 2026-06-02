@@ -128,6 +128,10 @@ scripts/
   - 采纳计划卡、切页恢复后台任务等场景下，即使消息区继续显示“思考中”，输入框也不会再被后台 pending/running 状态锁死。
   - 后台任务提交现在只在真实离页相关事件中触发，如 `visibilitychange(hidden)` 与 `pagehide`；不再使用 `blur` 或 effect cleanup 误触发提交。
 
+- `src/components/coach/MessageBubble.jsx`
+  - assistant 的“思考中”占位态保留紧凑气泡，但把旧版方块光标替换成三个逐次淡入淡出的圆点动效。
+  - 该动效通过 `fitloop-thinking-dot` 关键帧实现，只用于 assistant streaming/pending 提示，不影响普通消息正文与用户侧输入光标。
+
 ### 本地运维脚本
 
 - `scripts/kill-repmind.ps1`

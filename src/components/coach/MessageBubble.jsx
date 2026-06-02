@@ -2,6 +2,21 @@ import AdoptCard from '../AdoptCard.jsx'
 import MessageAttachmentCard from './MessageAttachmentCard.jsx'
 import MarkdownMessage from './MarkdownMessage.jsx'
 
+function ThinkingDots() {
+  return (
+    <span aria-hidden="true" className="mt-2 inline-flex items-center gap-1.5 text-fitloop-orange">
+      {/* 思考中加载动效改成三个呼吸点，避免旧版方块光标显得突兀。 */}
+      {[0, 1, 2].map((dotIndex) => (
+        <span
+          className="h-2 w-2 rounded-full bg-current opacity-30 animate-[fitloop-thinking-dot_1.4s_ease-in-out_infinite]"
+          key={dotIndex}
+          style={{ animationDelay: `${dotIndex * 0.2}s` }}
+        />
+      ))}
+    </span>
+  )
+}
+
 function AssistantActions({ onCopy, onRetry }) {
   return (
     <div className="mt-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -82,13 +97,9 @@ function MessageBubble({ message, isStreaming = false, onAdopt, onDismissSuggest
               ) : null}
             </p>
           ) : (
-            <div>
+            <div className="flex flex-col items-start">
               <MarkdownMessage content={message.content} />
-            {isStreaming ? (
-              <span aria-hidden="true" className="ml-0.5 animate-pulse text-fitloop-orange">
-                ▋
-              </span>
-            ) : null}
+              {isStreaming ? <ThinkingDots /> : null}
             </div>
           )}
         </div>
