@@ -18,6 +18,7 @@
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储
 - 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件。新版 bootstrap 默认生成 `https://api.deepseek.com/v1 + chat_completions + append_v1`；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据。保存模型配置后会立刻刷新运行时缓存，前台聊天、流式输出与后台任务都无需重启即可生效
+- 本地联调配置现已按职责拆分到两层 `.env`：根目录 `.env` 负责 `VITE_API_BASE_URL / VITE_DEV_PORT`，`vite.config.js` 会读取 `VITE_DEV_PORT` 统一前端 dev server 端口；`backend/.env` 负责 `BACKEND_HOST / BACKEND_PORT`，`npm run dev:backend` 会通过 `backend/run_dev_server.py` 读取它们再启动 uvicorn，避免前后端端口写死在多处
 - 当前仓库内对 DeepSeek 的默认口径也已同步固化到 `/v1` 形态：`.env.example` 默认值使用 `https://api.deepseek.com/v1`，README 与运行时文档都以 `chat_completions + append_v1` 为主说明；`DeepSeekClient` 不再承担主路径，只作为 provider runtime 缺失时的 fallback
 - AI 教练页发送消息走后端聊天代理，历史侧栏和消息恢复已切到后端 `chat_session / chat_message`
 
@@ -730,6 +731,8 @@ FileAttachmentTray
 
 ```text
 Settings / backend/.env
+  -> BACKEND_HOST / BACKEND_PORT
+      -> backend/run_dev_server.py 启动本地 uvicorn
   -> MODEL_PROVIDER_CONFIG_PATH
   -> HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY
       -> backend/config.py 同步回进程环境，供 httpx 访问 Gemini 等海外模型时复用
@@ -935,6 +938,7 @@ Phase 4 新增：
 CoachTab
   -> Phase 3 新契约只传 sessionId + userInput + model/thinking + files
   -> src/api/coachBackend.js
+     -> 统一通过 import.meta.env.VITE_API_BASE_URL 解析 API 根地址
   -> GET /api/chat/stream 或 POST /api/chat/reply
   -> build_agent_request()
       -> PromptAssembler
@@ -958,6 +962,7 @@ CoachTab
 关键设计点：
 
 - 每次发送前都重新读取最新上下文
+- 前端普通 CRUD、AI 教练聊天和 localStorage 迁移入口都统一优先读取根目录 `.env` 中的 `VITE_API_BASE_URL`，仅在未配置时才回退到本地 `http://127.0.0.1:8000/api`
 - DeepSeek API Key 只在后端 `.env` 中读取，前端 bundle 不再包含 `VITE_DEEPSEEK_API_KEY` 或 Authorization 直连逻辑
 - AI 回复解析与训练计划写回分离，保留用户最终确认权；只有点击采纳卡片才调用后端写回接口
 - 采纳接口失败时返回原始 plan 并不提交事务；成功时返回完整 plan，前端用该响应刷新页面状态

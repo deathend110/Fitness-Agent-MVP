@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:backend": "uv run python -m backend.run_dev_server",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:backend\"",
     "stop:all": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-repmind.ps1",
     "test": "node --test \"tests/*.test.js\"",

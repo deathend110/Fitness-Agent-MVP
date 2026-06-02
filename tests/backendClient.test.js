@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   BackendApiError,
   createBackendClient,
+  resolveBackendApiBaseUrl,
 } from '../src/api/backendClient.js'
 import {
   fromBackendDailyLog,
@@ -136,6 +137,20 @@ test('createBackendClient 会把网络异常归一成统一错误', async () => 
       return true
     },
   )
+})
+
+test('resolveBackendApiBaseUrl 会优先读取 env 中的 VITE_API_BASE_URL 并保留本地默认兜底', () => {
+  assert.equal(
+    resolveBackendApiBaseUrl({ VITE_API_BASE_URL: 'http://127.0.0.1:9321/api/' }),
+    'http://127.0.0.1:9321/api',
+  )
+
+  assert.equal(
+    resolveBackendApiBaseUrl({ VITE_API_BASE_URL: '   ' }),
+    'http://127.0.0.1:8000/api',
+  )
+
+  assert.equal(resolveBackendApiBaseUrl(undefined), 'http://127.0.0.1:8000/api')
 })
 
 test('appData 会在前后端 profile 字段之间做 oneRM / oneRm 映射', () => {

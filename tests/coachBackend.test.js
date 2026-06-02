@@ -5,6 +5,7 @@ import {
   BackendCoachApiError,
   getBackendCoachBackgroundTask,
   requestBackendCoachReply,
+  resolveCoachBackendBaseUrl,
   submitBackendCoachBackgroundTask,
   streamBackendCoachReply,
 } from '../src/api/coachBackend.js'
@@ -256,4 +257,13 @@ test('getBackendCoachBackgroundTask 会查询后台任务状态并归一化 resu
     },
     message: '',
   })
+})
+
+test('resolveCoachBackendBaseUrl 会复用统一 env 配置并在缺失时回退本地默认值', () => {
+  assert.equal(
+    resolveCoachBackendBaseUrl({ VITE_API_BASE_URL: 'http://localhost:9000/api/' }),
+    'http://localhost:9000/api',
+  )
+
+  assert.equal(resolveCoachBackendBaseUrl({}), 'http://127.0.0.1:8000/api')
 })

@@ -50,3 +50,10 @@ def test_apply_runtime_proxy_environment_promotes_proxy_fields_to_process_env():
     assert target_env["all_proxy"] == "socks5://127.0.0.1:7891"
     assert target_env["NO_PROXY"] == "127.0.0.1,localhost"
     assert target_env["no_proxy"] == "127.0.0.1,localhost"
+
+
+def test_settings_support_backend_host_and_backend_port():
+    settings = Settings(backend_host="0.0.0.0", backend_port=9234)
+
+    assert settings.backend_host == "0.0.0.0"
+    assert settings.backend_port == 9234

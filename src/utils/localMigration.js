@@ -11,7 +11,7 @@ export const localMigrationKeys = {
   migratedFlag: 'fitloop_migrated_to_backend',
 }
 
-const DEFAULT_MIGRATION_BASE_URL = 'http://127.0.0.1:8000/api'
+const LOCAL_FALLBACK_MIGRATION_BASE_URL = 'http://127.0.0.1:8000/api'
 
 function isSameSnapshot(leftValue, rightValue) {
   return JSON.stringify(leftValue ?? null) === JSON.stringify(rightValue ?? null)
@@ -39,10 +39,17 @@ export function buildLocalMigrationPayload(appState, exportedAt = new Date().toI
 }
 
 function trimTrailingSlash(url = '') {
-  return typeof url === 'string' ? url.replace(/\/+$/, '') : DEFAULT_MIGRATION_BASE_URL
+  return typeof url === 'string' ? url.replace(/\/+$/, '') : LOCAL_FALLBACK_MIGRATION_BASE_URL
 }
 
-function buildImportUrl(baseUrl = DEFAULT_MIGRATION_BASE_URL) {
+export function resolveMigrationBaseUrl(env = import.meta.env) {
+  const envBaseUrl = typeof env?.VITE_API_BASE_URL === 'string' ? env.VITE_API_BASE_URL.trim() : ''
+
+  // 本地历史数据迁移也走统一 API 地址，避免页面能连通但迁移请求仍指向旧端口。
+  return trimTrailingSlash(envBaseUrl || LOCAL_FALLBACK_MIGRATION_BASE_URL)
+}
+
+function buildImportUrl(baseUrl = resolveMigrationBaseUrl()) {
   return `${trimTrailingSlash(baseUrl)}/migrate/import`
 }
 

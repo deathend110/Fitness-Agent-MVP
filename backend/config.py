@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     uploads_dir: str = "./data/uploads"
     model_provider_config_path: str = "./config/model_providers.json"
     database_url: str = "sqlite+aiosqlite:///./data/repmind.db"
+    backend_host: str = "127.0.0.1"
+    backend_port: int = 8000
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     max_upload_mb: int = 15
     allowed_upload_extensions: list[str] = Field(

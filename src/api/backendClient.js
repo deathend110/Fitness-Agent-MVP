@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = 'http://127.0.0.1:8000/api'
+const LOCAL_FALLBACK_BASE_URL = 'http://127.0.0.1:8000/api'
 
 const HTTP_ERROR_MESSAGES = {
   400: '后端请求参数不合法，请检查提交的数据内容。',
@@ -19,7 +19,14 @@ export class BackendApiError extends Error {
 }
 
 function trimTrailingSlash(url = '') {
-  return typeof url === 'string' ? url.replace(/\/+$/, '') : DEFAULT_BASE_URL
+  return typeof url === 'string' ? url.replace(/\/+$/, '') : LOCAL_FALLBACK_BASE_URL
+}
+
+export function resolveBackendApiBaseUrl(env = import.meta.env) {
+  const envBaseUrl = typeof env?.VITE_API_BASE_URL === 'string' ? env.VITE_API_BASE_URL.trim() : ''
+
+  // 前端统一优先走 Vite 注入的 API 地址，未配置时才回退到本地单机联调默认值。
+  return trimTrailingSlash(envBaseUrl || LOCAL_FALLBACK_BASE_URL)
 }
 
 function readErrorDetail(data) {
@@ -92,7 +99,7 @@ function createRequestUrl(baseUrl, path, query) {
 
 export function createBackendClient(options = {}) {
   const {
-    baseUrl = DEFAULT_BASE_URL,
+    baseUrl = resolveBackendApiBaseUrl(),
     fetchImpl = globalThis.fetch,
     headers = {},
   } = options
@@ -240,5 +247,5 @@ export function createBackendClient(options = {}) {
 }
 
 export const backendClientDefaults = {
-  baseUrl: DEFAULT_BASE_URL,
+  baseUrl: resolveBackendApiBaseUrl(),
 }

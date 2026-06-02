@@ -56,6 +56,7 @@ uv sync
 首次配置时，建议准备环境文件：
 
 ```powershell
+Copy-Item .env.example .env
 Copy-Item backend\.env.example backend\.env
 ```
 
@@ -101,7 +102,9 @@ http://localhost:5173/
 说明：
 
 - 后端首次启动会自动在 `backend/data/repmind.db` 创建 SQLite 表
-- 浏览器端默认通过 `VITE_API_BASE_URL` 访问本地后端
+- 前端 dev server 端口统一由根目录 `.env` 中的 `VITE_DEV_PORT` 控制，未配置时默认回退到 `5173`
+- 浏览器端统一通过 `VITE_API_BASE_URL` 访问本地后端；未配置时会回退到 `http://127.0.0.1:8000/api`
+- `npm run dev:backend` 现在会通过 `backend/run_dev_server.py` 读取 `backend/.env` 中的 `BACKEND_HOST / BACKEND_PORT` 后再启动 uvicorn
 - `npm run stop:all` 会调用 `scripts/kill-repmind.ps1`；同时保留 `scripts/kill-fitloop.ps1` 作为旧入口兼容脚本，二者都会只停止命令行中包含当前仓库路径的 `node/python/uv` 相关进程
 
 ## API Key 配置
@@ -110,11 +113,14 @@ http://localhost:5173/
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:8000/api
+VITE_DEV_PORT=5173
 ```
 
 后端 `backend/.env` 至少需要配置：
 
 ```bash
+BACKEND_HOST=127.0.0.1
+BACKEND_PORT=8000
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db
 MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
@@ -124,6 +130,10 @@ HTTPS_PROXY=
 
 配置说明：
 
+- 根目录 `.env` 只负责前端开发期配置；推荐把前端访问地址和前端 dev 端口都收口到这里
+- `VITE_API_BASE_URL` 需要与后端实际地址保持一致，例如后端改到 `127.0.0.1:9000` 时应同步改成 `http://127.0.0.1:9000/api`
+- `VITE_DEV_PORT` 改动后，若后端 `CORS_ORIGINS` 仍保留默认值，请一并在 `backend/.env` 中同步允许新的前端地址
+- `BACKEND_HOST / BACKEND_PORT` 由后端启动脚本统一读取，避免 `package.json`、uvicorn CLI 和配置层三处各写一份端口
 - 前端不再直接读取或暴露 DeepSeek API Key
 - AI 教练相关能力仍会从 `backend/.env` 读取 `DEEPSEEK_API_KEY` 作为旧版兼容与首份配置 bootstrap 来源；`DeepSeekClient` 当前仅保留为短期 fallback，当运行时 provider 配置缺失、无效或尚未初始化时才会兜底
 - 当前仓库默认口径已经固化为：DeepSeek 使用 `https://api.deepseek.com/v1`，并在 provider 配置里配合 `wireApi=chat_completions`、`apiPathMode=append_v1`；如果你本地 `backend/config/model_providers.json` 是更早生成的旧文件，里面仍可能保留根路径写法，但运行时不会因此回退到旧主链路

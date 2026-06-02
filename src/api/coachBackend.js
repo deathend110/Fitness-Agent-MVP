@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = 'http://127.0.0.1:8000/api'
+const LOCAL_FALLBACK_BASE_URL = 'http://127.0.0.1:8000/api'
 
 const HTTP_ERROR_MESSAGES = {
   400: '后端聊天请求参数不合法，请检查发送内容。',
@@ -19,7 +19,14 @@ export class BackendCoachApiError extends Error {
 }
 
 function trimTrailingSlash(url = '') {
-  return typeof url === 'string' ? url.replace(/\/+$/, '') : DEFAULT_BASE_URL
+  return typeof url === 'string' ? url.replace(/\/+$/, '') : LOCAL_FALLBACK_BASE_URL
+}
+
+export function resolveCoachBackendBaseUrl(env = import.meta.env) {
+  const envBaseUrl = typeof env?.VITE_API_BASE_URL === 'string' ? env.VITE_API_BASE_URL.trim() : ''
+
+  // AI 教练请求和普通 CRUD 请求共用同一个 API 根地址，避免前后配置漂移。
+  return trimTrailingSlash(envBaseUrl || LOCAL_FALLBACK_BASE_URL)
 }
 
 function createRequestUrl(baseUrl, path, query = {}) {
@@ -206,7 +213,7 @@ function consumeCoachEvent(state, parsedEvent, onDelta) {
 
 export async function requestBackendCoachReply(messages, options = {}) {
   const {
-    baseUrl = DEFAULT_BASE_URL,
+    baseUrl = resolveCoachBackendBaseUrl(),
     fetchImpl = globalThis.fetch,
     model,
     sessionId,
@@ -246,7 +253,7 @@ export async function requestBackendCoachReply(messages, options = {}) {
 
 export async function streamBackendCoachReply(messages, options = {}) {
   const {
-    baseUrl = DEFAULT_BASE_URL,
+    baseUrl = resolveCoachBackendBaseUrl(),
     fetchImpl = globalThis.fetch,
     model,
     onDelta,
@@ -352,7 +359,7 @@ async function resolveBackgroundSessionId({ baseUrl, fetchImpl, sessionId, signa
 
 export async function submitBackendCoachBackgroundTask(messages, options = {}) {
   const {
-    baseUrl = DEFAULT_BASE_URL,
+    baseUrl = resolveCoachBackendBaseUrl(),
     fetchImpl = globalThis.fetch,
     model,
     sessionId,
@@ -428,7 +435,7 @@ function normalizeAgentRequestBody(payload = {}) {
 
 export async function getBackendCoachBackgroundTask(taskId, options = {}) {
   const {
-    baseUrl = DEFAULT_BASE_URL,
+    baseUrl = resolveCoachBackendBaseUrl(),
     fetchImpl = globalThis.fetch,
     signal,
   } = options
@@ -456,5 +463,5 @@ export async function getBackendCoachBackgroundTask(taskId, options = {}) {
 }
 
 export const coachBackendDefaults = {
-  baseUrl: DEFAULT_BASE_URL,
+  baseUrl: resolveCoachBackendBaseUrl(),
 }
