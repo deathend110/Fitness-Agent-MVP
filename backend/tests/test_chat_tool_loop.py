@@ -370,6 +370,7 @@ async def test_tool_loop_keeps_full_proposal_payload_in_chat_completions_followu
     assert "[trimmed:propose_plan_change]" not in followup_tool_message["content"]
     assert tool_payload["proposal"]["summary"] == "长摘要" * 400
     assert tool_payload["proposal"]["proposalId"]
+    assert tool_payload["proposal"]["status"] == "pending"
     assert tool_payload["validation"]["ok"] is True
 
 

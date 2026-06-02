@@ -302,6 +302,30 @@ class FakeToolProposalClient:
         return DeepSeekChatResult(content="已生成一张需要你确认的训练计划调整卡。")
 
 
+class FakeMisleadingToolProposalClient(FakeToolProposalClient):
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **kwargs: Any,
+    ) -> DeepSeekChatResult:
+        result = await super().request_chat_with_usage(
+            messages=messages,
+            model=model,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=stream,
+            **kwargs,
+        )
+        if len(self.calls) >= 2:
+            return DeepSeekChatResult(content="我已采纳并写入计划，今天就按这个调整执行。")
+        return result
+
+
 class FakeDayPlanProposalClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -599,6 +623,86 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
     assert fake_client.calls[0]["thinking"] == {"type": "enabled"}
     assert fake_client.calls[0]["reasoning_effort"] == "max"
     assert fake_client.calls[0]["tool_choice"] is None
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_closes_pending_proposal_copy_before_persisting(
+    api_client: AsyncClient,
+):
+    fake_client = FakeMisleadingToolProposalClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    response = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "请直接给我一张深蹲降强度 proposal 卡。",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["proposal"]["status"] == "pending"
+    assert "待确认" in payload["text"]
+    assert "未写回" in payload["text"]
+    assert "已采纳" not in payload["text"]
+    assert "已写入计划" not in payload["text"]
+    assert "已更新计划" not in payload["text"]
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    stored_messages = messages_response.json()
+
+    assert stored_messages[-1]["role"] == "assistant"
+    assert stored_messages[-1]["content"] == payload["text"]
+    assert stored_messages[-1]["suggestion"] == payload["proposal"]
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_closes_pending_proposal_copy_before_done_and_persisting(
+    api_client: AsyncClient,
+):
+    fake_client = FakeMisleadingToolProposalClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    response = await api_client.get(
+        "/api/chat/stream",
+        params={
+            "session_id": default_session["id"],
+            "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == [
+        "delta",
+        "proposal",
+        "suggestion",
+        "done",
+    ]
+    assert events[1]["data"]["proposal"]["status"] == "pending"
+    assert "待确认" in events[0]["data"]["text"]
+    assert "未写回" in events[0]["data"]["text"]
+    assert "已采纳" not in events[0]["data"]["text"]
+    assert "已写入计划" not in events[0]["data"]["text"]
+    assert "已更新计划" not in events[0]["data"]["text"]
+    assert events[3]["data"] == {"text": events[0]["data"]["text"]}
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    stored_messages = messages_response.json()
+
+    assert stored_messages[-1]["role"] == "assistant"
+    assert stored_messages[-1]["content"] == events[0]["data"]["text"]
+    assert stored_messages[-1]["suggestion"] == events[1]["data"]["proposal"]
 
 
 @pytest.mark.asyncio

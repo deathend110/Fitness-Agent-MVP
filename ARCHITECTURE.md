@@ -256,6 +256,7 @@ docs/
   - 提供会话列表、创建会话、删除会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
   - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
+  - 当工具循环返回 `proposal.status="pending"` 时，只会在 assistant 正文出现“已采纳 / 已写入计划 / 已更新计划”等误导性措辞时做最小后端收口；正常“待确认”文案不会被改写
 - 通过 `backend/agent/chat_session.py` 里的共享 provider runtime 选择器，前台聊天与后台任务会使用同一套 provider-bound client：Gemini-native 继续直连 `GeminiNativeClient`，OpenAI-compatible 会按 `wireApi/apiPathMode` 选择 `chat_completions` 或 `responses` 运行时；DeepSeek 默认也绑定到这套 OpenAI-compatible `/v1` 运行时，不再错误回退到旧直连链路
   - `/api/chat/stream` 将统一聊天运行时的文本事件映射为 `delta / suggestion / proposal / done / error`
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
@@ -368,7 +369,8 @@ docs/
   - 后台任务使用独立 SQLAlchemy session factory 写库，不复用请求生命周期内的 DB session
   - 当请求未显式传模型时，会优先使用运行时默认 `modelRef`，再解析到真实远端模型 ID，保证前台聊天与后台思考使用同一套模型来源
   - 后台任务与前台聊天复用同一套 provider-bound client 选择与工具回环，避免“前台可聊但后台 proposal 失效”的漂移
-  - 成功任务解析 `suggestion` 后写入本轮 user + assistant；失败任务只记录 provider-aware 友好状态，不写脏 assistant
+  - 成功任务解析 `suggestion` 后写入本轮 user + assistant；若 suggestion 是待确认 proposal，也会复用主聊天链路的正文语义收口，避免后台回复把未提交 proposal 说成“已采纳”
+  - 失败任务只记录 provider-aware 友好状态，不写脏 assistant
 
 - `backend/db/models.py`
   - 定义 `Profile / WeeklyPlanDay / DailyLog / ChatSession / ChatMessage`

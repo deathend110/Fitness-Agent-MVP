@@ -24,6 +24,7 @@ from backend.agent.chat_session import (
     run_tool_calling_chat,
 )
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
+from backend.agent.proposal_text import finalize_assistant_text
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.session_title import (
     DEFAULT_SESSION_TITLE,
@@ -623,6 +624,7 @@ async def stream_chat_reply(
                     thinking=thinking_payload,
                     reasoning_effort=reasoning_effort,
                 )
+                assistant_text = finalize_assistant_text(assistant_text, proposal)
                 if assistant_text:
                     yield build_sse_frame("delta", {"text": assistant_text})
                 await persist_successful_chat_turn(
@@ -727,6 +729,7 @@ async def request_chat_reply(
                 thinking=thinking_payload,
                 reasoning_effort=reasoning_effort,
             )
+            assistant_text = finalize_assistant_text(assistant_text, proposal)
         else:
             content, usage = await request_deepseek_reply_with_usage(
                 deepseek_client=provider_client,

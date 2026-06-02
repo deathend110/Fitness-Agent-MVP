@@ -308,6 +308,30 @@ class FakeDayPlanProposalClient:
         return DeepSeekChatResult(content="已生成一张单日训练计划卡，等你确认后写回。")
 
 
+class FakeMisleadingBackgroundProposalClient(FakeToolProposalClient):
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **kwargs: Any,
+    ) -> DeepSeekChatResult:
+        result = await super().request_chat_with_usage(
+            messages=messages,
+            model=model,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=stream,
+            **kwargs,
+        )
+        if len(self.calls) >= 2:
+            return DeepSeekChatResult(content="我已采纳并写入计划，今天就按这个调整执行。")
+        return result
+
+
 @pytest_asyncio.fixture
 async def api_client(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, FakeDeepSeekClient]]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'background-worker.db'}"
@@ -783,6 +807,43 @@ async def test_background_task_uses_openai_compatible_responses_runtime_for_prop
     assert result["result"]["suggestion"]["proposalId"]
     assert result["result"]["suggestion"]["changes"][0]["newValue"] == 0.7
     assert fake_responses_client.response_calls[0]["model"] == "gpt-4.1-mini"
+
+
+@pytest.mark.asyncio
+async def test_background_task_closes_misleading_pending_proposal_copy_before_persisting(
+    api_client: tuple[AsyncClient, FakeDeepSeekClient],
+) -> None:
+    client, _legacy_client = api_client
+    fake_tool_client = FakeMisleadingBackgroundProposalClient()
+    chat_api.initialize_background_worker(
+        session_factory=chat_api.background_worker.session_factory,
+        client_factory=lambda: fake_tool_client,
+        default_model="deepseek-chat",
+    )
+    session_id = (await client.post("/api/chat/sessions", json={"title": "proposal-background-guard"})).json()["id"]
+    assert (await client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    submit_response = await client.post(
+        f"/api/chat/{session_id}/background",
+        json={"userInput": "请根据我今天很累的状态，生成一张需要确认的深蹲调整卡。"},
+    )
+
+    assert submit_response.status_code == 200
+    result = await wait_for_task(client, submit_response.json()["task_id"])
+
+    assert result["status"] == "succeeded"
+    assert result["result"]["suggestion"]["status"] == "pending"
+    assert "待确认" in result["result"]["text"]
+    assert "未写回" in result["result"]["text"]
+    assert "已采纳" not in result["result"]["text"]
+    assert "已写入计划" not in result["result"]["text"]
+    assert "已更新计划" not in result["result"]["text"]
+
+    messages_response = await client.get(f"/api/chat/sessions/{session_id}/messages")
+    stored_messages = messages_response.json()
+    assert stored_messages[-1]["role"] == "assistant"
+    assert stored_messages[-1]["content"] == result["result"]["text"]
+    assert stored_messages[-1]["suggestion"] == result["result"]["suggestion"]
 
 
 @pytest.mark.asyncio

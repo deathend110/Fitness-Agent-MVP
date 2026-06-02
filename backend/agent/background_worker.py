@@ -14,6 +14,7 @@ from backend.agent.chat_session import (
     run_tool_calling_chat,
 )
 from backend.agent.deepseek_client import DeepSeekClient, DeepSeekClientError
+from backend.agent.proposal_text import finalize_assistant_text
 from backend.agent.response_parser import parse_ai_response
 from backend.agent.session_title import update_session_title_from_user_prompt
 from backend.agent.tool_calling import build_default_tool_registry
@@ -149,16 +150,17 @@ class BackgroundWorker:
                 )
 
             parsed_reply = parse_ai_response(content)
+            assistant_text = finalize_assistant_text(parsed_reply["text"], proposal)
             suggestion = proposal or parsed_reply["suggestion"]
             await self._persist_successful_chat_turn(
                 session_id=record.session_id,
                 user_content=user_content,
                 user_attachments=user_attachments,
-                assistant_text=parsed_reply["text"],
+                assistant_text=assistant_text,
                 suggestion=suggestion,
             )
             record.result = {
-                "text": parsed_reply["text"],
+                "text": assistant_text,
                 "suggestion": suggestion,
             }
             record.status = "succeeded"
