@@ -649,14 +649,11 @@ function CoachTab({
     pollStoredTask()
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('pagehide', submitBackgroundTask)
-    window.addEventListener('blur', submitBackgroundTask)
     window.addEventListener('focus', pollStoredTask)
 
     return () => {
-      submitBackgroundTask()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pagehide', submitBackgroundTask)
-      window.removeEventListener('blur', submitBackgroundTask)
       window.removeEventListener('focus', pollStoredTask)
       if (pollTimer) {
         window.clearTimeout(pollTimer)
@@ -1041,7 +1038,7 @@ function CoachTab({
           attachedFiles={attachedFiles}
           draft={draft}
           errorMessage={errorMessage}
-          isSending={isCoachThinking}
+          isSending={isSending}
           isUploading={isUploading}
           modelOptions={modelConfig.models}
           onDraftChange={setDraft}

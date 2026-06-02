@@ -123,6 +123,11 @@ scripts/
   - 首次挂载和切回 AI 教练页时会自动贴到底部，确保用户看到最新消息。
   - 仍保留“用户手动上翻时不强制追底”的滚动判定。
 
+- `src/tabs/CoachTab.jsx`
+  - 将“前台发送中”和“后台思考中”拆成两套状态：`isSending` 只控制输入区提交态，`isBackgroundThinking` 只控制消息区提示气泡。
+  - 采纳计划卡、切页恢复后台任务等场景下，即使消息区继续显示“思考中”，输入框也不会再被后台 pending/running 状态锁死。
+  - 后台任务提交现在只在真实离页相关事件中触发，如 `visibilitychange(hidden)` 与 `pagehide`；不再使用 `blur` 或 effect cleanup 误触发提交。
+
 ### 本地运维脚本
 
 - `scripts/kill-repmind.ps1`
@@ -928,7 +933,7 @@ CoachTab
   -> DeepSeekClient.stream_chat() / request_chat_with_usage()
   -> parse_ai_response(content)
   -> 保存 ChatMessage(user + assistant)
-  -> visibility hidden / pagehide / window blur / CoachTab unmount 时可补交 POST /api/chat/{session_id}/background
+  -> visibility hidden / pagehide 时可补交 POST /api/chat/{session_id}/background
       -> BackgroundWorker 对 request_chat_with_usage 客户端复用 run_tool_calling_chat()
       -> proposal or parsed suggestion 写入 ChatMessage.suggestion 与 task.result.suggestion
   -> 回页 GET /api/chat/background/{task_id}
@@ -951,6 +956,7 @@ CoachTab
 - 聊天、草稿和后台任务共享 `modelRef -> ProviderRuntimeCache -> provider-bound client/runtime -> remote_model_id` 解析链路，避免前端、SSE 与后台任务各自维护一套默认模型逻辑；保存配置后缓存会立即刷新，因此运行时选路不会要求手动重启服务
 - OpenAI-compatible provider 在聊天阶段还会继续细分成两条 wire：`chat_completions` 使用传统 `messages/tool_calls` 消息回环，`responses` 使用 `input/function_call/function_call_output` 回环；两者都通过统一 tool loop 驱动 proposal 工具
 - 后台任务提交由 `backgroundTaskStartedRef` 去重，窗口 focus 回来后主动轮询，避免 Alt+Tab 或应用内 tab 切换时用户消息看起来丢失
+- 后台 pending/running 态只负责渲染消息区“思考中”占位，不再复用为输入框禁用条件，避免 proposal 采纳后出现“卡在思考中且无法继续提问”的假死体验
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
 - AI 教练页历史侧栏使用后端真实 session id；`buildCoachHistoryView()` 只作为旧测试与兼容工具保留，不再驱动生产侧栏
 

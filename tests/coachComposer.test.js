@@ -58,18 +58,23 @@ test('CoachTab 会把后台 pending/running 任务映射为教练思考中状态
   assert.match(source, /shouldShowBackgroundCoachPendingIndicator/)
   assert.match(source, /const \[isBackgroundThinking, setIsBackgroundThinking\] = useState\(false\)/)
   assert.match(source, /const isCoachThinking = isSending \|\| isBackgroundThinking/)
-  assert.match(source, /isSending=\{isCoachThinking\}/)
+  assert.match(source, /isSending=\{isSending\}/)
   assert.match(source, /autoScrollKey=\{`\$\{messageList\.length\}:\$\{isCoachThinking \? 'sending' : 'idle'\}`\}/)
 })
 
-test('CoachTab 在窗口 blur/focus 和组件卸载时衔接后台任务', () => {
+test('CoachTab 只在真正离页相关事件时衔接后台任务，不使用 blur 和卸载清理误触发', () => {
   const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
 
-  assert.match(source, /window\.addEventListener\('blur', submitBackgroundTask\)/)
   assert.match(source, /window\.addEventListener\('focus', pollStoredTask\)/)
-  assert.match(source, /window\.removeEventListener\('blur', submitBackgroundTask\)/)
   assert.match(source, /window\.removeEventListener\('focus', pollStoredTask\)/)
-  assert.match(source, /return \(\) => \{[\s\S]*submitBackgroundTask\(\)[\s\S]*\}/)
+  assert.doesNotMatch(source, /window\.addEventListener\('blur', submitBackgroundTask\)/)
+  assert.doesNotMatch(source, /window\.removeEventListener\('blur', submitBackgroundTask\)/)
+  assert.match(source, /return \(\) => \{[\s\S]*document\.removeEventListener\('visibilitychange', handleVisibilityChange\)/)
+  assert.match(source, /window\.removeEventListener\('pagehide', submitBackgroundTask\)/)
+  assert.doesNotMatch(
+    source,
+    /document\.removeEventListener\('visibilitychange', handleVisibilityChange\)[\s\S]*submitBackgroundTask\(\)/,
+  )
 })
 
 test('CoachTab 后台任务提交成功后立即进入后台思考态且只提交一次', () => {
