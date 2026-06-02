@@ -12,7 +12,7 @@
 - Phase 3 已完成 Agent Orchestrator：后端可在只收到 `userInput` 时读取 SQLite 状态、拼装 Agent messages、执行只读工具循环，并生成需用户确认的计划修改 proposal；当前 DeepSeek 默认也已统一走 OpenAI-compatible `/v1` 运行时
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储
-- 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据。保存模型配置后会立刻刷新运行时缓存，前台聊天、流式输出与后台任务都无需重启即可生效
+- 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件。新版 bootstrap 默认生成 `https://api.deepseek.com/v1 + chat_completions + append_v1`；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据。保存模型配置后会立刻刷新运行时缓存，前台聊天、流式输出与后台任务都无需重启即可生效
 - AI 教练页发送消息走后端聊天代理，历史侧栏和消息恢复已切到后端 `chat_session / chat_message`
 
 ### 当前数据源分工
@@ -328,9 +328,10 @@ docs/
   - 定义 Provider 适配层的最小公共接口和统一错误类型
   - OpenAI-compatible provider 现在显式支持 `wireApi(chat_completions / responses)` 与 `apiPathMode(raw_root / append_v1)` 两个运行时参数
   - `/models`、`/chat/completions`、`/responses` 的 endpoint 都通过统一 builder 构造，`append_v1` 会自动避免 `.../v1/v1/...` 双拼接；DeepSeek 配到 `/v1` 根路径时也复用这套规则
+  - 模型测试与发现现在会对 OpenAI-compatible `/models` 的瞬时 `502/503/504` 与网络异常做轻量重试，减少代理抖动导致的假失败
   - 工具循环会按 wire 差异分别处理 `assistant.tool_calls -> tool` 与 `function_call -> function_call_output` 两条 follow-up 链路
   - `responses` 路径下的 tools schema 必须使用扁平 `{"type":"function","name":...,"description":...,"parameters":...}` 结构，不能复用 `chat_completions` 的嵌套 `function` 格式；否则真实 OpenAI-compatible 中转站会在首轮工具调用直接返回 HTTP 400
-  - 运行时会优先尝试 `responses`，但遇到 SSE 上游抖动、`502/503/504` 或某些中转站对 `function_call_output` HTTP 续传的限制时，会把当前轮次自动回退成 `chat_completions`，并把 mixed responses follow-up 消息回转为标准 `assistant(tool_calls) + tool` 结构
+  - 运行时会优先尝试 `responses`，但遇到 SSE 上游抖动、`502/503/504` 或某些中转站对 `function_call_output` HTTP 续传的限制时，会把当前轮次自动回退成 `chat_completions`，并把 mixed responses follow-up 消息回转为标准 `assistant(tool_calls) + tool` 结构；流式回复会直接切到真正的 `chat_completions` 流式请求，避免为了判断 fallback 先多打一轮非流式请求
 
 - `backend/providers/openai_compatible_client.py`
   - 抽出了真正的 OpenAI-compatible HTTP client，统一处理 base URL 规范化、headers、超时、错误映射和 endpoint builder

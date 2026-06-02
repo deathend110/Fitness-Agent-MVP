@@ -22,6 +22,8 @@ from backend.providers.openai_compatible_client import (
 class OpenAICompatibleProvider(ProviderAdapter):
     """统一适配 OpenAI 兼容供应商的模型发现、文本读取与工具回环结构。"""
 
+    _LIST_MODELS_MAX_ATTEMPTS = 3
+
     def __init__(
         self,
         *,
@@ -49,7 +51,7 @@ class OpenAICompatibleProvider(ProviderAdapter):
             wire_api=wire_api,
             api_path_mode=api_path_mode,
         )
-        payload = await client.get_json("/models", action_label="OpenAI 兼容模型列表请求")
+        payload = await self._get_models_payload_with_retry(client)
         data = payload.get("data") if isinstance(payload, dict) else []
         if not isinstance(data, list):
             raise ProviderAdapterError(
@@ -194,6 +196,46 @@ class OpenAICompatibleProvider(ProviderAdapter):
             timeout=self.timeout,
             client_factory=self.client_factory,
         )
+
+    async def _get_models_payload_with_retry(
+        self,
+        client: OpenAICompatibleClient,
+    ) -> dict[str, Any]:
+        last_error: ProviderAdapterError | None = None
+
+        for attempt in range(1, self._LIST_MODELS_MAX_ATTEMPTS + 1):
+            try:
+                payload = await client.get_json("/models", action_label="OpenAI 兼容模型列表请求")
+            except ProviderAdapterError as error:
+                last_error = error
+                if not self._should_retry_list_models(error, attempt=attempt):
+                    raise
+                continue
+
+            if isinstance(payload, dict):
+                return payload
+            raise ProviderAdapterError(
+                "OpenAI 兼容模型列表响应格式异常。",
+                code="invalid_response",
+            )
+
+        if last_error is not None:
+            raise last_error
+        raise ProviderAdapterError("OpenAI 兼容模型列表请求失败。", code="network_error")
+
+    def _should_retry_list_models(
+        self,
+        error: ProviderAdapterError,
+        *,
+        attempt: int,
+    ) -> bool:
+        if attempt >= self._LIST_MODELS_MAX_ATTEMPTS:
+            return False
+        if error.code == "network_error":
+            return True
+        if error.code == "http_error" and error.status in {502, 503, 504}:
+            return True
+        return False
 
     def _build_generate_payload(
         self,

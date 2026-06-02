@@ -626,3 +626,62 @@ async def test_list_remote_models_maps_http_error_to_provider_adapter_error() ->
     assert exc_info.value.status == 401
     assert exc_info.value.code == "http_error"
     assert exc_info.value.reason == "Invalid API key"
+
+
+@pytest.mark.asyncio
+async def test_list_remote_models_retries_transient_503_before_succeeding() -> None:
+    requests: list[str] = []
+    responses = [
+        {"status_code": 503, "payload": {"error": {"message": "upstream unavailable"}}},
+        {"status_code": 503, "payload": {"error": {"message": "upstream unavailable"}}},
+        {"status_code": 200, "payload": {"data": [{"id": "gpt-5.5"}]}},
+    ]
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        async def get(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+            timeout: float,
+        ):
+            del headers, timeout
+            requests.append(url)
+            current = responses.pop(0)
+
+            class Response:
+                status_code = current["status_code"]
+                is_success = current["status_code"] < 400
+                reason_phrase = "Service Unavailable" if current["status_code"] == 503 else "OK"
+
+                def json(self) -> dict[str, Any]:
+                    return current["payload"]
+
+            return Response()
+
+    provider = OpenAICompatibleProvider(client_factory=lambda **_: FakeClient())
+    models = await provider.list_remote_models(
+        api_key="sk-test",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="responses",
+        api_path_mode="append_v1",
+    )
+
+    assert models == [
+        {
+            "remoteId": "gpt-5.5",
+            "label": "gpt-5.5",
+            "enabled": True,
+        }
+    ]
+    assert requests == [
+        "https://sub2.congmingai.com/v1/models",
+        "https://sub2.congmingai.com/v1/models",
+        "https://sub2.congmingai.com/v1/models",
+    ]

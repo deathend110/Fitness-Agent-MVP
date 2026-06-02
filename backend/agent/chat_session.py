@@ -233,18 +233,17 @@ class OpenAICompatibleRuntimeClient:
     ) -> AsyncIterator[DeepSeekStreamEvent]:
         if self.wire_api == "responses":
             try:
-                payload, actual_wire_api = await self.request_openai_payload_with_fallback(
-                    messages=messages,
+                payload = await self.request_responses_with_usage(
+                    input_items=build_base_responses_input(messages),
                     model=model,
                     tools=tools,
                     tool_choice=tool_choice,
                     thinking=thinking,
                     reasoning_effort=reasoning_effort,
                 )
-            except DeepSeekClientError:
-                raise
-
-            if actual_wire_api == "chat_completions":
+            except DeepSeekClientError as exc:
+                if not self._should_fallback_from_responses_error(exc):
+                    raise
                 async for event in self._stream_chat_completions_with_usage(
                     messages=messages,
                     model=model,
@@ -257,6 +256,20 @@ class OpenAICompatibleRuntimeClient:
                 return
 
             text = read_base_responses_output_text(payload)
+            tool_calls = read_responses_tool_calls(payload)
+            # 流式降级时直接切到 chat_completions 真流式接口，避免先打一遍非流式
+            # fallback 请求，再重复发起第二次流式请求导致重复计费。
+            if self._should_fallback_from_responses_payload(text=text, tool_calls=tool_calls):
+                async for event in self._stream_chat_completions_with_usage(
+                    messages=messages,
+                    model=model,
+                    thinking=thinking,
+                    tools=self._convert_tools_to_chat_completions_schema(tools),
+                    tool_choice=tool_choice,
+                    reasoning_effort=reasoning_effort,
+                ):
+                    yield event
+                return
             if not text:
                 raise DeepSeekClientError(
                     f"{self._display_name()} 已返回成功响应，但没有可展示的消息内容。",

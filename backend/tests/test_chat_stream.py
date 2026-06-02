@@ -1322,6 +1322,102 @@ async def test_openai_compatible_runtime_client_falls_back_to_chat_completions_a
 
 
 @pytest.mark.asyncio
+async def test_openai_compatible_runtime_stream_fallback_does_not_issue_duplicate_non_stream_chat_completion_request() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+    queued_post_responses = [
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+    ]
+
+    class SequencedFallbackClient(FakeAsyncHttpxClient):
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxResponse:
+            self.recorder.append({"kind": "post", "url": url, "json": json, "headers": headers})
+            return queued_post_responses.pop(0)
+
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxStreamContext:
+            self.recorder.append(
+                {
+                    "kind": "stream",
+                    "method": method,
+                    "url": url,
+                    "json": json,
+                    "headers": headers,
+                }
+            )
+            return FakeAsyncHttpxStreamContext(
+                FakeAsyncHttpxResponse(
+                    lines=[
+                        'data: {"choices":[{"delta":{"content":"兼容"}}]}',
+                        'data: {"choices":[{"delta":{"content":"流式"}}],"usage":{"prompt_tokens":8,"completion_tokens":4,"total_tokens":12}}',
+                        "data: [DONE]",
+                    ]
+                )
+            )
+
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: SequencedFallbackClient(
+            recorder=recorded_requests,
+            **kwargs,
+        ),
+    )
+
+    chunks: list[str] = []
+    usage_payload: dict[str, Any] | None = None
+    async for event in client.stream_chat_with_usage(
+        messages=build_messages("流式降级验证"),
+        model="gpt-5.5",
+    ):
+        if event.text:
+            chunks.append(event.text)
+        if event.usage:
+            usage_payload = event.usage
+
+    assert "".join(chunks) == "兼容流式"
+    assert usage_payload == {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12}
+    assert [request["kind"] for request in recorded_requests] == ["post", "post", "post", "stream"]
+    assert recorded_requests[-1]["url"] == "https://sub2.congmingai.com/v1/chat/completions"
+
+
+@pytest.mark.asyncio
 async def test_openai_responses_tool_loop_provider_falls_back_to_chat_completions_and_preserves_tool_calls() -> None:
     recorded_requests: list[dict[str, Any]] = []
     queued_responses = [

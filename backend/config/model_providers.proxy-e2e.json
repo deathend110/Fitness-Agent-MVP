@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "defaultModelRef": "provider_openai_proxy::gpt-5.5",
+  "providers": [
+    {
+      "id": "provider_openai_proxy",
+      "type": "openai_compatible",
+      "label": "OpenAI 中转站",
+      "enabled": true,
+      "apiKey": "sk-your-openai-proxy-key",
+      "baseUrl": "https://sub2.congmingai.com/v1",
+      "wireApi": "responses",
+      "apiPathMode": "append_v1",
+      "selectedModels": [
+        {
+          "remoteId": "gpt-5.5",
+          "label": "gpt-5.5",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}
