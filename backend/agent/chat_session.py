@@ -95,15 +95,16 @@ class OpenAICompatibleRuntimeClient:
                     tool_choice=tool_choice,
                     reasoning_effort=reasoning_effort,
                 )
-            payload = await self.request_responses_with_usage(
-                input_items=build_base_responses_input(messages),
+            result = await self.request_chat_with_usage(
+                messages=messages,
                 model=model,
+                stream=False,
+                thinking=thinking,
                 tools=tools,
                 tool_choice=tool_choice,
-                thinking=thinking,
                 reasoning_effort=reasoning_effort,
             )
-            return read_base_responses_output_text(payload)
+            return result.content
 
         if stream:
             return self.stream_chat(
@@ -136,14 +137,29 @@ class OpenAICompatibleRuntimeClient:
         reasoning_effort: str | None = None,
     ) -> DeepSeekChatResult:
         if self.wire_api == "responses":
-            payload = await self.request_responses_with_usage(
-                input_items=build_base_responses_input(messages),
+            payload, actual_wire_api = await self.request_openai_payload_with_fallback(
+                messages=messages,
                 model=model,
                 tools=tools,
                 tool_choice=tool_choice,
                 thinking=thinking,
                 reasoning_effort=reasoning_effort,
             )
+            if actual_wire_api == "chat_completions":
+                content = self._read_chat_message_content(payload)
+                tool_calls = self._read_chat_tool_calls(payload)
+                if not content and not tool_calls:
+                    raise DeepSeekClientError(
+                        f"{self._display_name()} 已返回成功响应，但没有可展示的消息内容。",
+                        code="empty_content",
+                    )
+                return DeepSeekChatResult(
+                    content=content,
+                    usage=read_openai_usage_payload(payload),
+                    reasoning_content=self._read_chat_reasoning_content(payload),
+                    tool_calls=tool_calls,
+                )
+
             text = read_base_responses_output_text(payload)
             tool_calls = read_responses_tool_calls(payload)
             if not text and not tool_calls:
@@ -216,14 +232,30 @@ class OpenAICompatibleRuntimeClient:
         reasoning_effort: str | None = None,
     ) -> AsyncIterator[DeepSeekStreamEvent]:
         if self.wire_api == "responses":
-            payload = await self.request_responses_with_usage(
-                input_items=build_base_responses_input(messages),
-                model=model,
-                tools=tools,
-                tool_choice=tool_choice,
-                thinking=thinking,
-                reasoning_effort=reasoning_effort,
-            )
+            try:
+                payload, actual_wire_api = await self.request_openai_payload_with_fallback(
+                    messages=messages,
+                    model=model,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    thinking=thinking,
+                    reasoning_effort=reasoning_effort,
+                )
+            except DeepSeekClientError:
+                raise
+
+            if actual_wire_api == "chat_completions":
+                async for event in self._stream_chat_completions_with_usage(
+                    messages=messages,
+                    model=model,
+                    thinking=thinking,
+                    tools=self._convert_tools_to_chat_completions_schema(tools),
+                    tool_choice=tool_choice,
+                    reasoning_effort=reasoning_effort,
+                ):
+                    yield event
+                return
+
             text = read_base_responses_output_text(payload)
             if not text:
                 raise DeepSeekClientError(
@@ -236,6 +268,26 @@ class OpenAICompatibleRuntimeClient:
                 yield DeepSeekStreamEvent(usage=usage)
             return
 
+        async for event in self._stream_chat_completions_with_usage(
+            messages=messages,
+            model=model,
+            thinking=thinking,
+            tools=tools,
+            tool_choice=tool_choice,
+            reasoning_effort=reasoning_effort,
+        ):
+            yield event
+
+    async def _stream_chat_completions_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        thinking: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
         self._assert_api_key()
         payload = self._build_chat_completions_payload(
             messages=messages,
@@ -305,6 +357,53 @@ class OpenAICompatibleRuntimeClient:
         if usage is not None:
             yield DeepSeekStreamEvent(usage=usage)
 
+    async def request_openai_payload_with_fallback(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        thinking: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> tuple[dict[str, Any], str]:
+        try:
+            payload = await self.request_responses_with_usage(
+                input_items=build_base_responses_input(messages),
+                model=model,
+                tools=tools,
+                tool_choice=tool_choice,
+                thinking=thinking,
+                reasoning_effort=reasoning_effort,
+            )
+        except DeepSeekClientError as exc:
+            if not self._should_fallback_from_responses_error(exc):
+                raise
+            fallback_payload = await self._request_chat_completions_payload(
+                messages=self._convert_messages_to_chat_completions(messages),
+                model=model,
+                thinking=thinking,
+                tools=self._convert_tools_to_chat_completions_schema(tools),
+                tool_choice=tool_choice,
+                reasoning_effort=reasoning_effort,
+            )
+            return self._mark_payload_wire_api(fallback_payload, "chat_completions"), "chat_completions"
+
+        text = read_base_responses_output_text(payload)
+        tool_calls = read_responses_tool_calls(payload)
+        if self._should_fallback_from_responses_payload(text=text, tool_calls=tool_calls):
+            fallback_payload = await self._request_chat_completions_payload(
+                messages=self._convert_messages_to_chat_completions(messages),
+                model=model,
+                thinking=thinking,
+                tools=self._convert_tools_to_chat_completions_schema(tools),
+                tool_choice=tool_choice,
+                reasoning_effort=reasoning_effort,
+            )
+            return self._mark_payload_wire_api(fallback_payload, "chat_completions"), "chat_completions"
+
+        return self._mark_payload_wire_api(payload, "responses"), "responses"
+
     async def request_responses_with_usage(
         self,
         *,
@@ -328,13 +427,60 @@ class OpenAICompatibleRuntimeClient:
             payload["reasoning"] = {"effort": reasoning_effort}
         elif thinking and thinking.get("type") == "enabled":
             payload["reasoning"] = {"effort": "medium"}
-        response_payload = await self._post_json(self._build_responses_url(), payload)
+        response_payload = await self._post_responses_with_retry(payload)
         if not isinstance(response_payload, dict):
             raise DeepSeekClientError(
                 f"{self._display_name()} 响应格式异常，请稍后重试。",
                 code="invalid_response",
             )
         return response_payload
+
+    async def _request_chat_completions_payload(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        thinking: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict[str, Any]:
+        self._assert_api_key()
+        payload = self._build_chat_completions_payload(
+            messages=messages,
+            model=model,
+            stream=False,
+            thinking=thinking,
+            tools=tools,
+            tool_choice=tool_choice,
+            reasoning_effort=reasoning_effort,
+        )
+        response_payload = await self._post_json(self._build_chat_completions_url(), payload)
+        if not isinstance(response_payload, dict):
+            raise DeepSeekClientError(
+                f"{self._display_name()} 响应格式异常，请稍后重试。",
+                code="invalid_response",
+            )
+        return response_payload
+
+    async def _post_responses_with_retry(self, payload: dict[str, Any]) -> Any:
+        max_attempts = 3
+        last_error: DeepSeekClientError | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return await self._post_json(self._build_responses_url(), payload)
+            except DeepSeekClientError as exc:
+                last_error = exc
+                if not self._should_retry_responses_error(exc, attempt=attempt, max_attempts=max_attempts):
+                    raise
+
+        if last_error is not None:
+            raise last_error
+        raise DeepSeekClientError(
+            f"{self._display_name()} 请求失败，请稍后重试。",
+            code="network_error",
+        )
 
     def _display_name(self) -> str:
         if self.provider_label:
@@ -399,6 +545,143 @@ class OpenAICompatibleRuntimeClient:
             payload["reasoning_effort"] = reasoning_effort
         return payload
 
+    @staticmethod
+    def _mark_payload_wire_api(payload: dict[str, Any], wire_api: str) -> dict[str, Any]:
+        annotated_payload = dict(payload)
+        annotated_payload["_wire_api"] = wire_api
+        return annotated_payload
+
+    @staticmethod
+    def _convert_tools_to_chat_completions_schema(
+        tools: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]] | None:
+        if tools is None:
+            return None
+
+        converted_tools: list[dict[str, Any]] = []
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            function_payload = tool.get("function")
+            if isinstance(function_payload, dict):
+                converted_tools.append(tool)
+                continue
+
+            if tool.get("type") != "function":
+                converted_tools.append(tool)
+                continue
+
+            name = tool.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            converted_tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": tool.get("description") or "",
+                        "parameters": tool.get("parameters") or {"type": "object", "properties": {}},
+                    },
+                }
+            )
+        return converted_tools
+
+    @staticmethod
+    def _convert_messages_to_chat_completions(
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not messages:
+            return []
+
+        # 标准 chat 消息原样透传；只有 mixed / responses input 结构才做协议回转。
+        if all(isinstance(message, dict) and "role" in message and "type" not in message for message in messages):
+            return messages
+
+        converted_messages: list[dict[str, Any]] = []
+        pending_tool_calls: list[dict[str, Any]] = []
+        tool_names_by_call_id: dict[str, str] = {}
+
+        def flush_pending_tool_calls() -> None:
+            nonlocal pending_tool_calls
+            if not pending_tool_calls:
+                return
+            converted_messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": pending_tool_calls,
+                }
+            )
+            pending_tool_calls = []
+
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+
+            item_type = str(message.get("type") or "").strip()
+            if item_type == "message":
+                flush_pending_tool_calls()
+                role = str(message.get("role") or "user").strip() or "user"
+                content_blocks = message.get("content")
+                text_parts: list[str] = []
+                if isinstance(content_blocks, list):
+                    for block in content_blocks:
+                        if not isinstance(block, dict):
+                            continue
+                        text = block.get("text")
+                        if isinstance(text, str) and text:
+                            text_parts.append(text)
+                converted_messages.append(
+                    {
+                        "role": "assistant" if role in {"assistant", "model"} else role,
+                        "content": "\n".join(text_parts).strip(),
+                    }
+                )
+                continue
+
+            if item_type == "function_call":
+                call_id = str(message.get("call_id") or message.get("id") or "").strip()
+                name = str(message.get("name") or "").strip()
+                if not call_id or not name:
+                    continue
+                tool_names_by_call_id[call_id] = name
+                pending_tool_calls.append(
+                    {
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": message.get("arguments") or "{}",
+                        },
+                    }
+                )
+                continue
+
+            if item_type == "function_call_output":
+                flush_pending_tool_calls()
+                call_id = str(message.get("call_id") or "").strip()
+                if not call_id:
+                    continue
+                converted_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": tool_names_by_call_id.get(call_id, ""),
+                        "content": stringify_base_tool_result(message.get("output", "")),
+                    }
+                )
+                continue
+
+            if item_type == "reasoning":
+                continue
+
+            if "role" in message:
+                flush_pending_tool_calls()
+                converted_messages.append(message)
+
+        flush_pending_tool_calls()
+        return converted_messages
+
     async def _post_json(self, url: str, payload: dict[str, Any]) -> Any:
         try:
             async with self.client_factory(timeout=self.timeout) as client:
@@ -414,7 +697,7 @@ class OpenAICompatibleRuntimeClient:
             ) from exc
 
         self._raise_for_error_response(response)
-        return self._read_json_payload(response)
+        return await self._read_json_payload(response)
 
     def _raise_for_error_response(self, response: Any) -> None:
         if getattr(response, "is_success", False):
@@ -429,10 +712,15 @@ class OpenAICompatibleRuntimeClient:
             reason=reason,
         )
 
-    def _read_json_payload(self, response: Any) -> Any:
+    async def _read_json_payload(self, response: Any) -> Any:
         try:
             return response.json()
         except Exception as exc:
+            # 某些 OpenAI-compatible 中转会把 responses 工具调用结果包装成 SSE，
+            # 这里优先从最终 completed 事件恢复完整响应，避免影响既有 JSON 路径。
+            sse_payload = await self._read_responses_sse_payload(response)
+            if sse_payload is not None:
+                return sse_payload
             reason = str(exc).strip()
             reason_text = f"：{reason}" if reason else ""
             raise DeepSeekClientError(
@@ -440,6 +728,119 @@ class OpenAICompatibleRuntimeClient:
                 code="response_parse_error",
                 reason=reason,
             ) from exc
+
+    async def _read_responses_sse_payload(self, response: Any) -> dict[str, Any] | None:
+        content_type = self._read_response_content_type(response)
+        if "text/event-stream" not in content_type:
+            return None
+
+        final_payload: dict[str, Any] | None = None
+        error_reason: str | None = None
+        async for raw_line in response.aiter_lines():
+            data = self._parse_sse_data_line(raw_line)
+            if data is None or data == "[DONE]":
+                continue
+
+            try:
+                event_payload = json.loads(data)
+            except JSONDecodeError:
+                return None
+
+            completed_payload = self._extract_completed_response_payload(event_payload)
+            if completed_payload is not None:
+                final_payload = completed_payload
+                continue
+
+            extracted_error = self._extract_sse_error_reason(event_payload)
+            if extracted_error:
+                error_reason = extracted_error
+
+        if final_payload is not None:
+            return final_payload
+        if error_reason:
+            raise DeepSeekClientError(
+                f"{self._display_name()} 网络请求失败：{error_reason}",
+                code="network_error",
+                reason=error_reason,
+            )
+        return None
+
+    @staticmethod
+    def _read_response_content_type(response: Any) -> str:
+        headers = getattr(response, "headers", None)
+        if hasattr(headers, "get"):
+            content_type = headers.get("content-type", "")
+            return content_type.lower() if isinstance(content_type, str) else ""
+        return ""
+
+    @staticmethod
+    def _extract_completed_response_payload(payload: Any) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+
+        event_type = payload.get("type")
+        if isinstance(event_type, str) and event_type.endswith(".completed"):
+            response_payload = payload.get("response")
+            if isinstance(response_payload, dict):
+                return response_payload
+            if isinstance(payload.get("status"), str) and payload["status"] == "completed":
+                return payload
+        return None
+
+    @staticmethod
+    def _extract_sse_error_reason(payload: Any) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+
+        error_payload = payload.get("error")
+        if isinstance(error_payload, dict):
+            message = error_payload.get("message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+        return None
+
+    @staticmethod
+    def _should_retry_responses_error(
+        error: DeepSeekClientError,
+        *,
+        attempt: int,
+        max_attempts: int,
+    ) -> bool:
+        if attempt >= max_attempts:
+            return False
+        if error.code == "network_error":
+            return True
+        if error.code == "http_error" and error.status in {502, 503, 504}:
+            return True
+        return False
+
+    @staticmethod
+    def _should_fallback_from_responses_error(error: DeepSeekClientError) -> bool:
+        if error.code == "network_error":
+            return True
+        if error.code == "http_error" and error.status in {502, 503, 504}:
+            return True
+
+        reason = str(error.reason or "").lower()
+        message = str(error).lower()
+        unstable_markers = (
+            "upstream connection failed",
+            "ws dial",
+            "websocket dial",
+            "status=403",
+            "handshake response status code 101 but got 403",
+            "function_call_output requires item_reference ids",
+            "previous_response_id is only supported on responses websocket v2",
+        )
+        return any(marker in reason or marker in message for marker in unstable_markers)
+
+    @staticmethod
+    def _should_fallback_from_responses_payload(
+        *,
+        text: str,
+        tool_calls: list[dict[str, Any]] | None,
+    ) -> bool:
+        return not text.strip() and not tool_calls
 
     @staticmethod
     def _read_error_detail(response: Any) -> str:
@@ -841,14 +1242,31 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
         reasoning_effort: str | None = None,
         **_: Any,
     ) -> dict[str, Any]:
-        payload = await self.client.request_responses_with_usage(
-            input_items=build_base_responses_input(messages),
-            model=model,
-            tools=tools,
-            tool_choice=tool_choice,
-            thinking=thinking,
-            reasoning_effort=reasoning_effort,
-        )
+        if hasattr(self.client, "request_openai_payload_with_fallback"):
+            payload, actual_wire_api = await self.client.request_openai_payload_with_fallback(
+                messages=messages,
+                model=model,
+                tools=tools,
+                tool_choice=tool_choice,
+                thinking=thinking,
+                reasoning_effort=reasoning_effort,
+            )
+        else:
+            payload = await self.client.request_responses_with_usage(
+                input_items=build_base_responses_input(messages),
+                model=model,
+                tools=tools,
+                tool_choice=tool_choice,
+                thinking=thinking,
+                reasoning_effort=reasoning_effort,
+            )
+            actual_wire_api = "responses"
+        if actual_wire_api == "chat_completions":
+            return {
+                "text": self.client._read_chat_message_content(payload),
+                "toolCalls": self.normalize_tool_call_response(payload),
+                "raw": payload,
+            }
         return {
             "text": read_base_responses_output_text(payload),
             "toolCalls": self.normalize_tool_call_response(payload),
@@ -856,6 +1274,34 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
         }
 
     def normalize_tool_call_response(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        if str(payload.get("_wire_api") or "").strip() == "chat_completions":
+            tool_calls = self.client._read_chat_tool_calls(payload) or []
+            message = self.client._read_first_chat_message(payload) or {}
+            normalized_calls: list[dict[str, Any]] = []
+            for tool_call in tool_calls:
+                if not isinstance(tool_call, dict):
+                    continue
+                function = tool_call.get("function")
+                if not isinstance(function, dict):
+                    continue
+                name = function.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                normalized_calls.append(
+                    {
+                        "toolName": name,
+                        "callId": str(tool_call.get("id") or name),
+                        "arguments": OpenAICompatibleProvider._parse_function_arguments(
+                            function.get("arguments")
+                        ),
+                        "rawProviderPayload": {
+                            "toolCall": tool_call,
+                            "assistantMessage": message,
+                            "wireApi": "chat_completions",
+                        },
+                    }
+                )
+            return normalized_calls
         return normalize_responses_tool_call_response(payload)
 
     def build_followup_messages_after_tool_result(
@@ -864,6 +1310,34 @@ class _OpenAIResponsesToolLoopProvider(OpenAICompatibleProvider):
         tool_call: dict[str, Any],
         tool_result: Any,
     ) -> list[dict[str, Any]]:
+        raw_payload = tool_call.get("rawProviderPayload")
+        if isinstance(raw_payload, dict) and raw_payload.get("wireApi") == "chat_completions":
+            updated_messages = list(messages)
+            assistant_message = raw_payload.get("assistantMessage")
+            if isinstance(assistant_message, dict):
+                if not self._has_matching_trailing_assistant(updated_messages, assistant_message):
+                    updated_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": assistant_message.get("content", ""),
+                            "tool_calls": assistant_message.get("tool_calls", []),
+                            **(
+                                {"reasoning_content": assistant_message["reasoning_content"]}
+                                if isinstance(assistant_message.get("reasoning_content"), str)
+                                else {}
+                            ),
+                        }
+                    )
+            return updated_messages + [
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call["callId"],
+                    "name": tool_call["toolName"],
+                    "content": tool_result
+                    if isinstance(tool_result, str)
+                    else json.dumps(tool_result, ensure_ascii=False),
+                }
+            ]
         return build_base_responses_followup_messages(messages, tool_call, tool_result)
 
 

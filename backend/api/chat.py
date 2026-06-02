@@ -446,7 +446,18 @@ async def request_deepseek_reply_with_usage(
     if reasoning_effort is not None:
         thinking_kwargs["reasoning_effort"] = reasoning_effort
 
-    if read_runtime_client_wire_api(deepseek_client) == "responses":
+    # 统一优先走 provider runtime 的 usage 接口，让 responses->chat_completions
+    # 自动降级、工具协议差异和 usage 解析都收口在 runtime client 内部。
+    if hasattr(deepseek_client, "request_chat_with_usage"):
+        result = await deepseek_client.request_chat_with_usage(
+            messages=messages,
+            model=model,
+            stream=False,
+            **thinking_kwargs,
+        )
+        return result.content, result.usage
+
+    if hasattr(deepseek_client, "request_responses_with_usage"):
         result = await deepseek_client.request_responses_with_usage(
             input_items=convert_messages_to_responses_input(messages),
             model=model,
@@ -456,15 +467,6 @@ async def request_deepseek_reply_with_usage(
             output_text = read_responses_output_text(result)
             if output_text:
                 return output_text, read_openai_usage_payload(result)
-
-    if hasattr(deepseek_client, "request_chat_with_usage"):
-        result = await deepseek_client.request_chat_with_usage(
-            messages=messages,
-            model=model,
-            stream=False,
-            **thinking_kwargs,
-        )
-        return result.content, result.usage
 
     content = await deepseek_client.request_chat(
         messages=messages,
@@ -494,7 +496,18 @@ async def stream_deepseek_reply_with_usage(
     if reasoning_effort is not None:
         thinking_kwargs["reasoning_effort"] = reasoning_effort
 
-    if read_runtime_client_wire_api(deepseek_client) == "responses":
+    # 流式链路同样统一优先走 runtime client，避免 API 层直接调 responses
+    # 时绕开中转站异常恢复与协议降级逻辑。
+    if hasattr(deepseek_client, "stream_chat_with_usage"):
+        async for event in deepseek_client.stream_chat_with_usage(
+            messages=messages,
+            model=model,
+            **thinking_kwargs,
+        ):
+            yield (event.text or None, event.usage)
+        return
+
+    if hasattr(deepseek_client, "request_responses_with_usage"):
         result = await deepseek_client.request_responses_with_usage(
             input_items=convert_messages_to_responses_input(messages),
             model=model,
@@ -505,15 +518,6 @@ async def stream_deepseek_reply_with_usage(
             if output_text:
                 yield output_text, read_openai_usage_payload(result)
                 return
-
-    if hasattr(deepseek_client, "stream_chat_with_usage"):
-        async for event in deepseek_client.stream_chat_with_usage(
-            messages=messages,
-            model=model,
-            **thinking_kwargs,
-        ):
-            yield (event.text or None, event.usage)
-        return
 
     async for chunk in deepseek_client.stream_chat(
         messages=messages,

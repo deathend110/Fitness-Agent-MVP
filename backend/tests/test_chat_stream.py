@@ -9,7 +9,11 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from backend.agent.chat_session import OpenAICompatibleRuntimeClient, build_provider_bound_client
+from backend.agent.chat_session import (
+    OpenAICompatibleRuntimeClient,
+    _OpenAIResponsesToolLoopProvider,
+    build_provider_bound_client,
+)
 from backend.agent.deepseek_client import (
     DeepSeekChatResult,
     DeepSeekClient,
@@ -106,17 +110,23 @@ class FakeAsyncHttpxResponse:
         self,
         *,
         payload: dict[str, Any] | None = None,
+        json_error: Exception | None = None,
         lines: list[str] | None = None,
+        headers: dict[str, str] | None = None,
         status_code: int = 200,
         reason_phrase: str = "OK",
     ) -> None:
         self._payload = payload or {}
+        self._json_error = json_error
         self._lines = lines or []
+        self.headers = headers or {"content-type": "application/json"}
         self.status_code = status_code
         self.reason_phrase = reason_phrase
         self.is_success = 200 <= status_code < 300
 
     def json(self) -> dict[str, Any]:
+        if self._json_error is not None:
+            raise self._json_error
         return self._payload
 
     async def aiter_lines(self) -> AsyncIterator[str]:
@@ -1084,6 +1094,476 @@ async def test_chat_stream_reports_provider_aware_error_message_for_openai_provi
     assert events[0]["event"] == "error"
     assert "OpenAI 请求失败" in events[0]["data"]["message"]
     assert "DeepSeek" not in events[0]["data"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_runtime_client_keeps_json_responses_path() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://api.openai.com",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: FakeAsyncHttpxClient(
+            recorder=recorded_requests,
+            post_response=FakeAsyncHttpxResponse(
+                payload={
+                    "id": "resp_json_123",
+                    "status": "completed",
+                    "output": [],
+                    "usage": {
+                        "input_tokens": 11,
+                        "output_tokens": 7,
+                        "total_tokens": 18,
+                    },
+                }
+            ),
+            **kwargs,
+        ),
+    )
+
+    payload = await client.request_responses_with_usage(
+        input_items=[{"role": "user", "content": [{"type": "input_text", "text": "hello"}]}],
+        model="gpt-4.1-mini",
+    )
+
+    assert payload["id"] == "resp_json_123"
+    assert payload["usage"]["total_tokens"] == 18
+    assert recorded_requests[0]["url"] == "https://api.openai.com/v1/responses"
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_runtime_client_restores_completed_payload_from_sse_response() -> None:
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://api.openai.com",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: FakeAsyncHttpxClient(
+            post_response=FakeAsyncHttpxResponse(
+                json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+                headers={"content-type": "text/event-stream; charset=utf-8"},
+                lines=[
+                    "event: response.created",
+                    'data: {"type":"response.created","response":{"id":"resp_sse_123","status":"in_progress"}}',
+                    "",
+                    "event: response.completed",
+                    'data: {"type":"response.completed","response":{"id":"resp_sse_123","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"SSE 工具调用最终回复"}]}],"usage":{"input_tokens":21,"output_tokens":9,"total_tokens":30}}}',
+                    "",
+                ],
+            ),
+            **kwargs,
+        ),
+    )
+
+    payload = await client.request_responses_with_usage(
+        input_items=[{"role": "user", "content": [{"type": "input_text", "text": "use tools"}]}],
+        model="gpt-4.1-mini",
+        tools=[
+            {
+                "type": "function",
+                "name": "get_weekly_plan",
+                "description": "读取周计划",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ],
+    )
+
+    assert payload["id"] == "resp_sse_123"
+    assert payload["status"] == "completed"
+    assert payload["output"][0]["content"][0]["text"] == "SSE 工具调用最终回复"
+    assert payload["usage"]["total_tokens"] == 30
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_runtime_client_retries_transient_sse_upstream_failure() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+    queued_responses = [
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"id":"chatcmpl-ws-ingress","object":"chat.completion.chunk","choices":[{"delta":{"content":"\\u200b"}}]}',
+                'data: {"error":{"message":"upstream connection failed: openai ws dial"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            payload={
+                "id": "resp_retry_ok",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "重试后恢复成功"}],
+                    }
+                ],
+            }
+        ),
+    ]
+
+    class SequencedFakeAsyncHttpxClient(FakeAsyncHttpxClient):
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxResponse:
+            self.recorder.append({"kind": "post", "url": url, "json": json, "headers": headers})
+            return queued_responses.pop(0)
+
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://api.openai.com",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: SequencedFakeAsyncHttpxClient(
+            recorder=recorded_requests,
+            **kwargs,
+        ),
+    )
+
+    payload = await client.request_responses_with_usage(
+        input_items=[{"role": "user", "content": [{"type": "input_text", "text": "retry tools"}]}],
+        model="gpt-4.1-mini",
+        tools=[
+            {
+                "type": "function",
+                "name": "get_weekly_plan",
+                "description": "读取周计划",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ],
+    )
+
+    assert payload["id"] == "resp_retry_ok"
+    assert payload["output"][0]["content"][0]["text"] == "重试后恢复成功"
+    assert len(recorded_requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_runtime_client_falls_back_to_chat_completions_after_responses_upstream_failure() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+    queued_responses = [
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            payload={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "已自动降级到 chat_completions 并返回正文。",
+                        }
+                    }
+                ],
+                "usage": {"prompt_tokens": 18, "completion_tokens": 11, "total_tokens": 29},
+            }
+        ),
+    ]
+
+    class SequencedFallbackClient(FakeAsyncHttpxClient):
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxResponse:
+            self.recorder.append({"kind": "post", "url": url, "json": json, "headers": headers})
+            return queued_responses.pop(0)
+
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: SequencedFallbackClient(
+            recorder=recorded_requests,
+            **kwargs,
+        ),
+    )
+
+    result = await client.request_chat_with_usage(
+        messages=build_messages("降级验证"),
+        model="gpt-5.5",
+    )
+
+    assert result.content == "已自动降级到 chat_completions 并返回正文。"
+    assert result.usage == {"prompt_tokens": 18, "completion_tokens": 11, "total_tokens": 29}
+    assert [request["url"] for request in recorded_requests] == [
+        "https://sub2.congmingai.com/v1/responses",
+        "https://sub2.congmingai.com/v1/responses",
+        "https://sub2.congmingai.com/v1/responses",
+        "https://sub2.congmingai.com/v1/chat/completions",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_tool_loop_provider_falls_back_to_chat_completions_and_preserves_tool_calls() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+    queued_responses = [
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+            headers={"content-type": "text/event-stream; charset=utf-8"},
+            lines=[
+                'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                "",
+            ],
+        ),
+        FakeAsyncHttpxResponse(
+            payload={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "call_propose",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "propose_plan_change",
+                                        "arguments": json.dumps(
+                                            {
+                                                "day": "Monday",
+                                                "summary": "改成恢复型安排。",
+                                                "changes": [
+                                                    {
+                                                        "action": "update",
+                                                        "exerciseName": "深蹲",
+                                                        "field": "rpe",
+                                                        "newValue": 7,
+                                                    }
+                                                ],
+                                            },
+                                            ensure_ascii=False,
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ),
+    ]
+
+    class SequencedFallbackClient(FakeAsyncHttpxClient):
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxResponse:
+            self.recorder.append({"kind": "post", "url": url, "json": json, "headers": headers})
+            return queued_responses.pop(0)
+
+    runtime_client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: SequencedFallbackClient(
+            recorder=recorded_requests,
+            **kwargs,
+        ),
+    )
+    provider = _OpenAIResponsesToolLoopProvider(client=runtime_client)
+
+    response = await provider.generate_chat(
+        messages=build_messages("请生成一张计划修改卡"),
+        model="gpt-5.5",
+        tools=[
+            {
+                "type": "function",
+                "name": "propose_plan_change",
+                "description": "生成训练计划修改建议卡",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ],
+    )
+
+    normalized_calls = provider.normalize_tool_call_response(response["raw"])
+
+    assert response["text"] == ""
+    assert normalized_calls[0]["toolName"] == "propose_plan_change"
+    assert normalized_calls[0]["arguments"]["day"] == "Monday"
+    assert normalized_calls[0]["rawProviderPayload"]["wireApi"] == "chat_completions"
+    assert recorded_requests[-1]["url"] == "https://sub2.congmingai.com/v1/chat/completions"
+    assert recorded_requests[-1]["json"]["tools"] == [
+        {
+            "type": "function",
+            "function": {
+                "name": "propose_plan_change",
+                "description": "生成训练计划修改建议卡",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_openai_runtime_converts_responses_followup_messages_when_function_call_output_http_mode_is_rejected() -> None:
+    recorded_requests: list[dict[str, Any]] = []
+    queued_responses = [
+        FakeAsyncHttpxResponse(
+            payload={
+                "id": "resp_fc_1",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call_propose",
+                        "name": "propose_plan_change",
+                        "arguments": json.dumps(
+                            {
+                                "day": "Monday",
+                                "summary": "改成恢复型安排。",
+                                "changes": [
+                                    {
+                                        "action": "update",
+                                        "exerciseName": "深蹲",
+                                        "field": "rpe",
+                                        "newValue": 7,
+                                    }
+                                ],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                ],
+            }
+        ),
+        FakeAsyncHttpxResponse(
+            status_code=400,
+            reason_phrase="Bad Request",
+            payload={
+                "error": {
+                    "message": "function_call_output requires item_reference ids matching each call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2"
+                }
+            },
+        ),
+        FakeAsyncHttpxResponse(
+            payload={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "已生成待确认计划卡。",
+                        }
+                    }
+                ]
+            }
+        ),
+    ]
+
+    class SequencedFallbackClient(FakeAsyncHttpxClient):
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxResponse:
+            self.recorder.append({"kind": "post", "url": url, "json": json, "headers": headers})
+            return queued_responses.pop(0)
+
+    runtime_client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        client_factory=lambda **kwargs: SequencedFallbackClient(
+            recorder=recorded_requests,
+            **kwargs,
+        ),
+    )
+
+    first_payload, first_wire = await runtime_client.request_openai_payload_with_fallback(
+        messages=build_messages("请生成计划卡"),
+        model="gpt-5.5",
+        tools=[
+            {
+                "type": "function",
+                "name": "propose_plan_change",
+                "description": "生成训练计划修改建议卡",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ],
+    )
+    assert first_wire == "responses"
+
+    followup_messages = [
+        {"role": "system", "content": "SYSTEM_PROMPT"},
+        {"role": "assistant", "content": "先观察疲劳。"},
+        {"role": "user", "content": "请生成计划卡"},
+        first_payload["output"][0],
+        {"type": "function_call_output", "call_id": "call_propose", "output": '{"ok":true}'},
+    ]
+
+    second_payload, second_wire = await runtime_client.request_openai_payload_with_fallback(
+        messages=followup_messages,
+        model="gpt-5.5",
+        tools=[
+            {
+                "type": "function",
+                "name": "propose_plan_change",
+                "description": "生成训练计划修改建议卡",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ],
+    )
+
+    assert second_wire == "chat_completions"
+    assert second_payload["choices"][0]["message"]["content"] == "已生成待确认计划卡。"
+    assert recorded_requests[-1]["url"] == "https://sub2.congmingai.com/v1/chat/completions"
+    chat_messages = recorded_requests[-1]["json"]["messages"]
+    assert chat_messages[-2]["role"] == "assistant"
+    assert chat_messages[-2]["tool_calls"][0]["id"] == "call_propose"
+    assert chat_messages[-1] == {
+        "role": "tool",
+        "tool_call_id": "call_propose",
+        "name": "propose_plan_change",
+        "content": '{"ok":true}',
+    }
 
 
 def test_build_provider_bound_client_prefers_openai_compatible_runtime_for_deepseek_provider() -> None:

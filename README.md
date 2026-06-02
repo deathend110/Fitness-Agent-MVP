@@ -135,6 +135,8 @@ HTTPS_PROXY=
 - `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表
 - OpenAI-compatible Provider 的测试连接、模型发现、配置保存与回显都会携带 `wireApi` / `apiPathMode`；旧版 DeepSeek bootstrap 默认补成 `chat_completions + raw_root`，而显式把 `base_url` 配到 `/v1` 时，endpoint builder 也会自动避免出现 `/v1/v1/chat/completions`
 - OpenAI-compatible 聊天后端同时支持 `chat_completions` 与 `responses` 两种 wire；工具回环会按各自协议补齐 follow-up 消息
+- OpenAI-compatible `responses` 模式下，后端现在会发送 Responses API 需要的扁平 `function` tools schema，而不是 `chat_completions` 的嵌套 `function` 结构；这已经过真实中转站的普通工具对话、proposal 卡生成、计划 commit 和后台任务验证
+- 如果 OpenAI-compatible 中转站在 `responses` 下返回 SSE 上游异常，或在工具 follow-up 阶段拒绝 `function_call_output` 的 HTTP 续传，运行时会自动把该轮请求降级到 `chat_completions`，避免普通对话可用但 proposal / 后台任务失效
 - 如果本机访问 Gemini 依赖代理，请把 `HTTP_PROXY` / `HTTPS_PROXY` 写入 `backend/.env`；后端启动时会自动同步到运行进程，避免只在某个终端窗口里临时设代理导致 Gemini 连不上
 - 保存模型配置时会保留真实 `apiKey`，但返回给前端的是脱敏预览值
 - 未配置 API Key 时，除 AI 教练外的大部分本地功能仍可使用

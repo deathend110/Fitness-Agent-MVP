@@ -329,6 +329,8 @@ docs/
   - OpenAI-compatible provider 现在显式支持 `wireApi(chat_completions / responses)` 与 `apiPathMode(raw_root / append_v1)` 两个运行时参数
   - `/models`、`/chat/completions`、`/responses` 的 endpoint 都通过统一 builder 构造，`append_v1` 会自动避免 `.../v1/v1/...` 双拼接；DeepSeek 配到 `/v1` 根路径时也复用这套规则
   - 工具循环会按 wire 差异分别处理 `assistant.tool_calls -> tool` 与 `function_call -> function_call_output` 两条 follow-up 链路
+  - `responses` 路径下的 tools schema 必须使用扁平 `{"type":"function","name":...,"description":...,"parameters":...}` 结构，不能复用 `chat_completions` 的嵌套 `function` 格式；否则真实 OpenAI-compatible 中转站会在首轮工具调用直接返回 HTTP 400
+  - 运行时会优先尝试 `responses`，但遇到 SSE 上游抖动、`502/503/504` 或某些中转站对 `function_call_output` HTTP 续传的限制时，会把当前轮次自动回退成 `chat_completions`，并把 mixed responses follow-up 消息回转为标准 `assistant(tool_calls) + tool` 结构
 
 - `backend/providers/openai_compatible_client.py`
   - 抽出了真正的 OpenAI-compatible HTTP client，统一处理 base URL 规范化、headers、超时、错误映射和 endpoint builder
