@@ -22,6 +22,9 @@ PLAN_PROPOSAL_CONFIRMATION_MARKERS = (
     "不要直接写回",
     "待确认",
     "proposal",
+    "计划修改卡",
+    "修改计划卡",
+    "生成计划修改卡",
 )
 
 
@@ -58,13 +61,16 @@ def resolve_tool_choice_for_request(
 ) -> str | dict[str, Any] | None:
     requires_proposal = requires_structured_plan_proposal(user_content)
     thinking_enabled = bool(thinking and thinking.get("type") == "enabled")
+    is_deepseek_compatible = _is_deepseek_openai_compatible_client(provider_client)
 
     # 保留原有 thinking 默认行为：未显式要求 proposal 时，不主动强塞 tool_choice，
     # 避免影响普通分析/恢复类请求的自然工具回环。
     if thinking_enabled and not requires_proposal:
         return None
 
-    if thinking_enabled and _is_deepseek_openai_compatible_client(provider_client):
+    if is_deepseek_compatible:
+        # DeepSeek 实际接口在 thinking / v4 系列下会把 required tool_choice 直接判成 400，
+        # 因此统一不强塞 required，改由工具暴露范围 + 纠偏提示 + proposal 结果校验兜底。
         return None
 
     if requires_proposal:

@@ -135,7 +135,8 @@ HTTPS_PROXY=
 - `/api/tools/plan/commit` 成功后，后端会同步把对应 assistant 历史消息里的 proposal 状态更新为 `committed`；后续同一会话继续追问或切换模型时，新的上下文也会显式带上该状态，避免模型把旧卡误判为仍待确认
 - Gemini-native 工具调用现在会把内部 `tool_choice` 映射到官方 `toolConfig.functionCallingConfig`，并兼容 Gemini 风格的单日计划字段（如 `exerciseName / time / unit`），避免计划卡存在但名称或时长信息写回丢失
 - 当用户这一轮明确要求“待确认计划卡 / proposal / 不要直接写回”时，Gemini-native 首轮会被强制切到 required function calling，避免它只输出正文却不返回结构化 proposal，导致计划卡无法渲染或采纳
-- DeepSeek `/v1` 兼容链路在 thinking 模式下不会强制发送 `tool_choice=required`；这是为了兼容 DeepSeek 对 thinking + required 的协议限制，同时保留非 thinking 场景下的结构化 proposal 保障
+- 当用户本轮明确要求“生成计划修改卡 / 计划卡 / 修改卡”时，后端会把该轮视为必须产出结构化 proposal；如果模型首轮只返回文字卡片，后端会追加一次系统纠偏重试，要求它改用 proposal 工具返回可采纳卡片
+- DeepSeek `/v1` 兼容链路现在统一不会主动发送 `tool_choice` 给 DeepSeek 家族模型；这是为了兼容 DeepSeek 对 `thinking + tool_choice` 以及部分 `auto/required` 组合的协议限制，改由“proposal 工具按轮暴露 + 结果校验 + 纠偏重试”来保证计划卡场景稳定可用
 - 计划 proposal 工具现在只会在用户本轮明确要求“计划卡 / 修改卡 / 调整卡 / 生成新计划 / 改计划”等场景下暴露；普通解释性聊天会回到只读工具与自然回复，避免连续不停生成新卡
 - `POST /api/tools/plan/ignore` 已可用；前端点击“忽略”会同步把该 proposal 标记为 `ignored`，后续同会话会回到正常聊天，直到用户再次明确唤起下一张计划卡
 - 对于 Gemini 偶尔把“休息日新增整天训练安排”误生成为 `propose_plan_change` 的情况，后端会在空训练日上把这类 `add/replace` proposal 自动升级成 `day_plan_replace`，尽量保证仍能产出可采纳的计划卡

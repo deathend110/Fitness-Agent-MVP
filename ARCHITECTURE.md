@@ -11,8 +11,9 @@
 - 本地 FastAPI 后端已提供 `chat_session / chat_message` 的存储接口、`/api/chat/stream` SSE 代理、离页后台思考任务和计划采纳校验接口
 - Phase 3 已完成 Agent Orchestrator：后端可在只收到 `userInput` 时读取 SQLite 状态、拼装 Agent messages、执行只读工具循环，并生成需用户确认的计划修改 proposal；当前 DeepSeek 默认也已统一走 OpenAI-compatible `/v1` 运行时
 - 针对 Gemini-native，工具回环现在会在“用户本轮明确要求生成待确认 proposal 卡”时把首轮 tool choice 提升为 `required`；这样既保留平时 `AUTO` 的自然对话体验，又能避免 Gemini 在关键 proposal 场景里只返回自然语言正文、不返回结构化工具结果
-- 针对 DeepSeek `/v1` 兼容链路，若当前请求开启了 thinking/reasoning，则不会再强制发送 `tool_choice=required`；这样可以避开 DeepSeek 对 thinking + required 的 400 限制，同时只把降级范围收敛在 DeepSeek 家族，不影响 Gemini 和其他 OpenAI-compatible provider
+- 针对 DeepSeek `/v1` 兼容链路，当前已进一步收紧为“统一不主动发送 `tool_choice`”；这是因为真实 DeepSeek v4 服务对 `thinking + tool_choice` 以及部分 `auto/required` 组合都会返回 400。DeepSeek 的计划卡稳定性改由 proposal 工具按轮暴露、结构化结果校验，以及必要时追加一轮系统纠偏重试共同保证
 - proposal 类工具现在采用“按轮暴露”策略：只有当用户本轮明确表达“生成计划卡 / 修改计划 / 调整卡 / 生成新计划”等计划修改意图时，`propose_plan_change` / `propose_day_plan_replace` 才会进入工具 schema；普通解释、追问和恢复分析只保留只读工具
+- 当用户本轮明确要求“生成计划修改卡 / 计划卡 / 修改卡”而模型首轮只输出文字版卡片时，聊天入口会自动追加一条系统纠偏消息，再走一轮同样的工具回环，要求模型必须通过 proposal 工具返回结构化结果；只有仍未拿到 proposal 时，才会向前端返回 `missing_plan_proposal`
 - 计划卡处理状态已统一为 `pending / committed / ignored`；`commit` 与 `ignore` 都会同步回写 `chat_message.suggestion.status`，这样同会话后续上下文能明确知道上一张卡已处理，避免模型在未被再次唤起时继续重复出卡
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储

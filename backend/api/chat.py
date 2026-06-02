@@ -356,6 +356,25 @@ def build_error_payload(error: Exception) -> dict[str, Any]:
     }
 
 
+def build_plan_proposal_retry_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """当模型偷懒输出文字卡片时，补一条系统纠偏消息强制它走 proposal 工具。"""
+
+    retry_instruction = (
+        "系统纠偏：用户本轮明确要求生成训练计划修改卡。"
+        "你必须通过 proposal 工具返回结构化建议卡，"
+        "不要输出 markdown 卡片、JSON 示例或口头确认。"
+        "若需要替换整天计划，请调用 propose_day_plan_replace；"
+        "若只修改部分动作，请调用 propose_plan_change。"
+    )
+    return [
+        *messages,
+        {
+            "role": "system",
+            "content": retry_instruction,
+        },
+    ]
+
+
 async def request_agent_tool_reply(
     *,
     deepseek_client: DeepSeekClient,
@@ -393,6 +412,11 @@ async def request_agent_tool_reply(
         parsed_reply = parse_ai_response(content)
         return parsed_reply["text"], parsed_reply["suggestion"], None
 
+    tool_choice = resolve_tool_choice_for_request(
+        user_content=user_content,
+        provider_client=deepseek_client,
+        thinking=thinking,
+    )
     tool_result = await run_tool_calling_chat(
         session=session,
         session_id=session_id,
@@ -400,16 +424,33 @@ async def request_agent_tool_reply(
         model=model,
         deepseek_client=deepseek_client,
         registry=registry,
-        tool_choice=resolve_tool_choice_for_request(
-            user_content=user_content,
-            provider_client=deepseek_client,
-            thinking=thinking,
-        ),
+        tool_choice=tool_choice,
         thinking=thinking,
         reasoning_effort=reasoning_effort,
     )
     parsed_reply = parse_ai_response(tool_result.content)
     proposal = tool_result.proposals[-1] if tool_result.proposals else None
+    if proposal is None and requires_structured_plan_proposal(user_content):
+        retry_tool_choice = resolve_tool_choice_for_request(
+            user_content=user_content,
+            provider_client=deepseek_client,
+            thinking=thinking,
+        )
+        retry_result = await run_tool_calling_chat(
+            session=session,
+            session_id=session_id,
+            messages=build_plan_proposal_retry_messages(messages),
+            model=model,
+            deepseek_client=deepseek_client,
+            registry=registry,
+            tool_choice=retry_tool_choice,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
+        )
+        retry_parsed_reply = parse_ai_response(retry_result.content)
+        retry_proposal = retry_result.proposals[-1] if retry_result.proposals else None
+        if retry_proposal is not None:
+            return retry_parsed_reply["text"], retry_parsed_reply["suggestion"], retry_proposal
     return parsed_reply["text"], parsed_reply["suggestion"], proposal
 
 

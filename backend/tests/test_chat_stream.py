@@ -519,8 +519,8 @@ class FakeTextOnlyPlanCardClient:
         )
 
 
-class FakeDeepSeekTextOnlyUnlessRequiredProposalClient:
-    """模拟 OpenAI-compatible 模型在非 required 时只回正文。"""
+class FakeRepairableTextOnlyPlanCardClient:
+    """模拟模型首轮只输出文字版卡片，补充约束后才真正调用 proposal 工具。"""
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -535,33 +535,59 @@ class FakeDeepSeekTextOnlyUnlessRequiredProposalClient:
         stream: bool = False,
         **_: Any,
     ) -> DeepSeekChatResult:
-        del messages, model, tools, stream
-        self.calls.append({"tool_choice": tool_choice})
-        if len(self.calls) == 1 and tool_choice != "required":
-            return DeepSeekChatResult(
-                content="我建议把周一整体再轻一点，先生成一张待确认卡再说。"
-            )
+        del model, tools, stream
+        self.calls.append(
+            {
+                "messages": messages,
+                "tool_choice": tool_choice,
+            }
+        )
+
         if len(self.calls) == 1:
             return DeepSeekChatResult(
-                content="",
+                content=(
+                    "下面先给你一版文字计划卡：\n"
+                    "- 坡度走 30 分钟\n"
+                    "- 平板支撑 3 组\n"
+                    "- 死虫式 3 组"
+                )
+            )
+
+        if any(
+            isinstance(message, dict)
+            and str(message.get("role")) == "system"
+            and "必须通过 proposal 工具" in str(message.get("content") or "")
+            for message in messages
+        ):
+            return DeepSeekChatResult(
+                content="已按要求生成结构化计划修改卡。",
                 tool_calls=[
                     {
-                        "id": "call_propose_required",
+                        "id": "call_retry_plan_card",
                         "type": "function",
                         "function": {
-                            "name": "propose_plan_change",
+                            "name": "propose_day_plan_replace",
                             "arguments": json.dumps(
                                 {
                                     "day": "Monday",
-                                    "summary": "把深蹲组数降到 2 组，继续控制疲劳。",
-                                    "changes": [
-                                        {
-                                            "action": "update",
-                                            "exerciseName": "深蹲",
-                                            "field": "sets",
-                                            "newValue": 2,
-                                        }
-                                    ],
+                                    "summary": "把周一改成更适合减脂恢复期的有氧+核心轻量方案。",
+                                    "dayPlan": {
+                                        "type": "active_recovery",
+                                        "exercises": [
+                                            {
+                                                "name": "坡度快走",
+                                                "sets": 1,
+                                                "repsText": "30分钟",
+                                                "note": "保持低心率有氧，不压恢复。",
+                                            },
+                                            {
+                                                "name": "平板支撑",
+                                                "sets": 2,
+                                                "repsText": "30秒",
+                                                "note": "只保留轻量核心激活。",
+                                            },
+                                        ],
+                                    },
                                 },
                                 ensure_ascii=False,
                             ),
@@ -569,7 +595,67 @@ class FakeDeepSeekTextOnlyUnlessRequiredProposalClient:
                     }
                 ],
             )
-        return DeepSeekChatResult(content="已生成第二张待确认计划卡。")
+
+        return DeepSeekChatResult(content="已按要求生成结构化计划修改卡。")
+
+
+class FakeDeepSeekRepairableProposalClient:
+    """模拟 DeepSeek 不接受 required，需要靠纠偏重试才愿意走 proposal 工具。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.provider_label = "DeepSeek 主账号"
+        self.base_url = "https://api.deepseek.com/v1"
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, stream
+        self.calls.append({"tool_choice": tool_choice, "messages": messages})
+        has_retry_instruction = any(
+            isinstance(message, dict)
+            and str(message.get("role")) == "system"
+            and "必须通过 proposal 工具" in str(message.get("content") or "")
+            for message in messages
+        )
+        if not has_retry_instruction:
+            return DeepSeekChatResult(
+                content="我建议把周一整体再轻一点，先生成一张待确认卡再说。"
+            )
+        return DeepSeekChatResult(
+            content="",
+            tool_calls=[
+                {
+                    "id": "call_propose_required",
+                    "type": "function",
+                    "function": {
+                        "name": "propose_plan_change",
+                        "arguments": json.dumps(
+                            {
+                                "day": "Monday",
+                                "summary": "把深蹲组数降到 2 组，继续控制疲劳。",
+                                "changes": [
+                                    {
+                                        "action": "update",
+                                        "exerciseName": "深蹲",
+                                        "field": "sets",
+                                        "newValue": 2,
+                                    }
+                                ],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    },
+                }
+            ],
+        )
 
 
 class FakeGeminiTextOnlyUnlessRequiredProposalClient(GeminiNativeClient):
@@ -1239,7 +1325,7 @@ async def test_chat_reply_switching_to_gemini_requires_structured_proposal_tool_
         "/api/chat/reply",
         json={
             "sessionId": default_session["id"],
-            "userInput": "继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+            "userInput": "继续调整周一，把深蹲组数也降一点，然后生成计划修改卡。",
             "model": "provider_gemini_main::gemini-2.5-flash",
             "thinking": {"enabled": True, "budget": "max"},
         },
@@ -1281,7 +1367,7 @@ async def test_chat_reply_requires_structured_proposal_tool_call_for_openai_comp
             return provider, model_ref.split("::", 1)[1]
 
     first_client = FakeSequentialProposalClient()
-    second_client = FakeDeepSeekTextOnlyUnlessRequiredProposalClient()
+    second_client = FakeDeepSeekRepairableProposalClient()
     build_count = {"value": 0}
 
     def build_runtime_client(provider, fallback_client, timeout=None):
@@ -1315,7 +1401,7 @@ async def test_chat_reply_requires_structured_proposal_tool_call_for_openai_comp
         "/api/chat/reply",
         json={
             "sessionId": default_session["id"],
-            "userInput": "继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+            "userInput": "继续调整周一，把深蹲组数也降一点，然后生成计划修改卡。",
             "model": "provider_deepseek_main::deepseek-v4-flash",
         },
     )
@@ -1326,7 +1412,16 @@ async def test_chat_reply_requires_structured_proposal_tool_call_for_openai_comp
     assert second_payload["proposal"]["status"] == "pending"
     assert second_payload["proposal"]["changes"][0]["field"] == "sets"
     assert second_payload["proposal"]["changes"][0]["newValue"] == 2
-    assert second_client.calls[0]["tool_choice"] == "required"
+    assert second_client.calls[0]["tool_choice"] is None
+    assert any(
+        any(
+            isinstance(message, dict)
+            and str(message.get("role")) == "system"
+            and "必须通过 proposal 工具" in str(message.get("content") or "")
+            for message in call["messages"]
+        )
+        for call in second_client.calls[1:]
+    )
 
 
 @pytest.mark.asyncio
@@ -1345,7 +1440,7 @@ async def test_chat_reply_deepseek_thinking_does_not_send_required_tool_choice(
     )
 
     tool_choice = resolve_tool_choice_for_request(
-        user_content="继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+        user_content="继续调整周一，把深蹲组数也降一点，然后生成计划修改卡。",
         provider_client=provider_client,
         thinking={"type": "enabled"},
     )
@@ -1370,7 +1465,7 @@ async def test_chat_reply_standard_openai_compatible_thinking_keeps_required_too
     )
 
     tool_choice = resolve_tool_choice_for_request(
-        user_content="继续调整周一，把深蹲组数也降一点，再给我一张待确认计划卡，不要直接写回。",
+        user_content="继续调整周一，把深蹲组数也降一点，然后生成计划修改卡。",
         provider_client=provider_client,
         thinking={"type": "enabled"},
     )
@@ -1389,13 +1484,48 @@ async def test_chat_reply_rejects_text_only_plan_card_when_user_explicitly_reque
         "/api/chat/reply",
         json={
             "sessionId": default_session["id"],
-            "userInput": "继续调整周一，再给我一张待确认计划卡，不要直接写回。",
+            "userInput": "为周一休息日设计一份有氧+核心运动计划，然后生成计划修改卡。",
         },
     )
 
     assert response.status_code == 503
     assert "计划卡" in response.json()["detail"]
     assert "tool" in response.json()["detail"].lower() or "工具" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_retries_with_strict_prompt_when_model_returns_text_only_plan_card(
+    api_client: AsyncClient,
+):
+    fake_client = FakeRepairableTextOnlyPlanCardClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    response = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "为周一休息日设计一份有氧+核心运动计划，然后生成计划修改卡。",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["proposal"] is not None
+    assert payload["proposal"]["status"] == "pending"
+    assert payload["proposal"]["kind"] == "day_plan_replace"
+    assert len(fake_client.calls) >= 2
+    assert fake_client.calls[0]["tool_choice"] == "required"
+    assert any(
+        any(
+            isinstance(message, dict)
+            and str(message.get("role")) == "system"
+            and "必须通过 proposal 工具" in str(message.get("content") or "")
+            for message in call["messages"]
+        )
+        for call in fake_client.calls[1:]
+    )
 
 
 @pytest.mark.asyncio

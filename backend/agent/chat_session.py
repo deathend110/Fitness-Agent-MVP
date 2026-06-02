@@ -1083,6 +1083,14 @@ def provider_client_supports_tool_loop(client: Any) -> bool:
     return hasattr(client, "request_chat_with_usage")
 
 
+def should_omit_tool_choice_for_client(client: Any) -> bool:
+    """DeepSeek v4 实际接口对 tool_choice=auto/required 都可能报 thinking 兼容错误。"""
+
+    provider_label = str(getattr(client, "provider_label", "") or "").lower()
+    base_url = str(getattr(client, "base_url", "") or "").lower()
+    return "deepseek" in provider_label or "deepseek.com" in base_url
+
+
 def convert_messages_to_responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return build_base_responses_input(messages)
 
@@ -1172,6 +1180,14 @@ async def run_tool_calling_chat(
         max_rounds=max_tool_rounds,
         slimmer=slimmer,
     )
+    effective_tool_choice = tool_choice
+    if effective_tool_choice is None:
+        if thinking and thinking.get("type") == "enabled":
+            effective_tool_choice = None
+        elif should_omit_tool_choice_for_client(deepseek_client):
+            effective_tool_choice = None
+        else:
+            effective_tool_choice = "auto"
     return await orchestrator.run(
         session=session,
         session_id=session_id,
@@ -1180,7 +1196,7 @@ async def run_tool_calling_chat(
         model=model,
         thinking=thinking,
         reasoning_effort=reasoning_effort,
-        tool_choice=tool_choice if tool_choice is not None else (None if thinking and thinking.get("type") == "enabled" else "auto"),
+        tool_choice=effective_tool_choice,
     )
 
 
