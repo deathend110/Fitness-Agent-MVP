@@ -1,6 +1,16 @@
 ﻿# RepMind MVP 架构说明
 
-本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 聊天代理与后台思考、Phase 3 后端 Agent 上下文编排、Phase 4 文件体验与模型配置、Task 4、Task 5、Task 6 与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+本文档说明当前 MVP 的项目结构、核心模块职责、数据流、`localStorage` 数据结构以及 AI 调用链路，并同步记录 V2.3 后端基建、Phase 2 聊天代理与后台思考、Phase 3 后端 Agent 上下文编排、Phase 4 文件体验与模型配置、Task 4、Task 5、Task 6、V2.7 接口收口与 V2 已完成的训练计划、界面主题、复杂指标升级和 AI 教练页 UI 重构。
+
+## V2.7 收口总览
+
+V2.7 的目标不是新增功能，而是把 AI 教练相关接口统一到当前真实主链路，并把历史入口降级成兼容壳：
+
+- 前端聊天主链路固定为 `CoachTab -> coachChat.js -> coachBackend.js`
+- 前端普通后端操作固定为 `backendClient.js`
+- 后端聊天主链路固定为 `chat.py -> chat_session.py -> run_tool_calling_chat() -> provider runtime`
+- proposal 卡标准协议固定为 `/api/tools/plan/commit` 与 `/api/tools/plan/ignore`
+- `DeepSeekClient`、`src/api/deepseek.js`、`/api/weekly-plan/adopt`、聊天 `messages` 旧契约继续保留兼容，但不再作为主流程扩展入口
 
 ## V2.3 后端化总览
 
@@ -271,6 +281,7 @@ docs/
   - 负责聊天会话与消息的后端 CRUD、SSE 流式代理、非流式回退代理和后台思考任务 API
   - 提供会话列表、创建会话、删除会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
+  - `reply / stream / background` 入口现在都会先经过统一请求归一层，把 `userInput` 新契约与 `messages` 旧契约收口成一份内部结构，避免三处长期各自维护分支
   - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
   - 当工具循环返回 `proposal.status="pending"` 时，只会在 assistant 正文出现“已采纳 / 已写入计划 / 已更新计划”等误导性措辞时做最小后端收口；正常“待确认”文案不会被改写
 - 通过 `backend/agent/chat_session.py` 里的共享 provider runtime 选择器，前台聊天与后台任务会使用同一套 provider-bound client：Gemini-native 继续直连 `GeminiNativeClient`，OpenAI-compatible 会按 `wireApi/apiPathMode` 选择 `chat_completions` 或 `responses` 运行时；DeepSeek 默认也绑定到这套 OpenAI-compatible `/v1` 运行时，不再错误回退到旧直连链路
@@ -296,7 +307,7 @@ docs/
   - 最近消息回放不会只保留纯文本；若 assistant 消息带有结构化 proposal/suggestion，系统会把 `proposalId / status / day / summary` 追加进回放文本，保证重复修改计划或切模型续聊时，模型能看到 proposal 的真实处理状态
   - 同时承载共享 provider runtime 接线：把运行时 provider 配置映射成实际聊天 client，并在工具循环里按 wire 选择 provider wrapper
   - `DeepSeekClient` 现在只作为短期 fallback 保留：仅在 provider runtime 缺失、无有效凭据或尚未初始化时兜底，避免主链路继续绑定旧实现
-  - 工具循环现在会按 client/wire 类型选择 provider wrapper：DeepSeek 与 OpenAI-compatible `chat_completions` 走 `_DeepSeekToolLoopProvider`，OpenAI-compatible `responses` 走 `_OpenAIResponsesToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
+  - 工具循环现在会按 client/wire 类型选择 provider wrapper：legacy DeepSeek fallback 与 OpenAI-compatible `chat_completions` 统一走 `_ChatCompletionsToolLoopProvider`，OpenAI-compatible `responses` 走 `_OpenAIResponsesToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
   - OpenAI-compatible 运行时的网络与 SSE 错误文案会统一使用 provider label，并在异常细节缺失时回退到异常类型名，避免中转站偶发超时被误显示成 DeepSeek 故障或只剩空白提示
 
 - `backend/agent/usage_ledger.py`
@@ -380,6 +391,10 @@ docs/
   - proposal 只生成建议卡，不写库；commit 必须来自用户确认路径，并复用计划采纳校验
   - 当前 proposal 分为 `field_changes` 与 `day_plan_replace` 两类，统一走 `/api/tools/plan/commit` 写回
 
+- `backend/api/weekly_plan.py`
+  - 继续提供周计划 CRUD
+  - `POST /api/weekly-plan/adopt` 当前已明确降级为 legacy 兼容壳，仅用于历史 suggestion 或旧联调入口
+
 - `backend/agent/adopt_plan.py`
   - 负责 AI 计划建议的后端采纳校验、proposal store、动作字段更新、整日计划替换和动作结构归一化
   - `field_changes` 继续只支持 `action: "update"`；`day_plan_replace` 支持直接整日覆盖目标日期计划
@@ -409,6 +424,10 @@ docs/
   - 解析后端 SSE 帧并把 `delta / suggestion / proposal / tool_status / done / error` 映射给页面
   - 将后端 `error` 事件、HTTP 错误和断流统一成可展示异常
 
+- `src/api/deepseek.js`
+  - 当前只保留为历史兼容壳，内部转发到 `coachBackend.js`
+  - 文档与新代码不再把它视为 AI 教练主入口
+
 - `src/tabs/CoachTab.jsx`
   - 负责 AI 教练页状态协调
   - 继续管理 `sessions / activeSessionId / draft / errorMessage / isSending / streamingText`
@@ -422,7 +441,7 @@ docs/
   - 页面隐藏或离开时中止前台请求并提交后台思考兜底；只有后台任务成功拿到 `task_id` 后才抑制前台错误
   - 页面恢复可见且后台任务仍处于 `pending/running` 时，若源 user 消息仍存在，则恢复消息区“正在整理上下文”等待态
   - 页面恢复可见时查询 task，并在源 user 消息仍存在时把成功结果补进当前消息列表；若当前对话已变化则只提示，不污染新对话
-  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`；proposal 采纳按钮通过 `/api/tools/plan/commit` 写回计划，旧 suggestion 仍兼容 `/api/weekly-plan/adopt`
+  - 继续复用 `requestCoachReply()` / `requestCoachReplyStream()` 与 `appendChatMessages()`；proposal 采纳统一通过 `backendClient.commitCoachSuggestion()` 写回计划，优先走 `/api/tools/plan/commit`，旧 suggestion 仅在缺少 `proposalId` 时兼容回退 `/api/weekly-plan/adopt`
   - proposal commit 后通过 `mergeCommittedWeeklyPlan()` 只覆盖后端返回的 7 天计划，保留前端顶层 `weekMeta` 等本地元数据
   - 发送带附件的问题时会先从 `attachedFiles` 生成消息级附件快照，写入本地 `userMessage.attachments`；历史恢复时对旧消息补 `attachments: []` 兼容
 
