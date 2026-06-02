@@ -61,7 +61,7 @@ test('buildPromptPreviewModel 会随着今日日志变化生成新的结构化�
   assert.notEqual(updatedModel.promptText, originalModel.promptText)
   assert.match(updatedModel.promptText, /今天改成轻量恢复训练/)
   assert.match(updatedModel.promptText, /2460kcal/)
-  assert.match(updatedModel.promptText, /"calorie_status":\s*"deficit"/)
+  assert.match(updatedModel.promptText, /"calorie_status":\s*"surplus"/)
   assert.match(updatedModel.promptText, /"protein_status":\s*"low"/)
   assert.match(updatedModel.promptText, /"sleep_hours":\s*8/)
   assert.match(updatedModel.promptText, /"fatigue_level":\s*2/)
