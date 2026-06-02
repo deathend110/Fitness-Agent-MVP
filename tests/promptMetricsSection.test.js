@@ -15,7 +15,8 @@ test('buildMetricsSection 可独立构建复杂指标段，且 buildSystemPrompt
 
   assert.match(metricsSection, /今日 TDEE 估算/)
   assert.match(metricsSection, /structured_metrics=/)
-  assert.match(metricsSection, /"calorie_status":\s*"balanced"/)
+  assert.match(metricsSection, /"calorie_delta_kcal":\s*-195/)
+  assert.match(metricsSection, /"calorie_status":\s*"deficit"/)
   assert.match(metricsSection, /"protein_status":\s*"met"/)
   assert.match(metricsSection, /"sleep_hours":\s*6\.8/)
   assert.ok(prompt.includes(metricsSection))
