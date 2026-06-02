@@ -65,6 +65,21 @@ def build_plan_change_proposal(
     changes: list[dict[str, Any]],
     summary: str = "",
 ) -> PlanChangeProposal:
+    upgraded_day_plan = _try_upgrade_field_changes_to_day_plan_replace(
+        current_plan=current_plan,
+        day=day,
+        changes=changes,
+        summary=summary,
+    )
+    if upgraded_day_plan is not None:
+        return build_day_plan_replace_proposal(
+            current_plan=current_plan,
+            session_id=session_id,
+            day=day,
+            summary=summary,
+            day_plan=upgraded_day_plan,
+        )
+
     validation = validate_plan_changes(current_plan, day, changes)
     proposal_id = uuid4().hex
     normalized_changes = deepcopy(changes)
@@ -176,6 +191,101 @@ def commit_plan_proposal(
 
 def _build_failure_result(weekly_plan: dict[str, Any], message: str) -> AdoptPlanResult:
     return AdoptPlanResult(ok=False, message=message, next_plan=weekly_plan)
+
+
+def _try_upgrade_field_changes_to_day_plan_replace(
+    *,
+    current_plan: dict[str, Any],
+    day: str,
+    changes: list[dict[str, Any]],
+    summary: str,
+) -> dict[str, Any] | None:
+    safe_plan = deepcopy(current_plan) if _is_plain_object(current_plan) else {}
+    day_key = day.strip() if isinstance(day, str) else ""
+    current_day_plan = safe_plan.get(day_key) if _is_plain_object(safe_plan.get(day_key)) else {}
+    current_exercises = current_day_plan.get("exercises")
+    if not isinstance(current_exercises, list) or current_exercises:
+        return None
+
+    safe_changes = [change for change in changes if _is_plain_object(change)]
+    if not safe_changes:
+        return None
+
+    day_type = "active_recovery"
+    normalized_exercises: list[dict[str, Any]] = []
+    for index, change in enumerate(safe_changes):
+        action = _read_string_value(change.get("action")).lower()
+        field = _read_string_value(change.get("field")).lower()
+        exercise_name = _read_string_value(change.get("exerciseName"))
+        if action not in {"add", "replace", "update"}:
+            return None
+        if not exercise_name:
+            return None
+
+        if field == "type":
+            candidate_day_type = _read_string_value(change.get("newValue"))
+            if candidate_day_type:
+                day_type = candidate_day_type
+
+        note = _build_upgraded_exercise_note(
+            field=field,
+            new_value=change.get("newValue"),
+            fallback_summary=summary,
+        )
+        normalized_exercises.append(
+            _normalize_planned_exercise(
+                {
+                    "id": f"proposal-upgraded-{index}",
+                    "name": exercise_name,
+                    "tier": "accessory",
+                    "sets": 1,
+                    "reps": None,
+                    "note": note,
+                },
+                f"proposal-upgraded-{index}",
+            )
+        )
+        if field in {
+            "exercises",
+            "sets/reps",
+            "sets/reps/note",
+            "type",
+            "note",
+            "sets",
+            "reps",
+            "kg",
+            "pct",
+            "rpe",
+        }:
+            continue
+
+        return None
+
+    if not normalized_exercises:
+        return None
+
+    return {
+        "type": day_type,
+        "exercises": normalized_exercises,
+    }
+
+
+def _build_upgraded_exercise_note(
+    *,
+    field: str,
+    new_value: Any,
+    fallback_summary: str,
+) -> str:
+    value_text = _read_string_value(new_value)
+    if value_text and field in {"sets", "reps", "sets/reps", "sets/reps/note"}:
+        return f"建议处方：{value_text}"
+    if value_text and field in {"kg", "pct", "rpe", "note"}:
+        return value_text
+    if value_text and field == "type":
+        return f"训练类型建议：{value_text}"
+    if value_text:
+        return value_text
+    return fallback_summary or "由 AI 建议补充到该训练日。"
 
 
 def _is_plain_object(value: Any) -> bool:

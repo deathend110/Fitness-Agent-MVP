@@ -254,6 +254,85 @@ def test_gemini_style_day_plan_replace_preserves_name_and_duration_note() -> Non
     assert "60 秒" in committed_second_exercise["note"]
 
 
+def test_rest_day_additive_field_changes_are_upgraded_to_day_plan_replace() -> None:
+    plan = build_weekly_plan()
+    proposal = build_plan_change_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Tuesday",
+        summary="把休息日改成有氧加核心恢复。",
+        changes=[
+            {
+                "action": "add",
+                "exerciseName": "坡度步行",
+                "field": "exercises",
+                "newValue": "30分钟",
+                "oldValue": None,
+            },
+            {
+                "action": "add",
+                "exerciseName": "平板支撑",
+                "field": "exercises",
+                "newValue": "3组x60秒",
+                "oldValue": None,
+            },
+            {
+                "action": "add",
+                "exerciseName": "俄罗斯转体",
+                "field": "exercises",
+                "newValue": "3组x20次",
+                "oldValue": None,
+            },
+        ],
+    )
+
+    committed = commit_plan_proposal(
+        current_plan=plan,
+        proposal_id=proposal.proposal_id,
+        confirmed_by_user=True,
+    )
+
+    assert proposal.kind == "day_plan_replace"
+    assert proposal.validation.ok is True
+    assert proposal.card["status"] == "pending"
+    assert proposal.card["dayPlan"]["type"] == "active_recovery"
+    assert proposal.card["dayPlan"]["exercises"][0]["name"] == "坡度步行"
+    assert "30分钟" in proposal.card["dayPlan"]["exercises"][0]["note"]
+    assert committed.ok is True
+    assert committed.next_plan["Tuesday"]["exercises"][1]["name"] == "平板支撑"
+
+
+def test_rest_day_mixed_gemini_fields_still_upgrade_to_day_plan_replace() -> None:
+    plan = build_weekly_plan()
+    proposal = build_plan_change_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Tuesday",
+        summary="把周二改成有氧与核心恢复日。",
+        changes=[
+            {
+                "action": "replace",
+                "exerciseName": "有氧（低强度恒速）",
+                "field": "sets/reps/note",
+                "newValue": "30-40分钟，心率控制在130-140bpm之间",
+                "oldValue": None,
+            },
+            {
+                "action": "add",
+                "exerciseName": "死虫式",
+                "field": "sets/reps",
+                "newValue": "3组 x 16次",
+                "oldValue": None,
+            },
+        ],
+    )
+
+    assert proposal.kind == "day_plan_replace"
+    assert proposal.validation.ok is True
+    assert proposal.card["dayPlan"]["exercises"][0]["name"] == "有氧（低强度恒速）"
+    assert "30-40分钟" in proposal.card["dayPlan"]["exercises"][0]["note"]
+
+
 @pytest.mark.asyncio
 async def test_plan_commit_endpoint_writes_only_after_confirm(api_client: AsyncClient) -> None:
     original_plan = build_weekly_plan()

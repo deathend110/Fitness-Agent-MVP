@@ -133,6 +133,7 @@ HTTPS_PROXY=
 - AI 教练工具调用现在分为两条运行时链路：OpenAI-compatible `chat_completions` 会按 `assistant(tool_calls) -> tool` 顺序补齐消息，OpenAI-compatible `responses` 会按 `function_call -> function_call_output` 回环，Gemini-native 会按官方 `functionCall -> functionResponse` 结构继续下一轮请求
 - 当 AI 生成的是待确认 proposal 卡时，后端会拦截“已采纳 / 已写入计划 / 已更新计划”这类误导性正文表述，统一保留“待确认、尚未写回”的真实语义；真正写回仍只会发生在 `/api/tools/plan/commit`
 - Gemini-native 工具调用现在会把内部 `tool_choice` 映射到官方 `toolConfig.functionCallingConfig`，并兼容 Gemini 风格的单日计划字段（如 `exerciseName / time / unit`），避免计划卡存在但名称或时长信息写回丢失
+- 对于 Gemini 偶尔把“休息日新增整天训练安排”误生成为 `propose_plan_change` 的情况，后端会在空训练日上把这类 `add/replace` proposal 自动升级成 `day_plan_replace`，尽量保证仍能产出可采纳的计划卡
 - `GET/PUT /api/model-config` 会读取和保存脱敏后的多供应商模型配置；保存后后端会立即刷新运行时缓存，前台聊天、流式输出和后台任务都会直接使用新配置，不需要重启服务
 - `POST /api/model-config/providers/test` 与 `POST /api/model-config/providers/discover-models` 支持在页面内测试连接并拉取远端模型列表
 - OpenAI-compatible Provider 的测试连接、模型发现、配置保存与回显都会携带 `wireApi` / `apiPathMode`；新版 DeepSeek bootstrap 默认补成 `https://api.deepseek.com/v1 + chat_completions + append_v1`，而显式把 `base_url` 配到 `/v1` 时，endpoint builder 也会自动避免出现 `/v1/v1/chat/completions`
