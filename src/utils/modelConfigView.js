@@ -120,9 +120,9 @@ export function createEmptyProviderConfig(providerType = 'openai_compatible', in
     apiKeyPreview: '',
     baseUrl: isGemini
       ? 'https://generativelanguage.googleapis.com/v1beta'
-      : 'https://api.deepseek.com',
+      : 'https://api.deepseek.com/v1',
     wireApi: isGemini ? '' : 'chat_completions',
-    apiPathMode: isGemini ? '' : 'raw_root',
+    apiPathMode: isGemini ? '' : 'append_v1',
     selectedModels: [],
   }
 }

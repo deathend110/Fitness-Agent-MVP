@@ -9,6 +9,35 @@ from backend.model_config.bootstrap import bootstrap_legacy_deepseek_config
 from backend.model_config.types import ModelProviderConfig, ProviderConfig
 
 
+def _normalize_deepseek_openai_provider(provider: ProviderConfig) -> ProviderConfig:
+    """把 DeepSeek 官方旧根路径配置收口到 /v1 默认形态，避免新旧口径长期混杂。"""
+
+    if provider.type != "openai_compatible":
+        return provider
+
+    base_url = str(provider.base_url or "").strip()
+    normalized_base_url = base_url.rstrip("/")
+    if normalized_base_url.lower() != "https://api.deepseek.com":
+        return provider
+
+    wire_api = str(provider.wire_api or "").strip() or "chat_completions"
+    api_path_mode = str(provider.api_path_mode or "").strip() or "raw_root"
+    if wire_api != "chat_completions" or api_path_mode != "raw_root":
+        return provider
+
+    return ProviderConfig(
+        id=provider.id,
+        type=provider.type,
+        label=provider.label,
+        enabled=provider.enabled,
+        api_key=provider.api_key,
+        base_url="https://api.deepseek.com/v1",
+        wire_api="chat_completions",
+        api_path_mode="append_v1",
+        selected_models=provider.selected_models,
+    )
+
+
 class ModelProviderConfigService:
     def __init__(
         self,
@@ -54,8 +83,10 @@ class ModelProviderConfigService:
 
     def _coerce_config(self, payload: Mapping[str, Any] | ModelProviderConfig) -> ModelProviderConfig:
         if isinstance(payload, ModelProviderConfig):
-            return payload
-        return ModelProviderConfig.model_validate(payload)
+            config = payload
+        else:
+            config = ModelProviderConfig.model_validate(payload)
+        return self._normalize_config(config)
 
     def _read_config(self) -> ModelProviderConfig:
         raw_text = self.config_path.read_text(encoding="utf-8")
@@ -108,6 +139,15 @@ class ModelProviderConfigService:
             version=incoming.version,
             default_model_ref=incoming.default_model_ref,
             providers=merged_providers,
+        )
+
+    def _normalize_config(self, config: ModelProviderConfig) -> ModelProviderConfig:
+        """在写盘前做最小配置归一化，避免官方 DeepSeek 旧默认值长期残留。"""
+
+        return ModelProviderConfig(
+            version=config.version,
+            default_model_ref=config.default_model_ref,
+            providers=[_normalize_deepseek_openai_provider(provider) for provider in config.providers],
         )
 
     def _write_config(self, config: ModelProviderConfig) -> None:

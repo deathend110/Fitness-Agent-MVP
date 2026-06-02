@@ -366,6 +366,75 @@ def test_save_persists_openai_compatible_wire_api_fields(tmp_path: Path) -> None
     assert persisted["providers"][0]["apiPathMode"] == "append_v1"
 
 
+def test_save_normalizes_legacy_deepseek_root_provider_to_v1_defaults(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    service = ModelProviderConfigService(config_path=config_file)
+    payload = {
+        "version": 1,
+        "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
+        "providers": [
+            {
+                "id": "provider_deepseek_main",
+                "type": "openai_compatible",
+                "label": "DeepSeek 主账号",
+                "enabled": True,
+                "apiKey": "sk-test",
+                "baseUrl": "https://api.deepseek.com",
+                "wireApi": "chat_completions",
+                "apiPathMode": "raw_root",
+                "selectedModels": [
+                    {"remoteId": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "enabled": True}
+                ],
+            }
+        ],
+    }
+
+    saved = service.save(payload)
+    loaded = service.load()
+    persisted = json.loads(config_file.read_text(encoding="utf-8"))
+
+    assert saved["providers"][0]["baseUrl"] == "https://api.deepseek.com/v1"
+    assert saved["providers"][0]["wireApi"] == "chat_completions"
+    assert saved["providers"][0]["apiPathMode"] == "append_v1"
+    assert loaded.providers[0].base_url == "https://api.deepseek.com/v1"
+    assert loaded.providers[0].api_path_mode == "append_v1"
+    assert persisted["providers"][0]["baseUrl"] == "https://api.deepseek.com/v1"
+    assert persisted["providers"][0]["apiPathMode"] == "append_v1"
+
+
+def test_save_keeps_non_deepseek_openai_compatible_provider_unchanged(tmp_path: Path) -> None:
+    config_file = tmp_path / "model_providers.json"
+    service = ModelProviderConfigService(config_path=config_file)
+    payload = {
+        "version": 1,
+        "defaultModelRef": "provider_openai_proxy::gpt-5.4-mini",
+        "providers": [
+            {
+                "id": "provider_openai_proxy",
+                "type": "openai_compatible",
+                "label": "OpenAI 中转站",
+                "enabled": True,
+                "apiKey": "sk-test",
+                "baseUrl": "https://sub2.congmingai.com",
+                "wireApi": "responses",
+                "apiPathMode": "append_v1",
+                "selectedModels": [
+                    {"remoteId": "gpt-5.4-mini", "label": "gpt-5.4-mini", "enabled": True}
+                ],
+            }
+        ],
+    }
+
+    saved = service.save(payload)
+    loaded = service.load()
+
+    assert saved["providers"][0]["baseUrl"] == "https://sub2.congmingai.com"
+    assert saved["providers"][0]["wireApi"] == "responses"
+    assert saved["providers"][0]["apiPathMode"] == "append_v1"
+    assert loaded.providers[0].base_url == "https://sub2.congmingai.com"
+    assert loaded.providers[0].wire_api == "responses"
+
+
 def test_save_preserves_existing_api_key_and_ignores_preview_only_payload(tmp_path: Path) -> None:
     config_file = tmp_path / "model_providers.json"
     config_file.write_text(

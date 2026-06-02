@@ -106,6 +106,16 @@ test('buildProviderConfigView fills openai-compatible defaults for missing wire 
   assert.equal(configView.providers[1].apiPathMode, '')
 })
 
+test('createEmptyProviderConfig uses DeepSeek /v1 defaults for openai-compatible provider', async () => {
+  const { createEmptyProviderConfig } = await import('../src/utils/modelConfigView.js')
+
+  const provider = createEmptyProviderConfig('openai_compatible', 1)
+
+  assert.equal(provider.baseUrl, 'https://api.deepseek.com/v1')
+  assert.equal(provider.wireApi, 'chat_completions')
+  assert.equal(provider.apiPathMode, 'append_v1')
+})
+
 test('listProviderModelRefs builds provider-qualified labels', () => {
   const refs = listProviderModelRefs({
     providers: [
