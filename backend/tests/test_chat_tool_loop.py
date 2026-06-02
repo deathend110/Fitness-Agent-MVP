@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+import json
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,53 @@ class MultiToolLoopClient:
                 ],
             )
         return DeepSeekChatResult(content="我已经读取了档案和本周计划。")
+
+
+class ProposalToolLoopClient:
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, tool_choice, stream
+        self.calls.append(messages)
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_proposal",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "长摘要" * 400,
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "pct",
+                                            "newValue": 0.7,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="建议已整理成可确认 proposal。")
 
 
 class FakeGeminiResponse:
@@ -292,6 +340,37 @@ async def test_tool_loop_keeps_one_assistant_tool_call_message_for_parallel_deep
     assert result.content == "我已经读取了档案和本周计划。"
     assert len(assistant_messages) == 1
     assert [message["tool_call_id"] for message in tool_messages] == ["call_profile", "call_weekly"]
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_keeps_full_proposal_payload_in_chat_completions_followup_messages(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = ChatSession(title="tool-loop-proposal", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add(WeeklyPlanDay(day_key="Monday", type="strength", exercises=[{"name": "深蹲", "pct": 0.75}]))
+    await db_session.commit()
+
+    client = ProposalToolLoopClient()
+    result = await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "给我一张降强度 proposal 卡"}],
+        model="deepseek-chat",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+    )
+
+    followup_tool_message = client.calls[1][-1]
+    tool_payload = json.loads(followup_tool_message["content"])
+
+    assert result.content == "建议已整理成可确认 proposal。"
+    assert followup_tool_message["role"] == "tool"
+    assert "[trimmed:propose_plan_change]" not in followup_tool_message["content"]
+    assert tool_payload["proposal"]["summary"] == "长摘要" * 400
+    assert tool_payload["proposal"]["proposalId"]
+    assert tool_payload["validation"]["ok"] is True
 
 
 @pytest.mark.asyncio

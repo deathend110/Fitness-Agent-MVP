@@ -49,6 +49,19 @@ def test_builds_chat_completions_endpoint_with_append_v1_mode() -> None:
     )
 
 
+def test_builds_chat_completions_endpoint_without_double_v1_when_base_url_already_contains_v1() -> None:
+    provider = OpenAICompatibleProvider()
+
+    assert (
+        provider.build_request_url(
+            base_url="https://api.deepseek.com/v1",
+            path="/chat/completions",
+            api_path_mode="append_v1",
+        )
+        == "https://api.deepseek.com/v1/chat/completions"
+    )
+
+
 @pytest.mark.asyncio
 async def test_lists_models_from_openai_compatible_models_endpoint() -> None:
     requests: list[tuple[str, dict[str, str], float]] = []

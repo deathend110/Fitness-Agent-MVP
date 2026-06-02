@@ -75,10 +75,13 @@ class ToolLoopOrchestrator:
                     result_summary = self.slimmer.slim(tool_call["toolName"], tool_result)
                     status = "succeeded"
                     error_message = None
+                    followup_result = tool_result
                 except Exception as exc:
-                    result_summary = self.slimmer.slim(tool_call["toolName"], {"error": str(exc)})
+                    error_result = {"error": str(exc)}
+                    result_summary = self.slimmer.slim(tool_call["toolName"], error_result)
                     status = "failed"
                     error_message = str(exc)
+                    followup_result = error_result
 
                 if session_id is not None:
                     session.add(
@@ -97,7 +100,9 @@ class ToolLoopOrchestrator:
                 active_messages = provider.build_followup_messages_after_tool_result(
                     active_messages,
                     tool_call,
-                    result_summary,
+                    # 日志里继续记录瘦身后的摘要，但回灌给模型的 follow-up 必须保留
+                    # 完整工具结果，避免 proposal 等结构化 payload 被截断后下一轮退化。
+                    followup_result,
                 )
 
             if session_id is not None:

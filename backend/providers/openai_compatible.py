@@ -282,7 +282,11 @@ class OpenAICompatibleProvider(ProviderAdapter):
                 "role": "tool",
                 "tool_call_id": tool_call["callId"],
                 "name": tool_call["toolName"],
-                "content": tool_result,
+                # chat_completions 的 tool 消息需要完整字符串内容，不能继续使用被截断
+                # 的摘要，也不能直接把 dict 原样塞进 messages。
+                "content": tool_result
+                if isinstance(tool_result, str)
+                else json.dumps(tool_result, ensure_ascii=False),
             }
         ]
 

@@ -9,10 +9,10 @@
 - 前端继续负责 UI、交互、页面状态组织
 - 本地 FastAPI 后端负责 `profile / weeklyPlan / dailyLog` 的持久化
 - 本地 FastAPI 后端已提供 `chat_session / chat_message` 的存储接口、`/api/chat/stream` SSE 代理、离页后台思考任务和计划采纳校验接口
-- Phase 3 已完成 Agent Orchestrator：后端可在只收到 `userInput` 时读取 SQLite 状态、拼装 DeepSeek messages、执行只读工具循环，并生成需用户确认的计划修改 proposal
+- Phase 3 已完成 Agent Orchestrator：后端可在只收到 `userInput` 时读取 SQLite 状态、拼装 Agent messages、执行只读工具循环，并生成需用户确认的计划修改 proposal；当前 DeepSeek 默认也已统一走 OpenAI-compatible `/v1` 运行时
 - Phase 4 已完成文件上传解析、文件摘要上下文注入、模型列表 fallback、Coach 草稿持久化、安全 Markdown 渲染、对话滚动定位和 Python 指标摘要服务
 - SQLite 作为本地结构化存储
-- 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据
+- 后端通用配置继续从 `backend/.env` 读取；模型 provider 配置已开始拆到独立 JSON 文件 `backend/config/model_providers.json`，路径由 `MODEL_PROVIDER_CONFIG_PATH` 控制，缺失时会用旧版 DeepSeek 环境变量自动生成首份文件；相对 SQLite 路径按 `backend/` 目录解析，启动时自动创建本地表并播种空白 MVP 数据。保存模型配置后会立刻刷新运行时缓存，前台聊天、流式输出与后台任务都无需重启即可生效
 - AI 教练页发送消息走后端聊天代理，历史侧栏和消息恢复已切到后端 `chat_session / chat_message`
 
 ### 当前数据源分工
@@ -256,7 +256,7 @@ docs/
   - 提供会话列表、创建会话、删除会话、获取或创建默认会话、追加消息、全量读取消息
   - `POST /api/chat/reply` 已支持 Phase 3 新契约 `{sessionId?, userInput, model?}`，同时保留 Phase 2 `{sessionId?, messages, model?}` 兼容路径
   - `model` 现已统一兼容旧版 plain modelId 与新版 `modelRef(provider_id::remote_id)`；请求供应商前会先解析运行时配置，再把真实 `remote_model_id` 交给客户端
-  - 通过 `backend/agent/chat_session.py` 里的共享 provider runtime 选择器，前台聊天与后台任务会使用同一套 provider-bound client：Gemini-native 继续直连 `GeminiNativeClient`，OpenAI-compatible 会按 `wireApi/apiPathMode` 选择 `chat_completions` 或 `responses` 运行时，不再错误回退到 DeepSeek
+- 通过 `backend/agent/chat_session.py` 里的共享 provider runtime 选择器，前台聊天与后台任务会使用同一套 provider-bound client：Gemini-native 继续直连 `GeminiNativeClient`，OpenAI-compatible 会按 `wireApi/apiPathMode` 选择 `chat_completions` 或 `responses` 运行时；DeepSeek 默认也绑定到这套 OpenAI-compatible `/v1` 运行时，不再错误回退到旧直连链路
   - `/api/chat/stream` 将统一聊天运行时的文本事件映射为 `delta / suggestion / proposal / done / error`
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
   - 普通“新对话”会在首条 user prompt 成功落库后自动回填标题，历史侧栏不再长期显示占位文案
@@ -276,6 +276,7 @@ docs/
   - 从 SQLite 读取 `profile / weekly_plan / daily_log / memory / knowledge / summary / recent_messages`
   - 返回 Agent messages、模型配置和上下文调试信息，并通过 `run_tool_calling_chat()` 执行工具调用循环
   - 同时承载共享 provider runtime 接线：把运行时 provider 配置映射成实际聊天 client，并在工具循环里按 wire 选择 provider wrapper
+  - `DeepSeekClient` 现在只作为短期 fallback 保留：仅在 provider runtime 缺失、无有效凭据或尚未初始化时兜底，避免主链路继续绑定旧实现
   - 工具循环现在会按 client/wire 类型选择 provider wrapper：DeepSeek 与 OpenAI-compatible `chat_completions` 走 `_DeepSeekToolLoopProvider`，OpenAI-compatible `responses` 走 `_OpenAIResponsesToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
 
 - `backend/agent/usage_ledger.py`
@@ -325,7 +326,7 @@ docs/
 - `backend/providers/base.py` 与 `backend/providers/openai_compatible.py`
   - 定义 Provider 适配层的最小公共接口和统一错误类型
   - OpenAI-compatible provider 现在显式支持 `wireApi(chat_completions / responses)` 与 `apiPathMode(raw_root / append_v1)` 两个运行时参数
-  - `/models`、`/chat/completions`、`/responses` 的 endpoint 都通过统一 builder 构造，`append_v1` 会自动避免 `.../v1/v1/...` 双拼接
+  - `/models`、`/chat/completions`、`/responses` 的 endpoint 都通过统一 builder 构造，`append_v1` 会自动避免 `.../v1/v1/...` 双拼接；DeepSeek 配到 `/v1` 根路径时也复用这套规则
   - 工具循环会按 wire 差异分别处理 `assistant.tool_calls -> tool` 与 `function_call -> function_call_output` 两条 follow-up 链路
 
 - `backend/providers/openai_compatible_client.py`
@@ -942,7 +943,7 @@ CoachTab
 - memory 保存用户长期事实，knowledge 保存外部资料或上传文件知识，两者不会混写；单日状态不晋升长期 memory
 - 上传文件只通过 `fileIds` 和摘要进入 Agent，不把本机路径或完整大文件塞进请求
 - 模型与 thinking 配置由后端 `/api/models` 收口，前端仅选择后端声明的可用项
-- 聊天、草稿和后台任务共享 `modelRef -> ProviderRuntimeCache -> provider-bound client/runtime -> remote_model_id` 解析链路，避免前端、SSE 与后台任务各自维护一套默认模型逻辑
+- 聊天、草稿和后台任务共享 `modelRef -> ProviderRuntimeCache -> provider-bound client/runtime -> remote_model_id` 解析链路，避免前端、SSE 与后台任务各自维护一套默认模型逻辑；保存配置后缓存会立即刷新，因此运行时选路不会要求手动重启服务
 - OpenAI-compatible provider 在聊天阶段还会继续细分成两条 wire：`chat_completions` 使用传统 `messages/tool_calls` 消息回环，`responses` 使用 `input/function_call/function_call_output` 回环；两者都通过统一 tool loop 驱动 proposal 工具
 - 后台任务提交由 `backgroundTaskStartedRef` 去重，窗口 focus 回来后主动轮询，避免 Alt+Tab 或应用内 tab 切换时用户消息看起来丢失
 - Today 页复杂指标面板与 prompt 注入共用 `buildDailyMetricsSummary()`，避免展示层和 AI 上下文口径漂移
