@@ -411,6 +411,87 @@ class FakeDayPlanProposalClient:
         return DeepSeekChatResult(content="已生成一张单日训练计划卡。")
 
 
+class FakeSequentialProposalClient:
+    """按回合返回不同 proposal，便于复现同会话连续修改计划。"""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **kwargs: Any,
+    ) -> DeepSeekChatResult:
+        del tools, stream, kwargs
+        self.calls.append({"messages": messages, "model": model, "tool_choice": tool_choice})
+
+        tool_round_index = sum(1 for call in self.calls if call["tool_choice"] is not None)
+        if tool_round_index == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_propose_round_1",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "把深蹲 RPE 下调到 7，降低疲劳风险。",
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "rpe",
+                                            "newValue": 7,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        if tool_round_index == 2:
+            return DeepSeekChatResult(content="已生成第一张待确认计划卡。")
+        if tool_round_index == 3:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_propose_round_2",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "Monday",
+                                    "summary": "把深蹲组数降到 2 组，继续控制疲劳。",
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "sets",
+                                            "newValue": 2,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content=f"{model} 已生成第二张待确认计划卡。")
+
+
 @pytest_asyncio.fixture
 async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'chat-stream.db'}"
@@ -744,6 +825,144 @@ async def test_agent_stream_emits_day_plan_replace_proposal(
     assert events[1]["data"]["proposal"]["kind"] == "day_plan_replace"
     assert events[1]["data"]["proposal"]["dayPlan"]["type"] == "腿日"
     assert events[1]["data"]["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_allows_second_plan_proposal_after_first_proposal_commit_in_same_session(
+    api_client: AsyncClient,
+):
+    fake_client = FakeSequentialProposalClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    first_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "先给我一张周一深蹲降疲劳的计划卡。",
+        },
+    )
+    assert first_reply.status_code == 200
+    first_payload = first_reply.json()
+    first_proposal = first_payload["proposal"]
+    assert first_proposal["status"] == "pending"
+
+    commit_response = await api_client.post(
+        "/api/tools/plan/commit",
+        json={"proposalId": first_proposal["proposalId"]},
+    )
+    assert commit_response.status_code == 200
+
+    second_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "继续调整周一，把深蹲组数也降一点，再给我一张计划卡。",
+        },
+    )
+    assert second_reply.status_code == 200
+    second_payload = second_reply.json()
+
+    assert second_payload["proposal"] is not None
+    assert second_payload["proposal"]["status"] == "pending"
+    assert second_payload["proposal"]["proposalId"] != first_proposal["proposalId"]
+    assert second_payload["proposal"]["changes"][0]["field"] == "sets"
+    assert second_payload["proposal"]["changes"][0]["newValue"] == 2
+    assert "待确认" in second_payload["text"]
+
+
+@pytest.mark.asyncio
+async def test_chat_reply_same_session_can_switch_model_and_still_generate_second_plan_proposal(
+    api_client: AsyncClient,
+    monkeypatch,
+):
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    class FakeRuntime:
+        default_model_ref = "provider_deepseek_main::deepseek-v4-flash"
+
+        def resolve_model_ref(self, model_ref: str):
+            provider_map = {
+                "provider_deepseek_main::deepseek-v4-flash": type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "openai_compatible",
+                        "api_key": "sk-provider",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "wire_api": "chat_completions",
+                        "api_path_mode": "append_v1",
+                        "label": "DeepSeek 主账号",
+                    },
+                )(),
+                "provider_gemini_main::gemini-2.5-flash": type(
+                    "Provider",
+                    (),
+                    {
+                        "type": "gemini_native",
+                        "api_key": "sk-gemini",
+                        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                        "label": "Gemini 主账号",
+                    },
+                )(),
+            }
+            return provider_map[model_ref], model_ref.split("::", 1)[1]
+
+    observed_models: list[str] = []
+    shared_client = FakeSequentialProposalClient()
+
+    def build_runtime_client(provider, fallback_client, timeout=None):
+        del provider, fallback_client, timeout
+        original_request = shared_client.request_chat_with_usage
+
+        async def wrapped_request_chat_with_usage(**kwargs: Any):
+            observed_models.append(kwargs["model"])
+            return await original_request(**kwargs)
+
+        shared_client.request_chat_with_usage = wrapped_request_chat_with_usage  # type: ignore[method-assign]
+        return shared_client
+
+    monkeypatch.setattr(chat_api, "get_provider_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(chat_api, "build_provider_bound_client", build_runtime_client)
+
+    first_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "先给我一张周一深蹲降疲劳的计划卡。",
+            "model": "provider_deepseek_main::deepseek-v4-flash",
+        },
+    )
+    assert first_reply.status_code == 200
+    first_payload = first_reply.json()
+    first_proposal = first_payload["proposal"]
+    assert first_proposal["status"] == "pending"
+
+    commit_response = await api_client.post(
+        "/api/tools/plan/commit",
+        json={"proposalId": first_proposal["proposalId"]},
+    )
+    assert commit_response.status_code == 200
+
+    second_reply = await api_client.post(
+        "/api/chat/reply",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "继续调整周一，把深蹲组数也降一点，再给我一张计划卡。",
+            "model": "provider_gemini_main::gemini-2.5-flash",
+        },
+    )
+    assert second_reply.status_code == 200
+    second_payload = second_reply.json()
+
+    assert second_payload["proposal"] is not None
+    assert second_payload["proposal"]["status"] == "pending"
+    assert second_payload["proposal"]["changes"][0]["field"] == "sets"
+    assert second_payload["proposal"]["changes"][0]["newValue"] == 2
+    assert observed_models[0] == "deepseek-v4-flash"
+    assert observed_models[-1] == "gemini-2.5-flash"
 
 
 @pytest.mark.asyncio

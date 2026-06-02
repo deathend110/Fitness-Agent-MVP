@@ -270,6 +270,7 @@ docs/
   - `/api/chat/stream` 将统一聊天运行时的文本事件映射为 `delta / suggestion / proposal / done / error`
   - 成功完成后一次性写入本轮 user + assistant；错误时不写半截 assistant，避免污染历史
   - 普通“新对话”会在首条 user prompt 成功落库后自动回填标题，历史侧栏不再长期显示占位文案
+  - 当用户通过 `/api/tools/plan/commit` 采纳 proposal 后，系统会同步更新该会话内匹配 assistant 消息里的 `suggestion.status=committed`，避免后续上下文仍把旧 proposal 视为 pending
 
 - `backend/agent/prompt_templates.py`
   - 定义稳定 system prompt，包含健身教练身份、安全边界、非医疗诊断声明和计划写回必须用户确认的约束
@@ -285,6 +286,7 @@ docs/
   - 定义 `build_agent_request()` 后端编排入口
   - 从 SQLite 读取 `profile / weekly_plan / daily_log / memory / knowledge / summary / recent_messages`
   - 返回 Agent messages、模型配置和上下文调试信息，并通过 `run_tool_calling_chat()` 执行工具调用循环
+  - 最近消息回放不会只保留纯文本；若 assistant 消息带有结构化 proposal/suggestion，系统会把 `proposalId / status / day / summary` 追加进回放文本，保证重复修改计划或切模型续聊时，模型能看到 proposal 的真实处理状态
   - 同时承载共享 provider runtime 接线：把运行时 provider 配置映射成实际聊天 client，并在工具循环里按 wire 选择 provider wrapper
   - `DeepSeekClient` 现在只作为短期 fallback 保留：仅在 provider runtime 缺失、无有效凭据或尚未初始化时兜底，避免主链路继续绑定旧实现
   - 工具循环现在会按 client/wire 类型选择 provider wrapper：DeepSeek 与 OpenAI-compatible `chat_completions` 走 `_DeepSeekToolLoopProvider`，OpenAI-compatible `responses` 走 `_OpenAIResponsesToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`

@@ -14,7 +14,7 @@ from backend.agent.adopt_plan import (
 )
 from backend.api.weekly_plan import build_weekly_plan_response, dump_weekly_plan_response
 from backend.db.database import get_db_session
-from backend.db.models import WeeklyPlanDay
+from backend.db.models import ChatMessage, WeeklyPlanDay
 from backend.schemas import WeeklyPlanSchema
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
@@ -84,6 +84,7 @@ async def commit_plan_change(
         }
 
     await _write_plan(session, result.next_plan)
+    await _sync_committed_proposal_status(session, payload.proposalId)
     refreshed_plan = await _load_current_plan(session)
     return {
         "ok": True,
@@ -117,3 +118,21 @@ async def _write_plan(session: AsyncSession, plan: dict[str, Any]) -> None:
             existing.type = day_payload["type"]
             existing.exercises = day_payload["exercises"]
     await session.commit()
+
+
+async def _sync_committed_proposal_status(session: AsyncSession, proposal_id: str) -> None:
+    result = await session.execute(select(ChatMessage).where(ChatMessage.role == "assistant"))
+    updated = False
+    for item in result.scalars().all():
+        suggestion = item.suggestion
+        if not isinstance(suggestion, dict):
+            continue
+        if str(suggestion.get("proposalId") or "").strip() != proposal_id:
+            continue
+        if suggestion.get("status") == "committed":
+            continue
+        item.suggestion = {**suggestion, "status": "committed"}
+        updated = True
+
+    if updated:
+        await session.commit()

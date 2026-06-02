@@ -16,6 +16,7 @@ from backend.agent.adopt_plan import (
     commit_validated_plan_change,
     validate_plan_changes,
 )
+from backend.api import chat as chat_api
 from backend.api import tools as tools_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base
@@ -397,6 +398,42 @@ async def test_plan_commit_endpoint_writes_day_plan_replace(api_client: AsyncCli
     assert committed.status_code == 200
     assert committed.json()["ok"] is True
     assert committed.json()["plan"]["Monday"]["exercises"][0]["name"] == "深蹲"
+
+
+@pytest.mark.asyncio
+async def test_plan_commit_endpoint_updates_matching_chat_message_suggestion_status(
+    api_client: AsyncClient,
+) -> None:
+    original_plan = build_weekly_plan()
+    await api_client.put("/api/weekly-plan", json=original_plan)
+    session_id = (await api_client.post("/api/chat/sessions", json={"title": "proposal-status-sync"})).json()["id"]
+
+    proposal = await api_client.post(
+        "/api/tools/plan/propose",
+        json={"sessionId": session_id, "day": "Monday", "summary": "降强度", "changes": build_change()},
+    )
+    proposal_id = proposal.json()["proposalId"]
+    proposal_card = proposal.json()["card"]
+
+    message_response = await api_client.post(
+        f"/api/chat/sessions/{session_id}/messages",
+        json={
+            "role": "assistant",
+            "content": "已生成一张周一调整卡，请确认。",
+            "suggestion": proposal_card,
+            "attachments": [],
+        },
+    )
+    assert message_response.status_code == 200
+
+    committed = await api_client.post("/api/tools/plan/commit", json={"proposalId": proposal_id})
+    assert committed.status_code == 200
+    assert committed.json()["ok"] is True
+
+    messages_response = await api_client.get(f"/api/chat/sessions/{session_id}/messages")
+    messages = messages_response.json()
+    assert messages[-1]["suggestion"]["proposalId"] == proposal_id
+    assert messages[-1]["suggestion"]["status"] == "committed"
 
 
 @pytest.mark.asyncio

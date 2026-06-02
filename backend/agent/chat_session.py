@@ -1530,10 +1530,34 @@ async def _load_recent_messages(
         .order_by(ChatMessage.id.desc())
         .limit(limit)
     )
-    return [
-        {
-            "role": item.role,
-            "content": item.content,
-        }
-        for item in reversed(result.scalars().all())
-    ]
+    return [_serialize_recent_chat_message(item) for item in reversed(result.scalars().all())]
+
+
+def _serialize_recent_chat_message(item: ChatMessage) -> dict[str, Any]:
+    content = item.content
+    suggestion = item.suggestion if isinstance(item.suggestion, dict) else None
+    if item.role == "assistant" and suggestion:
+        content = _append_suggestion_status_to_recent_content(content, suggestion)
+    return {
+        "role": item.role,
+        "content": content,
+    }
+
+
+def _append_suggestion_status_to_recent_content(content: str, suggestion: dict[str, Any]) -> str:
+    lines = [content.strip()]
+    proposal_id = str(suggestion.get("proposalId") or "").strip()
+    status = str(suggestion.get("status") or "").strip()
+    summary = str(suggestion.get("summary") or "").strip()
+    day = str(suggestion.get("day") or "").strip()
+
+    if proposal_id:
+        lines.append(f"建议卡 proposalId={proposal_id}")
+    if status:
+        lines.append(f"建议状态：{status}")
+    if day:
+        lines.append(f"建议日期：{day}")
+    if summary:
+        lines.append(f"建议摘要：{summary}")
+
+    return "\n".join(line for line in lines if line)

@@ -220,3 +220,48 @@ async def test_reply_endpoint_keeps_phase2_messages_request_compatible(
 
     assert response.status_code == 200
     assert fake_client.calls[-1] == legacy_messages
+
+
+@pytest.mark.asyncio
+async def test_build_agent_request_includes_committed_proposal_status_in_recent_history(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = ChatSession(title="proposal-status", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            ChatMessage(
+                session_id=chat_session.id,
+                role="user",
+                content="先给我一张周一恢复卡。",
+                suggestion=None,
+                created_at=utc_now(),
+            ),
+            ChatMessage(
+                session_id=chat_session.id,
+                role="assistant",
+                content="已生成一张周一恢复卡，等待确认。",
+                suggestion={
+                    "proposalId": "proposal-1",
+                    "kind": "day_plan_replace",
+                    "day": "Monday",
+                    "summary": "先把周一改成恢复日。",
+                    "status": "committed",
+                },
+                created_at=utc_now(),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    request = await build_agent_request(
+        session=db_session,
+        session_id=chat_session.id,
+        user_input="继续调整周一，给我第二张卡。",
+        model_config={"model": "provider_deepseek_main::deepseek-v4-flash"},
+    )
+
+    rendered = "\n".join(message["content"] for message in request.messages if message["role"] != "system")
+    assert "建议状态：committed" in rendered
+    assert "proposalId=proposal-1" in rendered
