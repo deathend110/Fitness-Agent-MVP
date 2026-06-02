@@ -210,3 +210,57 @@ RepMind 已具备“日志 -> AI 建议 -> 采纳 -> 写回训练计划”的完
 - `sleep_hours = 7.2`
 - `fatigue_level = 3`
 - Today 页 `panelModel.source.summary` 与 prompt 中 `structured_metrics` 完整对齐
+
+## 8. 2026-06-03 深度浏览器验证补充
+
+### 8.1 验收目标
+
+- 为开源发布前验证计划补齐 AI 教练深度浏览器回归脚本
+- 覆盖 commit、ignore、附件上传、provider 切换、stream fallback、模型设置保存后即时生效
+- 保持全部脚本都能通过浏览器端 route mock 稳定复现
+
+### 8.2 新增脚本
+
+- `tests/e2e/coach_commit_full_flow.py`
+- `tests/e2e/coach_ignore_flow.py`
+- `tests/e2e/coach_attachment_flow.py`
+- `tests/e2e/coach_provider_switch.py`
+- `tests/e2e/coach_stream_fallback.py`
+- `tests/e2e/coach_model_config_flow.py`
+
+### 8.3 自动化验收命令
+
+- 命令：`uv run python -m py_compile tests/e2e/coach_commit_full_flow.py tests/e2e/coach_ignore_flow.py tests/e2e/coach_attachment_flow.py tests/e2e/coach_provider_switch.py tests/e2e/coach_stream_fallback.py tests/e2e/coach_model_config_flow.py`
+- 结果：通过
+
+- 命令：`uv run python tests/e2e/coach_commit_full_flow.py`
+- 结果：通过
+
+- 命令：`uv run python tests/e2e/coach_ignore_flow.py`
+- 结果：通过
+
+- 命令：`uv run python tests/e2e/coach_attachment_flow.py`
+- 结果：通过
+
+- 命令：`uv run python tests/e2e/coach_provider_switch.py`
+- 结果：通过
+
+- 命令：`uv run python tests/e2e/coach_stream_fallback.py`
+- 结果：通过
+
+- 命令：`uv run python tests/e2e/coach_model_config_flow.py`
+- 结果：通过
+
+### 8.4 本轮覆盖点
+
+- proposal 卡生成后，commit 前计划页保持旧内容，commit 后才显示新计划
+- ignore 会调用 `/api/tools/plan/ignore`，且忽略后旧卡片不会继续以待处理状态出现
+- 附件上传后首轮消息会携带 `fileIds`，移除附件后下一轮不再携带旧附件
+- DeepSeek / Responses / Gemini 三类 `modelRef` 切换后，真实发送请求会跟随切换
+- `/api/chat/stream` 失败后会回退到 `/api/chat/reply`，且不会重复生成 assistant 消息
+- 模型设置弹窗保存后，新的默认模型会立即体现在模型选择器和后续聊天请求里
+
+### 8.5 结论
+
+截至 2026-06-03，AI 教练浏览器级自动化验证已经从“冒烟”扩展到“深度流程回归”。  
+当前脚本集已能稳定覆盖开源发布前验证计划中的 6 条高风险前端链路。

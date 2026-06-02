@@ -132,6 +132,30 @@ scripts/
   - 覆盖 AI 教练页后台任务恢复、切换 tab 后“正在整理上下文...”继续展示、采纳卡片持久展示与 `/api/tools/plan/commit` 提交参数。
   - 通过 `uv run python ...` 运行，避免依赖全局 Python 环境。
 
+- `tests/e2e/coach_commit_full_flow.py`
+  - 覆盖“已有档案/计划/日志 -> proposal 卡 -> commit -> 训练计划页确认写回”的完整深度回归。
+  - 会显式断言 commit 请求体以及 commit 前后计划展示差异，避免 proposal 误被提前写回。
+
+- `tests/e2e/coach_ignore_flow.py`
+  - 覆盖计划卡 ignore 流程、`/api/tools/plan/ignore` 请求体以及忽略后继续聊天不受阻。
+  - 重点防回归“旧 proposal 被忽略后仍作为待处理卡片重复出现”。
+
+- `tests/e2e/coach_attachment_flow.py`
+  - 覆盖附件上传、附件 chip、用户消息附件回显、发送时 `fileIds` 注入，以及移除附件后下一轮请求不再携带旧附件。
+  - 使用临时文本文件驱动上传，避免依赖外部固定测试资源。
+
+- `tests/e2e/coach_provider_switch.py`
+  - 覆盖 DeepSeek、OpenAI-compatible Responses、Gemini 三类模型切换后的真实发送链路。
+  - 断言不同 `modelRef` 会进入各自请求，避免模型切换只改 UI 不改实际请求。
+
+- `tests/e2e/coach_stream_fallback.py`
+  - 覆盖 `/api/chat/stream` 失败后自动回退 `/api/chat/reply` 的前端体验。
+  - 重点防回归“重复 assistant 消息”“回退后消息区仍停在思考中”。
+
+- `tests/e2e/coach_model_config_flow.py`
+  - 覆盖模型设置弹窗里的测试连接、发现模型、保存配置以及保存后默认模型即时生效。
+  - 重点验证 provider 配置请求体与保存后聊天请求使用的新默认模型保持一致。
+
 - `src/utils/chatSuggestionState.js`
   - 负责 AI 教练消息里的 suggestion 元数据合并，最新消息优先，避免相同回复内容复用旧 proposalId。
   - 只有同一 proposal 才保留 dismissed 状态，防止旧卡片隐藏标记误伤新卡片。

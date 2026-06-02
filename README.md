@@ -211,6 +211,17 @@ uv run python -m playwright install chromium
 uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_browser_smoke.py
 ```
 
+浏览器自动化深度回归：
+
+```powershell
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_commit_full_flow.py
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_ignore_flow.py
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_attachment_flow.py
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_provider_switch.py
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_stream_fallback.py
+uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev -- --host 127.0.0.1" --port 5173 -- uv run python tests\e2e\coach_model_config_flow.py
+```
+
 更细的验证记录见 [docs/verification.md](/g:/VSCODE-G/Fitness Agent MVP/docs/verification.md)。
 
 ## Demo 操作路径
@@ -230,3 +241,4 @@ uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" -
 - 后端启动、迁移与接口：[backend/README.md](/g:/VSCODE-G/Fitness Agent MVP/backend/README.md)
 - 迭代进度与历史记录：[docs/progress.md](/g:/VSCODE-G/Fitness Agent MVP/docs/progress.md)
 - 验证记录：[docs/verification.md](/g:/VSCODE-G/Fitness Agent MVP/docs/verification.md)
+- 发布前验证计划：[docs/verification_release_plan.md](/g:/VSCODE-G/Fitness Agent MVP/docs/verification_release_plan.md)
