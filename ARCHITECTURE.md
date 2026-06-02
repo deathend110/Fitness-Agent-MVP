@@ -297,6 +297,7 @@ docs/
   - 同时承载共享 provider runtime 接线：把运行时 provider 配置映射成实际聊天 client，并在工具循环里按 wire 选择 provider wrapper
   - `DeepSeekClient` 现在只作为短期 fallback 保留：仅在 provider runtime 缺失、无有效凭据或尚未初始化时兜底，避免主链路继续绑定旧实现
   - 工具循环现在会按 client/wire 类型选择 provider wrapper：DeepSeek 与 OpenAI-compatible `chat_completions` 走 `_DeepSeekToolLoopProvider`，OpenAI-compatible `responses` 走 `_OpenAIResponsesToolLoopProvider`，Gemini-native 走 `_GeminiToolLoopProvider`
+  - OpenAI-compatible 运行时的网络与 SSE 错误文案会统一使用 provider label，并在异常细节缺失时回退到异常类型名，避免中转站偶发超时被误显示成 DeepSeek 故障或只剩空白提示
 
 - `backend/agent/usage_ledger.py`
   - 负责规范化 DeepSeek `usage` 字段并写入 `UsageRecord`
@@ -486,6 +487,7 @@ docs/
 
 - `src/utils/coachView.js`
   - 负责 AI 教练页视图层纯函数
+  - `parseCoachTimestamp()` 会把后端返回的无时区 UTC ISO 字符串补齐为 UTC 语义，再统一交给侧栏时间格式化使用，避免浏览器按本地时间误解析
   - 提供流式文本剥离、真实会话侧栏模型和空状态建议问题模型
 
 - `src/tabs/PlanTab.jsx`

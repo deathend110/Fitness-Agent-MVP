@@ -353,7 +353,11 @@ class OpenAICompatibleRuntimeClient:
                         yield DeepSeekStreamEvent(text=delta)
         except httpx.HTTPError as exc:
             raise DeepSeekClientError(
-                f"{self._display_name()} 流式请求失败：{exc}",
+                self._build_network_error_message(
+                    detail=exc,
+                    fallback=exc.__class__.__name__,
+                    action_label="流式请求失败",
+                ),
                 code="network_error",
             ) from exc
 
@@ -504,6 +508,22 @@ class OpenAICompatibleRuntimeClient:
         if "deepseek.com" in lowered:
             return "DeepSeek"
         return "OpenAI-compatible 服务"
+
+    def _format_error_detail(self, detail: Any, *, fallback: str) -> str:
+        normalized = str(detail or "").strip()
+        if normalized:
+            return normalized
+        return fallback
+
+    def _build_network_error_message(
+        self,
+        *,
+        detail: Any = None,
+        fallback: str = "网络连接异常，请稍后重试。",
+        action_label: str = "网络请求失败",
+    ) -> str:
+        reason = self._format_error_detail(detail, fallback=fallback)
+        return f"{self._display_name()} {action_label}：{reason}"
 
     def _assert_api_key(self) -> None:
         if self.api_key:
@@ -705,7 +725,10 @@ class OpenAICompatibleRuntimeClient:
                 )
         except httpx.HTTPError as exc:
             raise DeepSeekClientError(
-                f"{self._display_name()} 网络请求失败：{exc}",
+                self._build_network_error_message(
+                    detail=exc,
+                    fallback=exc.__class__.__name__,
+                ),
                 code="network_error",
             ) from exc
 
@@ -772,7 +795,7 @@ class OpenAICompatibleRuntimeClient:
             return final_payload
         if error_reason:
             raise DeepSeekClientError(
-                f"{self._display_name()} 网络请求失败：{error_reason}",
+                self._build_network_error_message(detail=error_reason),
                 code="network_error",
                 reason=error_reason,
             )

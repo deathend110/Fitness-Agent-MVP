@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
+import httpx
 from httpx import ASGITransport, AsyncClient
 
 from backend.agent.chat_session import (
@@ -2101,6 +2102,70 @@ async def test_openai_compatible_runtime_client_falls_back_to_chat_completions_a
         "https://sub2.congmingai.com/v1/responses",
         "https://sub2.congmingai.com/v1/chat/completions",
     ]
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_runtime_client_network_error_uses_provider_label_and_fallback_detail() -> None:
+    class FailingHttpxClient(FakeAsyncHttpxClient):
+        async def post(
+            self,
+            url: str,
+            *,
+            json: dict[str, Any],
+            headers: dict[str, Any],
+        ) -> FakeAsyncHttpxResponse:
+            del url, json, headers
+            raise httpx.ReadTimeout("timed out")
+
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="chat_completions",
+        api_path_mode="append_v1",
+        provider_label="聪明AI",
+        client_factory=lambda **kwargs: FailingHttpxClient(**kwargs),
+    )
+
+    with pytest.raises(DeepSeekClientError) as exc_info:
+        await client.request_chat_with_usage(
+            messages=build_messages("网络错误文案测试"),
+            model="gpt-5.4-mini",
+        )
+
+    assert str(exc_info.value) == "聪明AI 网络请求失败：timed out"
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_runtime_client_sse_network_error_uses_provider_label() -> None:
+    client = OpenAICompatibleRuntimeClient(
+        api_key="sk-openai",
+        base_url="https://sub2.congmingai.com/v1",
+        wire_api="responses",
+        api_path_mode="append_v1",
+        provider_label="聪明AI",
+        client_factory=lambda **kwargs: FakeAsyncHttpxClient(
+            post_response=FakeAsyncHttpxResponse(
+                json_error=ValueError("Expecting value: line 1 column 1 (char 0)"),
+                headers={"content-type": "text/event-stream; charset=utf-8"},
+                lines=[
+                    'data: {"error":{"message":"upstream connection failed: openai ws dial failed: status=403"}}',
+                    "",
+                ],
+            ),
+            **kwargs,
+        ),
+    )
+
+    with pytest.raises(DeepSeekClientError) as exc_info:
+        await client.request_responses_with_usage(
+            input_items=[{"role": "user", "content": [{"type": "input_text", "text": "测试中转站 SSE 错误"}]}],
+            model="gpt-5.4-mini",
+        )
+
+    assert (
+        str(exc_info.value)
+        == "聪明AI 网络请求失败：upstream connection failed: openai ws dial failed: status=403"
+    )
 
 
 @pytest.mark.asyncio
