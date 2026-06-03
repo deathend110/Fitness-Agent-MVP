@@ -37,3 +37,6 @@ pnpm-debug.log*
 Thumbs.db
 
 docs/prompt.md
+
+
+.vite-dev.log
