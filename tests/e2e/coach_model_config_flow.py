@@ -1,5 +1,5 @@
 import json
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -246,8 +246,8 @@ def install_backend_mock(page, test_calls, discover_calls, save_calls, stream_ca
             if method == "PUT":
                 return json_response(route, {"ok": True})
 
-        if method == "GET" and path == "/chat/stream":
-            stream_calls.append(request.url)
+        if method == "POST" and path == "/chat/stream":
+            stream_calls.append(read_request_json(request))
             return stream_response(route, REPLY_TEXT)
 
         return json_response(route, {"ok": True})
@@ -387,9 +387,8 @@ def main():
         }, save_calls
 
         assert len(stream_calls) == 1, stream_calls
-        stream_query = parse_qs(urlparse(stream_calls[0]).query)
-        assert stream_query["model"] == [DISCOVERED_DEFAULT_MODEL], stream_query
-        assert stream_query["userInput"] == [USER_MESSAGE], stream_query
+        assert stream_calls[0]["model"] == DISCOVERED_DEFAULT_MODEL, stream_calls
+        assert stream_calls[0]["userInput"] == USER_MESSAGE, stream_calls
 
         browser.close()
 

@@ -29,12 +29,13 @@ test('streamBackendCoachReply 会解析后端 SSE 事件并返回文本和 sugge
     baseUrl: 'http://backend.test/api',
     sessionId: 7,
     fetchImpl: async (url, options) => {
-      assert.equal(options.method, 'GET')
-      assert.match(url, /^http:\/\/backend\.test\/api\/chat\/stream\?/)
-
-      const requestUrl = new URL(url)
-      assert.equal(requestUrl.searchParams.get('session_id'), '7')
-      assert.deepEqual(JSON.parse(requestUrl.searchParams.get('messages')), messages)
+      assert.equal(url, 'http://backend.test/api/chat/stream')
+      assert.equal(options.method, 'POST')
+      assert.equal(options.headers['Content-Type'], 'application/json')
+      assert.deepEqual(JSON.parse(options.body), {
+        sessionId: 7,
+        messages,
+      })
 
       return {
         ok: true,
@@ -69,13 +70,16 @@ test('streamBackendCoachReply 支持 Agent 请求契约并解析 proposal/tool_s
     {
       baseUrl: 'http://backend.test/api',
       fetchImpl: async (url, options) => {
-        assert.equal(options.method, 'GET')
-        const requestUrl = new URL(url)
-        assert.equal(requestUrl.searchParams.get('session_id'), '8')
-        assert.equal(requestUrl.searchParams.get('userInput'), '读取计划再建议')
-        assert.equal(requestUrl.searchParams.get('model'), 'deepseek-chat')
-        assert.equal(requestUrl.searchParams.get('fileIds'), '2,5')
-        assert.deepEqual(JSON.parse(requestUrl.searchParams.get('thinking')), { enabled: true, budget: 'max' })
+        assert.equal(url, 'http://backend.test/api/chat/stream')
+        assert.equal(options.method, 'POST')
+        assert.equal(options.headers['Content-Type'], 'application/json')
+        assert.deepEqual(JSON.parse(options.body), {
+          sessionId: 8,
+          userInput: '读取计划再建议',
+          model: 'deepseek-chat',
+          thinking: { enabled: true, budget: 'max' },
+          fileIds: [2, 5],
+        })
 
         return {
           ok: true,

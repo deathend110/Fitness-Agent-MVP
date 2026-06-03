@@ -88,6 +88,10 @@ class ChatBackgroundTaskResponseSchema(BaseModel):
     message: str = ""
 
 
+class ChatStreamRequestSchema(ChatReplyRequestSchema):
+    """流式接口沿用与 /reply 一致的请求体契约。"""
+
+
 @dataclass(frozen=True)
 class NormalizedChatRequest:
     session_id: int | None
@@ -107,7 +111,7 @@ def get_deepseek_client() -> DeepSeekClient:
     return DeepSeekClient(
         api_key=settings.deepseek_api_key,
         base_url=settings.deepseek_base_url,
-        timeout=settings.deepseek_timeout_seconds,
+        timeout=settings.llm_timeout_seconds,
     )
 
 
@@ -733,27 +737,13 @@ async def get_or_create_default_session(session: AsyncSession = Depends(get_db_s
     return build_session_response(chat_session)
 
 
-@router.get("/stream")
+@router.post("/stream")
 async def stream_chat_reply(
-    messages: str | None = None,
-    user_input: str | None = Query(default=None, alias="userInput"),
-    session_id: int | None = None,
-    model: str | None = None,
-    thinking: str | None = None,
-    file_ids: list[str] | None = Query(default=None, alias="fileIds"),
+    payload: ChatStreamRequestSchema,
     deepseek_client: DeepSeekClient = Depends(get_deepseek_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> StreamingResponse:
-    parsed_messages = parse_messages_query(messages) if messages is not None else None
-    thinking_query = parse_thinking_query(thinking)
-    normalized_request = normalize_stream_chat_request(
-        session_id=session_id,
-        user_input=user_input,
-        model=model,
-        thinking=thinking_query,
-        file_ids=parse_file_ids_query(file_ids),
-        messages=parsed_messages,
-    )
+    normalized_request = normalize_chat_request_payload(payload)
     chat_session = await resolve_chat_session(normalized_request.session_id, session)
     selected_model_ref, selected_provider, remote_model_id = resolve_selected_chat_model(
         normalized_request.model
@@ -761,7 +751,7 @@ async def stream_chat_reply(
     provider_client = build_provider_bound_client(
         selected_provider,
         deepseek_client,
-        timeout=get_settings().deepseek_timeout_seconds,
+        timeout=get_settings().llm_timeout_seconds,
     )
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(normalized_request.thinking)
     user_attachments: list[dict[str, Any]] = []
@@ -875,7 +865,7 @@ async def request_chat_reply(
     provider_client = build_provider_bound_client(
         selected_provider,
         deepseek_client,
-        timeout=get_settings().deepseek_timeout_seconds,
+        timeout=get_settings().llm_timeout_seconds,
     )
     thinking_payload, reasoning_effort = normalize_deepseek_thinking(normalized_request.thinking)
     user_attachments: list[dict[str, Any]] = []

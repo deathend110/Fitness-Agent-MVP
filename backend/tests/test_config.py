@@ -57,3 +57,17 @@ def test_settings_support_backend_host_and_backend_port():
 
     assert settings.backend_host == "0.0.0.0"
     assert settings.backend_port == 9234
+
+
+def test_settings_use_generic_llm_timeout_field():
+    settings = Settings(llm_timeout_seconds=45.5)
+
+    assert settings.llm_timeout_seconds == 45.5
+    assert settings.deepseek_timeout_seconds == 45.5
+
+
+def test_settings_keep_legacy_deepseek_timeout_alias():
+    settings = Settings(deepseek_timeout_seconds=19.0)
+
+    assert settings.llm_timeout_seconds == 19.0
+    assert settings.deepseek_timeout_seconds == 19.0

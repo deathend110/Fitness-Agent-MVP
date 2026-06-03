@@ -323,3 +323,30 @@ RepMind 已具备“日志 -> AI 建议 -> 采纳 -> 写回训练计划”的完
 - 发布计划中的前端、后端、构建与浏览器自动化主矩阵已在同一时点完成复验
 - 本轮未发现新的生产缺陷，新增问题全部收敛在测试脚本或过期断言层
 - 当前版本已经满足 `docs/verification_release_plan.md` 中自动化验证部分的发布前要求
+
+## 10. 2026-06-03 POST Stream 与统一超时配置收口
+
+### 10.1 本轮改动目标
+
+- 把前后端流式聊天主路径从 `GET /api/chat/stream` 收口到 `POST /api/chat/stream`
+- 前端流式请求统一改为 JSON body，避免把 `userInput / messages / thinking / fileIds` 拼进 query string
+- 后端新增统一的 `LLM_TIMEOUT_SECONDS` 配置入口，并保持 `DEEPSEEK_TIMEOUT_SECONDS` 兼容
+- 同步修正单测、后端测试与受影响的浏览器 mock
+
+### 10.2 本轮执行结果
+
+- 命令：`node --test tests/coachBackend.test.js`
+- 结果：`9/9` 通过
+
+- 命令：`uv run pytest backend/tests/test_config.py backend/tests/test_chat_stream.py backend/tests/test_usage_ledger.py -q`
+- 结果：`46/46` 通过，附带 FastAPI 依赖层 `DeprecationWarning`
+
+- 命令：`uv run python -m py_compile tests/e2e/coach_stream_fallback.py tests/e2e/coach_provider_switch.py tests/e2e/coach_model_config_flow.py tests/e2e/coach_attachment_flow.py tests/e2e/coach_ignore_flow.py`
+- 结果：通过
+
+### 10.3 本轮覆盖点
+
+- `streamBackendCoachReply` 已确认改为 `POST /api/chat/stream`，并发送 JSON body
+- 后端 `POST /api/chat/stream` 已覆盖 legacy `messages` 和 agent `userInput` 两条入口
+- `LLM_TIMEOUT_SECONDS` 与 `DEEPSEEK_TIMEOUT_SECONDS` 已验证会映射到同一配置值
+- 浏览器级 mock 已改成按 `POST /chat/stream` 断言，不再依赖 query string

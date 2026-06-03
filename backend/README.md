@@ -77,7 +77,7 @@ Copy-Item backend\.env.example backend\.env
 - `MODEL_ALLOWLIST`
 - `DEFAULT_THINKING_ENABLED`
 - `DEFAULT_THINKING_BUDGET`
-- `DEEPSEEK_TIMEOUT_SECONDS`
+- `LLM_TIMEOUT_SECONDS`
 
 说明：
 
@@ -85,6 +85,7 @@ Copy-Item backend\.env.example backend\.env
 - `DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db` 会按 `backend/` 目录解析，仓库根目录启动也不会写到根目录 `data/`
 - `backend/.env` 不应提交到仓库
 - 后端 Agent 模块只从 `backend/.env` 读取 DeepSeek API Key；前端不再读取或打包 DeepSeek Key
+- `LLM_TIMEOUT_SECONDS` 是统一的模型请求超时配置；旧的 `DEEPSEEK_TIMEOUT_SECONDS` 仍兼容，但文档与新配置建议统一使用新名字
 
 ## 启动方式
 
@@ -168,7 +169,7 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `GET /api/chat/sessions/default`
 - `GET /api/chat/sessions/{id}/messages`
 - `POST /api/chat/sessions/{id}/messages`
-- `GET /api/chat/stream`
+- `POST /api/chat/stream`
 - `POST /api/chat/reply`
 - `POST /api/chat/{session_id}/background`
 - `GET /api/chat/background/{task_id}`
@@ -197,8 +198,7 @@ uv run alembic -c backend\alembic.ini upgrade head
 - `GET /api/chat/sessions/default` 会获取或创建“默认对话”，用于承接旧版单条 `chatHistory`
 - `POST /api/chat/sessions` 未传标题时会创建“新对话”，不会占用默认会话语义
 - 消息读取全量返回，不做 20 条裁剪
-- `GET /api/chat/stream` 接收 `messages=<JSON>`、可选 `session_id / model`，返回 `text/event-stream`
-- `GET /api/chat/stream` 也可接收 `userInput + session_id + model + thinking`，由后端统一拼装上下文
+- `POST /api/chat/stream` 接收与 `/api/chat/reply` 一致的 JSON 请求体：既支持 `{sessionId?, messages, model?}`，也支持 `{sessionId?, userInput, model?, thinking?, fileIds?}`，返回 `text/event-stream`
 - SSE 事件格式为 `event: delta / suggestion / proposal / tool_status / done / error`，`data` 始终是 JSON
 - `POST /api/chat/reply` 接收 `{sessionId?, messages, model?}` 或 Phase 3 新契约 `{sessionId?, userInput, model?}`，用于前端流式失败后的非流式回退
 - `reply / stream / background` 三条聊天入口现在都会先把新旧请求体归一成统一内部结构，再决定是否走 Agent 上下文编排

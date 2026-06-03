@@ -264,22 +264,19 @@ export async function streamBackendCoachReply(messages, options = {}) {
   assertFetchAvailable(fetchImpl)
 
   try {
-    const query = Array.isArray(messages)
-      ? { messages: JSON.stringify(messages), model, session_id: sessionId }
-      : {
-          userInput: messages?.userInput,
-          model: messages?.model || model,
-          session_id: messages?.sessionId ?? sessionId,
-          fileIds: normalizeFileIds(messages).join(','),
-          thinking: messages?.thinking ? JSON.stringify(messages.thinking) : undefined,
-        }
-    const response = await fetchImpl(
-      createRequestUrl(baseUrl, '/chat/stream', query),
-      {
-        method: 'GET',
-        signal,
+    const body = {
+      ...(sessionId === undefined || sessionId === null ? {} : { sessionId }),
+      ...(Array.isArray(messages) ? { messages } : normalizeAgentRequestBody(messages)),
+      ...(model ? { model } : {}),
+    }
+    const response = await fetchImpl(createRequestUrl(baseUrl, '/chat/stream'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    )
+      body: JSON.stringify(body),
+      signal,
+    })
 
     await assertOkResponse(response)
 

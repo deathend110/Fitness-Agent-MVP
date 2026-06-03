@@ -172,7 +172,7 @@ def install_backend_mock(page, ignore_calls, reply_calls):
             if method == "PUT":
                 return json_response(route, {"ok": True})
 
-        if method == "GET" and path == "/chat/stream":
+        if method == "POST" and path == "/chat/stream":
             route.fulfill(status=500, content_type="application/json", body=json.dumps({"message": "force fallback"}))
             return
 

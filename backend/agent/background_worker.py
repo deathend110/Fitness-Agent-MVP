@@ -113,7 +113,7 @@ class BackgroundWorker:
             client = build_provider_bound_client(
                 provider,
                 fallback_client,
-                timeout=get_settings().deepseek_timeout_seconds,
+                timeout=get_settings().llm_timeout_seconds,
             )
             thinking_kwargs: dict[str, Any] = {}
             if thinking is not None:
@@ -272,11 +272,11 @@ class BackgroundWorker:
                 return GeminiNativeClient(
                     api_key=api_key,
                     base_url=base_url,
-                    timeout=get_settings().deepseek_timeout_seconds,
+                    timeout=get_settings().llm_timeout_seconds,
                 )
 
         return build_provider_bound_client(
             provider,
             fallback_client,
-            timeout=get_settings().deepseek_timeout_seconds,
+            timeout=get_settings().llm_timeout_seconds,
         )

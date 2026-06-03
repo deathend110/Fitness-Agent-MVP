@@ -167,7 +167,7 @@ def install_backend_mock(page, upload_calls, reply_calls):
             draft_state["attachedFileIds"] = [uploaded_file["id"]]
             return json_response(route, {"file": uploaded_file})
 
-        if method == "GET" and path == "/chat/stream":
+        if method == "POST" and path == "/chat/stream":
             route.fulfill(status=500, content_type="application/json", body=json.dumps({"message": "force fallback"}))
             return
 

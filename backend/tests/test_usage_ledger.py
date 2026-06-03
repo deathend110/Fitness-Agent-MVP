@@ -239,11 +239,11 @@ async def test_stream_endpoint_records_usage_when_final_stream_event_contains_us
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: usage_client
     session_id = (await client.get("/api/chat/sessions/default")).json()["id"]
 
-    response = await client.get(
+    response = await client.post(
         "/api/chat/stream",
-        params={
-            "session_id": session_id,
-            "messages": '[{"role":"user","content":"明天要调吗？"}]',
+        json={
+            "sessionId": session_id,
+            "messages": [{"role": "user", "content": "明天要调吗？"}],
             "model": "deepseek-chat",
         },
     )

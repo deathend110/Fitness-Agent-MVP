@@ -861,11 +861,11 @@ async def test_chat_stream_emits_delta_suggestion_done_and_persists_clean_messag
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages(),
         },
     )
 
@@ -913,11 +913,11 @@ async def test_chat_stream_emits_null_suggestion_for_plain_text_reply(
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages(),
         },
     )
 
@@ -938,12 +938,12 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
     assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
+        json={
+            "sessionId": default_session["id"],
             "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
-            "thinking": json.dumps({"enabled": True, "budget": "max"}),
+            "thinking": {"enabled": True, "budget": "max"},
         },
     )
 
@@ -1014,10 +1014,10 @@ async def test_agent_stream_closes_pending_proposal_copy_before_done_and_persist
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
     assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
+        json={
+            "sessionId": default_session["id"],
             "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
         },
     )
@@ -1058,10 +1058,10 @@ async def test_agent_stream_emits_day_plan_replace_proposal(
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
     assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
+        json={
+            "sessionId": default_session["id"],
             "userInput": "请给我一张周一恢复型腿日卡片。",
         },
     )
@@ -1544,11 +1544,11 @@ async def test_chat_stream_emits_error_and_does_not_persist_partial_assistant(
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages(),
         },
     )
 
@@ -1580,11 +1580,11 @@ async def test_chat_stream_rolls_back_when_upstream_breaks_after_delta(
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages(), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages(),
         },
     )
 
@@ -1611,12 +1611,12 @@ async def test_chat_stream_persists_user_attachment_snapshot_and_empty_assistant
     app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
     default_session = (await api_client.get("/api/chat/sessions/default")).json()
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
+        json={
+            "sessionId": default_session["id"],
             "userInput": "请基于我上传的文件给建议。",
-            "fileIds": [str(uploaded_file["fileId"])],
+            "fileIds": [uploaded_file["fileId"]],
         },
     )
 
@@ -1756,11 +1756,11 @@ async def test_chat_stream_uses_openai_compatible_chat_completions_stream_client
         lambda provider, fallback_client, timeout=None: fake_client,
     )
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages("走 chat_completions stream"), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages("走 chat_completions stream"),
             "model": "provider_openai_chat::gpt-4.1-mini",
         },
     )
@@ -1808,10 +1808,10 @@ async def test_agent_stream_executes_tool_loop_with_openai_compatible_responses_
         lambda provider, fallback_client, timeout=None: fake_client,
     )
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
+        json={
+            "sessionId": default_session["id"],
             "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
             "model": "provider_openai_responses::gpt-4.1-mini",
         },
@@ -1864,11 +1864,11 @@ async def test_chat_stream_reports_provider_aware_error_message_for_openai_provi
         lambda provider, fallback_client, timeout=None: fake_client,
     )
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages("触发 OpenAI 错误"), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages("触发 OpenAI 错误"),
             "model": "provider_openai_chat::gpt-4.1-mini",
         },
     )
@@ -2652,11 +2652,11 @@ async def test_chat_stream_deepseek_model_ref_uses_openai_compatible_runtime_not
 
     monkeypatch.setattr(chat_api, "build_provider_bound_client", build_runtime_client)
 
-    response = await api_client.get(
+    response = await api_client.post(
         "/api/chat/stream",
-        params={
-            "session_id": default_session["id"],
-            "messages": json.dumps(build_messages("走 DeepSeek modelRef 流式链路"), ensure_ascii=False),
+        json={
+            "sessionId": default_session["id"],
+            "messages": build_messages("走 DeepSeek modelRef 流式链路"),
             "model": "provider_deepseek_main::deepseek-chat",
         },
     )

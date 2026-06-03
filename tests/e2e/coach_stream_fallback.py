@@ -136,8 +136,8 @@ def install_backend_mock(page, stream_calls, reply_calls):
             if method == "PUT":
                 return json_response(route, {"ok": True})
 
-        if method == "GET" and path == "/chat/stream":
-            stream_calls.append(request.url)
+        if method == "POST" and path == "/chat/stream":
+            stream_calls.append(read_request_json(request))
             return json_response(route, {"message": "stream down"}, status=503)
 
         if method == "POST" and path == "/chat/reply":
@@ -191,6 +191,8 @@ def main():
 
         assert len(stream_calls) == 1, stream_calls
         assert len(reply_calls) == 1, reply_calls
+        assert stream_calls[0]["model"] == MODEL_REF, stream_calls
+        assert stream_calls[0]["userInput"] == USER_MESSAGE, stream_calls
         assert reply_calls[0]["model"] == MODEL_REF, reply_calls
         assert reply_calls[0]["userInput"] == USER_MESSAGE, reply_calls
         assert page.get_by_text(REPLY_TEXT, exact=True).count() == 1

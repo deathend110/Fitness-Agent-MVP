@@ -3,7 +3,7 @@ from collections.abc import MutableMapping
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -83,7 +83,15 @@ class Settings(BaseSettings):
     )
     default_thinking_enabled: bool = False
     default_thinking_budget: str = "auto"
-    deepseek_timeout_seconds: float = 30.0
+    llm_timeout_seconds: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices(
+            "llm_timeout_seconds",
+            "deepseek_timeout_seconds",
+            "LLM_TIMEOUT_SECONDS",
+            "DEEPSEEK_TIMEOUT_SECONDS",
+        ),
+    )
     # Gemini 等海外模型在部分网络环境下必须经过代理，这里显式接入 backend/.env，
     # 避免只在启动终端里临时设置代理时，后端重启或换启动方式后又悄悄失效。
     http_proxy: str = ""
@@ -102,6 +110,12 @@ class Settings(BaseSettings):
         self.model_provider_config_path = resolve_backend_relative_path(self.model_provider_config_path)
         self.database_url = resolve_sqlite_url(self.database_url)
         return self
+
+    @property
+    def deepseek_timeout_seconds(self) -> float:
+        """兼容旧调用点，统一回落到通用 LLM 超时配置。"""
+
+        return self.llm_timeout_seconds
 
 
 def apply_runtime_proxy_environment(

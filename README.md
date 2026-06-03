@@ -132,6 +132,7 @@ VITE_DEV_PORT=5173
 BACKEND_HOST=127.0.0.1
 BACKEND_PORT=8000
 DEEPSEEK_API_KEY=your_deepseek_api_key
+LLM_TIMEOUT_SECONDS=30
 DATABASE_URL=sqlite+aiosqlite:///./data/repmind.db
 MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
 HTTP_PROXY=
@@ -146,11 +147,13 @@ HTTPS_PROXY=
 - `BACKEND_HOST / BACKEND_PORT` 由后端启动脚本统一读取，避免 `package.json`、uvicorn CLI 和配置层三处各写一份端口
 - 前端不再直接读取或暴露 DeepSeek API Key
 - AI 教练相关能力仍会从 `backend/.env` 读取 `DEEPSEEK_API_KEY` 作为旧版兼容与首份配置 bootstrap 来源；`DeepSeekClient` 当前仅保留为短期 fallback，当运行时 provider 配置缺失、无效或尚未初始化时才会兜底
+- `LLM_TIMEOUT_SECONDS` 是统一的模型请求超时入口；旧环境变量 `DEEPSEEK_TIMEOUT_SECONDS` 仍兼容，老 `.env` 不改也可以继续运行
 - 当前仓库默认口径已经固化为：DeepSeek 使用 `https://api.deepseek.com/v1`，并在 provider 配置里配合 `wireApi=chat_completions`、`apiPathMode=append_v1`；如果你本地 `backend/config/model_providers.json` 是更早生成的旧文件，里面仍可能保留根路径写法，但运行时不会因此回退到旧主链路
 - 模型提供方配置已经开始迁移到独立 JSON 文件，默认落在 `backend/config/model_providers.json`
 - `MODEL_PROVIDER_CONFIG_PATH` 用来覆盖模型配置 JSON 的路径，缺失文件时会自动根据当前后端设置生成首份文件
 - `GET /api/models` 现在返回带 `provider::remoteModel` 形式的 `modelRef`，聊天、草稿和后台任务会统一按这个引用解析真实模型
 - 选择 Gemini 模型后，`/api/chat/reply` 与 `/api/chat/stream` 会直接实例化 Gemini 运行时客户端；如果仍看到 DeepSeek 模型名相关报错，通常说明当前进程还没有加载到最新代码
+- 前端流式聊天现在统一使用 `POST /api/chat/stream` 发送 JSON body，不再把 `userInput / messages / thinking / fileIds` 拼进 query string，避免长输入和附件上下文把 URL 拉得过长
 - AI 教练工具调用现在分为两条运行时链路：OpenAI-compatible `chat_completions` 会按 `assistant(tool_calls) -> tool` 顺序补齐消息，OpenAI-compatible `responses` 会按 `function_call -> function_call_output` 回环，Gemini-native 会按官方 `functionCall -> functionResponse` 结构继续下一轮请求
 - 当 AI 生成的是待确认 proposal 卡时，后端会拦截“已采纳 / 已写入计划 / 已更新计划”这类误导性正文表述，统一保留“待确认、尚未写回”的真实语义；真正写回仍只会发生在 `/api/tools/plan/commit`
 - `/api/tools/plan/commit` 成功后，后端会同步把对应 assistant 历史消息里的 proposal 状态更新为 `committed`；后续同一会话继续追问或切换模型时，新的上下文也会显式带上该状态，避免模型把旧卡误判为仍待确认
