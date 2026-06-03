@@ -1066,11 +1066,22 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
     assert events[2]["data"]["proposal"]["proposalId"]
     assert events[3]["data"] == {"suggestion": None}
     assert events[4]["data"] == {"text": "已生成一张需要你确认的训练计划调整卡。"}
+    assert events[4]["data"]["text"] == events[0]["data"]["text"] + events[1]["data"]["text"]
     assert len(fake_client.calls) == 1
     assert len(fake_client.stream_calls) == 1
     assert fake_client.calls[0]["thinking"] == {"type": "enabled"}
     assert fake_client.calls[0]["reasoning_effort"] == "max"
     assert fake_client.calls[0]["tool_choice"] is None
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    stored_messages = messages_response.json()
+    assert [(message["role"], message["content"]) for message in stored_messages] == [
+        ("user", "请读取我的计划，并给出需要我确认的深蹲调整卡。"),
+        ("assistant", events[4]["data"]["text"]),
+    ]
+    assert stored_messages[1]["suggestion"] == events[2]["data"]["proposal"]
 
 
 @pytest.mark.asyncio
@@ -1212,8 +1223,19 @@ async def test_agent_stream_emits_plain_text_without_proposal_when_tool_loop_ret
     assert events[1]["data"] == {"text": "主项减一组并控制 RPE。"}
     assert events[2]["data"] == {"suggestion": None}
     assert events[3]["data"] == {"text": "今天改成轻量恢复，主项减一组并控制 RPE。"}
+    assert events[3]["data"]["text"] == events[0]["data"]["text"] + events[1]["data"]["text"]
     assert len(fake_client.calls) == 1
     assert len(fake_client.stream_calls) == 1
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    stored_messages = messages_response.json()
+    assert [(message["role"], message["content"]) for message in stored_messages] == [
+        ("user", "请根据我的疲劳情况直接给一个普通建议，不需要计划卡。"),
+        ("assistant", events[3]["data"]["text"]),
+    ]
+    assert stored_messages[1]["suggestion"] is None
 
 
 @pytest.mark.asyncio
@@ -1629,6 +1651,34 @@ async def test_chat_reply_rejects_text_only_plan_card_when_user_explicitly_reque
     assert response.status_code == 503
     assert "计划卡" in response.json()["detail"]
     assert "tool" in response.json()["detail"].lower() or "工具" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_rejects_text_only_plan_card_when_user_explicitly_requests_pending_proposal(
+    api_client: AsyncClient,
+):
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: FakeTextOnlyPlanCardClient()
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+
+    response = await api_client.post(
+        "/api/chat/stream",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "为周一休息日设计一份有氧+核心运动计划，然后生成计划修改卡。",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+    assert [event["event"] for event in events] == ["error"]
+    assert events[0]["data"]["code"] == "missing_plan_proposal"
+    assert "计划卡" in events[0]["data"]["message"]
+    assert "proposal" in events[0]["data"]["message"]
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+    assert messages_response.json() == []
 
 
 @pytest.mark.asyncio
