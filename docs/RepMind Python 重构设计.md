@@ -250,7 +250,7 @@ RepMind/
 
 **前后端通信**：
 - 普通 CRUD → REST（JSON）
-- AI 流式 → `GET /api/chat/stream` → Server-Sent Events
+- AI 流式 → `POST /api/chat/stream` → Server-Sent Events
 - 文件上传 → `POST /api/files/upload` → multipart/form-data
 - 本地一键启动 → 根目录加 npm script（`concurrently` 同时起 Vite 与 uvicorn）
 
@@ -272,7 +272,7 @@ backend/
 │   ├── profile.py             # GET/PUT /api/profile
 │   ├── weekly_plan.py         # GET/PUT /api/weekly-plan、采纳接口
 │   ├── daily_log.py           # GET /api/daily-log、PUT /api/daily-log/{date}
-│   ├── chat.py                # 会话/消息 CRUD + GET /api/chat/stream（SSE）
+│   ├── chat.py                # 会话/消息 CRUD + POST /api/chat/stream（SSE）
 │   ├── models.py              # GET /api/models
 │   └── files.py               # POST /api/files/upload
 ├── agent/
@@ -355,7 +355,7 @@ PUT  /api/daily-log/{date}   {log}      -> log
 GET  /api/chat/sessions                 -> [session]
 POST /api/chat/sessions      {title?}   -> session
 GET  /api/chat/sessions/{id}/messages   -> [message]            # 全量，无 20 条裁剪
-GET  /api/chat/stream?session_id&model&input  -> text/event-stream   # SSE 流式回复
+POST /api/chat/stream  {sessionId?, userInput|messages, model?, thinking?, fileIds?}  -> text/event-stream   # SSE 流式回复
 POST /api/chat/{session_id}/background   {input}   -> {task_id}  # 后台思考
 
 # Phase 3 上下文、记忆与工具
