@@ -205,14 +205,31 @@ test('MessageList 和 MessageBubble 会把发送中的 assistant 占位态渲染
   const listSource = readFileSync('src/components/coach/MessageList.jsx', 'utf-8')
   const bubbleSource = readFileSync('src/components/coach/MessageBubble.jsx', 'utf-8')
 
-  assert.match(listSource, /streamingText \|\| '思考中'/)
+  assert.match(listSource, /streamingText \|\| streamStatusLabel \|\| '思考中'/)
   assert.doesNotMatch(listSource, /正在整理上下文/)
+  assert.match(listSource, /suggestion: streamingSuggestion/)
+  assert.match(listSource, /suggestionCard: buildAdoptCardModel\(streamingSuggestion\)/)
   assert.match(bubbleSource, /const bubbleClassName =/)
   assert.match(bubbleSource, /isStreaming && !isUser/)
   assert.match(bubbleSource, /思考中加载动效改成三个呼吸点/)
   assert.match(bubbleSource, /animate-\[fitloop-thinking-dot/)
   assert.match(bubbleSource, /h-2 w-2 rounded-full/)
   assert.match(bubbleSource, /isStreaming \? <ThinkingDots \/> : null/)
+})
+
+test('CoachTab 会把 tool_status 映射为 streamStatusLabel，并在流式阶段持有 proposal 卡片', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf-8')
+
+  assert.match(source, /const \[streamStatusLabel, setStreamStatusLabel\] = useState\(''\)/)
+  assert.match(source, /const \[streamingSuggestion, setStreamingSuggestion\] = useState\(null\)/)
+  assert.match(source, /onProposal: \(proposal\) => \{/)
+  assert.match(source, /setStreamingSuggestion\(proposal \?\? null\)/)
+  assert.match(source, /onStatusLabel: \(statusLabel\) => \{/)
+  assert.match(source, /setStreamStatusLabel\(statusLabel \|\| ''\)/)
+  assert.match(source, /setStreamingText\(visibleText\)/)
+  assert.match(source, /setStreamStatusLabel\(''\)/)
+  assert.match(source, /streamStatusLabel=\{streamStatusLabel\}/)
+  assert.match(source, /streamingSuggestion=\{streamingSuggestion\}/)
 })
 
 test('ChatTopbar 会为右上角操作按钮提供 SVG 图标和 hover 提示', () => {

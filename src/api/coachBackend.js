@@ -163,11 +163,12 @@ function parseSseBlock(block) {
   }
 }
 
-function consumeCoachEvent(state, parsedEvent, onDelta) {
+function consumeCoachEvent(state, parsedEvent, callbacks = {}) {
   if (!parsedEvent) {
     return false
   }
 
+  const { onDelta, onProposal, onSuggestion, onToolStatus } = callbacks
   const { data, event } = parsedEvent
 
   if (event === 'delta') {
@@ -183,16 +184,19 @@ function consumeCoachEvent(state, parsedEvent, onDelta) {
 
   if (event === 'suggestion') {
     state.suggestion = data?.suggestion ?? null
+    onSuggestion?.(state.suggestion)
     return false
   }
 
   if (event === 'proposal') {
     state.proposal = data?.proposal ?? null
+    onProposal?.(state.proposal)
     return false
   }
 
   if (event === 'tool_status') {
     state.toolStatus = data ?? null
+    onToolStatus?.(state.toolStatus)
     return false
   }
 
@@ -257,6 +261,9 @@ export async function streamBackendCoachReply(messages, options = {}) {
     fetchImpl = globalThis.fetch,
     model,
     onDelta,
+    onProposal,
+    onSuggestion,
+    onToolStatus,
     sessionId,
     signal,
   } = options
@@ -306,7 +313,14 @@ export async function streamBackendCoachReply(messages, options = {}) {
       buffer = blocks.pop() ?? ''
 
       for (const block of blocks) {
-        if (consumeCoachEvent(state, parseSseBlock(block), onDelta)) {
+        if (
+          consumeCoachEvent(state, parseSseBlock(block), {
+            onDelta,
+            onProposal,
+            onSuggestion,
+            onToolStatus,
+          })
+        ) {
           break
         }
       }

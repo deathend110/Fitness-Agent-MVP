@@ -5,6 +5,14 @@ import {
   submitBackendCoachBackgroundTask,
 } from '../api/coachBackend.js'
 
+const STREAM_TOOL_STATUS_LABELS = {
+  get_chat_session_context: '整理对话上下文',
+  get_daily_log: '读取今日日志',
+  get_profile: '读取用户档案',
+  get_recent_chat_history: '整理最近对话',
+  get_weekly_plan: '读取训练计划',
+}
+
 function buildAgentPayload({
   files = [],
   fileIds,
@@ -49,6 +57,9 @@ export async function requestCoachReply(
 export async function requestCoachReplyStream(
   { files = [], model, sessionId = null, thinking, userInput = '' },
   {
+    onProposal,
+    onStatusLabel,
+    onSuggestion,
     onText,
     signal,
     streamImpl = streamBackendCoachReply,
@@ -56,12 +67,52 @@ export async function requestCoachReplyStream(
 ) {
   const payload = buildAgentPayload({ files, model, sessionId, thinking, userInput })
   return streamImpl(payload, {
+    onProposal,
     sessionId,
+    onSuggestion,
     signal,
     onDelta: (_delta, fullText) => {
       onText?.(fullText)
     },
+    onToolStatus: (toolStatus) => {
+      onStatusLabel?.(resolveCoachStreamStatusLabel(toolStatus))
+    },
   })
+}
+
+export function resolveCoachStreamStatusLabel(toolStatus) {
+  if (!toolStatus || typeof toolStatus !== 'object') {
+    return ''
+  }
+
+  const message =
+    typeof toolStatus.message === 'string'
+      ? toolStatus.message.trim()
+      : typeof toolStatus.label === 'string'
+        ? toolStatus.label.trim()
+        : ''
+
+  if (message) {
+    return message
+  }
+
+  const tool = typeof toolStatus.tool === 'string' ? toolStatus.tool.trim() : ''
+  const status = typeof toolStatus.status === 'string' ? toolStatus.status.trim() : ''
+  const toolLabel = STREAM_TOOL_STATUS_LABELS[tool] || ''
+
+  if (status === 'succeeded' || status === 'completed') {
+    return ''
+  }
+
+  if (toolLabel) {
+    return `正在${toolLabel}`
+  }
+
+  if (status === 'pending' || status === 'running') {
+    return '正在整理上下文'
+  }
+
+  return ''
 }
 
 export async function startBackgroundCoachReply(

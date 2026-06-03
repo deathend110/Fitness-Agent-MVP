@@ -65,6 +65,8 @@ test('streamBackendCoachReply 会解析后端 SSE 事件并返回文本和 sugge
 })
 
 test('streamBackendCoachReply 支持 Agent 请求契约并解析 proposal/tool_status 事件', async () => {
+  const toolStatuses = []
+  const proposals = []
   const reply = await streamBackendCoachReply(
     { sessionId: 8, userInput: '读取计划再建议', model: 'deepseek-chat', thinking: { enabled: true, budget: 'max' }, fileIds: [2, 5] },
     {
@@ -92,9 +94,17 @@ test('streamBackendCoachReply 支持 Agent 请求契约并解析 proposal/tool_s
           headers: new Headers({ 'content-type': 'text/event-stream' }),
         }
       },
+      onProposal: (proposal) => {
+        proposals.push(proposal)
+      },
+      onToolStatus: (toolStatus) => {
+        toolStatuses.push(toolStatus)
+      },
     },
   )
 
+  assert.deepEqual(toolStatuses, [{ tool: 'get_weekly_plan', status: 'running' }])
+  assert.deepEqual(proposals, [{ proposalId: 'p1', day: 'Monday' }])
   assert.deepEqual(reply, {
     text: '建议保守调整。',
     suggestion: null,
