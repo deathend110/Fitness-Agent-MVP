@@ -260,10 +260,23 @@ class FakeOpenAICompatibleResponsesClient:
         self.stream_calls.append({"input_items": input_items, "model": model})
         yield ("兼容 responses 流式回复。", None)
 
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        split_index = max(1, len(self.final_text) // 2)
+        yield DeepSeekStreamEvent(text=self.final_text[:split_index])
+        yield DeepSeekStreamEvent(text=self.final_text[split_index:])
+
 
 class FakeToolProposalClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.stream_calls: list[dict[str, Any]] = []
 
     async def request_chat_with_usage(
         self,
@@ -314,6 +327,17 @@ class FakeToolProposalClient:
             )
         return DeepSeekChatResult(content="已生成一张需要你确认的训练计划调整卡。")
 
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        yield DeepSeekStreamEvent(text="已生成一张需要你确认的")
+        yield DeepSeekStreamEvent(text="训练计划调整卡。")
+
 
 class FakeMisleadingToolProposalClient(FakeToolProposalClient):
     async def request_chat_with_usage(
@@ -338,10 +362,22 @@ class FakeMisleadingToolProposalClient(FakeToolProposalClient):
             return DeepSeekChatResult(content="我已采纳并写入计划，今天就按这个调整执行。")
         return result
 
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        yield DeepSeekStreamEvent(text="已生成待确认的训练计划调整建议：把深蹲 RPE 下调，")
+        yield DeepSeekStreamEvent(text="降低疲劳风险。当前仍未写回计划，请确认后再采纳。")
+
 
 class FakeDayPlanProposalClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.stream_calls: list[dict[str, Any]] = []
 
     async def request_chat_with_usage(
         self,
@@ -412,6 +448,70 @@ class FakeDayPlanProposalClient:
                 ],
             )
         return DeepSeekChatResult(content="已生成一张单日训练计划卡。")
+
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        yield DeepSeekStreamEvent(text="已生成一张单日")
+        yield DeepSeekStreamEvent(text="训练计划卡。")
+
+
+class FakePlainAgentStreamClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.stream_calls: list[dict[str, Any]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, stream
+        self.calls.append(
+            {
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+        )
+        return DeepSeekChatResult(content="今天改成轻量恢复，主项减一组并控制 RPE。")
+
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        yield DeepSeekStreamEvent(text="今天改成轻量恢复，")
+        yield DeepSeekStreamEvent(text="主项减一组并控制 RPE。")
+
+
+class FakeInterruptingAgentProposalClient(FakeToolProposalClient):
+    async def stream_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        **_: Any,
+    ) -> AsyncIterator[DeepSeekStreamEvent]:
+        self.stream_calls.append({"messages": messages, "model": model})
+        yield DeepSeekStreamEvent(text="已经发给前端的半截 proposal 正文")
+        raise DeepSeekClientError(
+            "DeepSeek 流式响应在完成前中断，请稍后重试。",
+            code="stream_interrupted",
+        )
 
 
 class FakeSequentialProposalClient:
@@ -952,18 +1052,21 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
 
     assert [event["event"] for event in events] == [
         "delta",
+        "delta",
         "proposal",
         "suggestion",
         "done",
     ]
-    assert events[0]["data"] == {"text": "已生成一张需要你确认的训练计划调整卡。"}
-    assert events[1]["data"]["proposal"]["day"] == "Monday"
-    assert events[1]["data"]["proposal"]["summary"] == "把深蹲 RPE 下调，降低疲劳风险。"
-    assert events[1]["data"]["proposal"]["changes"][0]["newValue"] == 7
-    assert events[1]["data"]["proposal"]["proposalId"]
-    assert events[2]["data"] == {"suggestion": None}
-    assert events[3]["data"] == {"text": "已生成一张需要你确认的训练计划调整卡。"}
+    assert events[0]["data"] == {"text": "已生成一张需要你确认的"}
+    assert events[1]["data"] == {"text": "训练计划调整卡。"}
+    assert events[2]["data"]["proposal"]["day"] == "Monday"
+    assert events[2]["data"]["proposal"]["summary"] == "把深蹲 RPE 下调，降低疲劳风险。"
+    assert events[2]["data"]["proposal"]["changes"][0]["newValue"] == 7
+    assert events[2]["data"]["proposal"]["proposalId"]
+    assert events[3]["data"] == {"suggestion": None}
+    assert events[4]["data"] == {"text": "已生成一张需要你确认的训练计划调整卡。"}
     assert len(fake_client.calls) == 2
+    assert len(fake_client.stream_calls) == 1
     assert fake_client.calls[0]["thinking"] == {"type": "enabled"}
     assert fake_client.calls[0]["reasoning_effort"] == "max"
     assert fake_client.calls[0]["tool_choice"] is None
@@ -1027,17 +1130,19 @@ async def test_agent_stream_closes_pending_proposal_copy_before_done_and_persist
 
     assert [event["event"] for event in events] == [
         "delta",
+        "delta",
         "proposal",
         "suggestion",
         "done",
     ]
-    assert events[1]["data"]["proposal"]["status"] == "pending"
+    assert events[2]["data"]["proposal"]["status"] == "pending"
     assert "待确认" in events[0]["data"]["text"]
-    assert "未写回" in events[0]["data"]["text"]
+    assert "未写回" in (events[0]["data"]["text"] + events[1]["data"]["text"])
     assert "已采纳" not in events[0]["data"]["text"]
     assert "已写入计划" not in events[0]["data"]["text"]
     assert "已更新计划" not in events[0]["data"]["text"]
-    assert events[3]["data"] == {"text": events[0]["data"]["text"]}
+    full_text = events[0]["data"]["text"] + events[1]["data"]["text"]
+    assert events[4]["data"] == {"text": full_text}
 
     messages_response = await api_client.get(
         f"/api/chat/sessions/{default_session['id']}/messages"
@@ -1045,8 +1150,8 @@ async def test_agent_stream_closes_pending_proposal_copy_before_done_and_persist
     stored_messages = messages_response.json()
 
     assert stored_messages[-1]["role"] == "assistant"
-    assert stored_messages[-1]["content"] == events[0]["data"]["text"]
-    assert stored_messages[-1]["suggestion"] == events[1]["data"]["proposal"]
+    assert stored_messages[-1]["content"] == full_text
+    assert stored_messages[-1]["suggestion"] == events[2]["data"]["proposal"]
 
 
 @pytest.mark.asyncio
@@ -1071,13 +1176,43 @@ async def test_agent_stream_emits_day_plan_replace_proposal(
 
     assert [event["event"] for event in events] == [
         "delta",
+        "delta",
         "proposal",
         "suggestion",
         "done",
     ]
-    assert events[1]["data"]["proposal"]["kind"] == "day_plan_replace"
-    assert events[1]["data"]["proposal"]["dayPlan"]["type"] == "腿日"
-    assert events[1]["data"]["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
+    assert events[2]["data"]["proposal"]["kind"] == "day_plan_replace"
+    assert events[2]["data"]["proposal"]["dayPlan"]["type"] == "腿日"
+    assert events[2]["data"]["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
+
+
+@pytest.mark.asyncio
+async def test_agent_stream_emits_plain_text_without_proposal_when_tool_loop_returns_no_plan_card(
+    api_client: AsyncClient,
+):
+    fake_client = FakePlainAgentStreamClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    response = await api_client.post(
+        "/api/chat/stream",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "请根据我的疲劳情况直接给一个普通建议，不需要计划卡。",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == ["delta", "delta", "suggestion", "done"]
+    assert events[0]["data"] == {"text": "今天改成轻量恢复，"}
+    assert events[1]["data"] == {"text": "主项减一组并控制 RPE。"}
+    assert events[2]["data"] == {"suggestion": None}
+    assert events[3]["data"] == {"text": "今天改成轻量恢复，主项减一组并控制 RPE。"}
+    assert len(fake_client.calls) == 1
+    assert len(fake_client.stream_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -1603,6 +1738,37 @@ async def test_chat_stream_rolls_back_when_upstream_breaks_after_delta(
 
 
 @pytest.mark.asyncio
+async def test_agent_stream_rolls_back_when_final_answer_stream_breaks_after_delta(
+    api_client: AsyncClient,
+):
+    fake_client = FakeInterruptingAgentProposalClient()
+    app.dependency_overrides[chat_api.get_deepseek_client] = lambda: fake_client
+    default_session = (await api_client.get("/api/chat/sessions/default")).json()
+    assert (await api_client.put("/api/weekly-plan", json=build_weekly_plan())).status_code == 200
+
+    response = await api_client.post(
+        "/api/chat/stream",
+        json={
+            "sessionId": default_session["id"],
+            "userInput": "请读取我的计划，并给出需要我确认的深蹲调整卡。",
+        },
+    )
+
+    assert response.status_code == 200
+    events = parse_sse_events(response.text)
+
+    assert [event["event"] for event in events] == ["delta", "error"]
+    assert events[0]["data"] == {"text": "已经发给前端的半截 proposal 正文"}
+    assert events[1]["data"]["code"] == "stream_interrupted"
+
+    messages_response = await api_client.get(
+        f"/api/chat/sessions/{default_session['id']}/messages"
+    )
+
+    assert messages_response.json() == []
+
+
+@pytest.mark.asyncio
 async def test_chat_stream_persists_user_attachment_snapshot_and_empty_assistant_attachments(
     api_client: AsyncClient,
     uploaded_file: dict[str, Any],
@@ -1819,9 +1985,10 @@ async def test_agent_stream_executes_tool_loop_with_openai_compatible_responses_
 
     assert response.status_code == 200
     events = parse_sse_events(response.text)
-    assert [event["event"] for event in events] == ["delta", "proposal", "suggestion", "done"]
-    assert events[1]["data"]["proposal"]["proposalId"]
+    assert [event["event"] for event in events] == ["delta", "delta", "proposal", "suggestion", "done"]
+    assert events[2]["data"]["proposal"]["proposalId"]
     assert fake_client.response_calls[0]["tools"] is not None
+    assert len(fake_client.stream_calls) == 1
 
 
 @pytest.mark.asyncio
