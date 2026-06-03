@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 import httpx
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from backend.agent.chat_session import (
     OpenAICompatibleRuntimeClient,
@@ -24,7 +25,7 @@ from backend.agent.deepseek_client import (
 )
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
-from backend.db.models import Base, UploadedFile, utc_now
+from backend.db.models import Base, ToolCallLog, UploadedFile, utc_now
 from backend.main import app
 from backend.providers.gemini_client import GeminiNativeClient
 
@@ -1065,7 +1066,7 @@ async def test_agent_stream_executes_tool_loop_and_emits_plan_proposal(
     assert events[2]["data"]["proposal"]["proposalId"]
     assert events[3]["data"] == {"suggestion": None}
     assert events[4]["data"] == {"text": "已生成一张需要你确认的训练计划调整卡。"}
-    assert len(fake_client.calls) == 2
+    assert len(fake_client.calls) == 1
     assert len(fake_client.stream_calls) == 1
     assert fake_client.calls[0]["thinking"] == {"type": "enabled"}
     assert fake_client.calls[0]["reasoning_effort"] == "max"
@@ -1766,6 +1767,13 @@ async def test_agent_stream_rolls_back_when_final_answer_stream_breaks_after_del
     )
 
     assert messages_response.json() == []
+
+    session_factory = getattr(api_client, "_session_factory")
+    async with session_factory() as session:
+        logs = (await session.execute(select(ToolCallLog))).scalars().all()
+
+    assert len(logs) == 1
+    assert logs[0].tool_name == "propose_plan_change"
 
 
 @pytest.mark.asyncio

@@ -93,3 +93,25 @@ async def test_tool_loop_executes_tool_and_returns_final_text(db_session: AsyncS
 
     assert result.content == "final-answer"
     assert result.tool_rounds == 1
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_can_stop_after_tool_execution_without_final_completion(
+    db_session: AsyncSession,
+) -> None:
+    orchestrator = ToolLoopOrchestrator(registry=build_default_tool_registry(), max_rounds=4)
+    provider = FakeProvider()
+
+    result = await orchestrator.run(
+        session=db_session,
+        provider=provider,
+        messages=[{"role": "user", "content": "给我建议"}],
+        model="provider::model",
+        stop_after_tool_names={"get_profile"},
+    )
+
+    assert result.content == ""
+    assert result.tool_rounds == 0
+    assert provider.calls == 1
+    assert result.messages[-1]["role"] == "tool"
+    assert result.messages[-1]["name"] == "get_profile"

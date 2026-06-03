@@ -1196,6 +1196,7 @@ async def run_tool_calling_chat(
     reasoning_effort: str | None = None,
     max_tool_rounds: int = 4,
     slimmer: ToolResultSlimmer | None = None,
+    stop_after_tool_names: set[str] | None = None,
 ) -> ToolLoopResult:
     provider = _build_tool_loop_provider(deepseek_client)
     orchestrator = ToolLoopOrchestrator(
@@ -1220,6 +1221,7 @@ async def run_tool_calling_chat(
         thinking=thinking,
         reasoning_effort=reasoning_effort,
         tool_choice=effective_tool_choice,
+        stop_after_tool_names=stop_after_tool_names,
     )
 
 
