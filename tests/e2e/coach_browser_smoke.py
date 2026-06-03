@@ -1,383 +1,184 @@
 import json
-from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
 
+from coach_e2e_helpers import APP_URL, ensure_vite_dev_server, get_message_texts, install_coach_backend_fetch_mock
 
-APP_URL = "http://127.0.0.1:5173"
 
+MODEL_REF = "provider_deepseek_main::deepseek-v4-flash"
+USER_MESSAGE = "我今天恢复一般，帮我看看周三主项怎么降一点量。"
+ASSISTANT_REPLY = "先把周三深蹲减到 3 组，RPE 控制在 7 左右。"
 
 PROFILE = {
     "basic": {
-        "name": "测试用户",
+        "name": "流式冒烟用户",
         "sex": "male",
-        "age": 24,
+        "age": 25,
         "height": 178,
-        "weight": 82,
+        "weight": 81,
         "waist": 82,
     },
-    "oneRM": {
-        "squat": 150,
-        "bench": 100,
-        "deadlift": 180,
-    },
+    "oneRM": {"squat": 155, "bench": 102, "deadlift": 185},
     "goal": "增肌",
-    "targetWeight": 84,
-    "notes": "用于浏览器自动化冒烟验证。",
+    "targetWeight": 83,
+    "notes": "用于普通问题流式与切页回页时序验证。",
 }
+
+BACKEND_PROFILE = {**PROFILE, "oneRm": PROFILE["oneRM"]}
 
 WEEKLY_PLAN = {
-    "Monday": {
-        "type": "训练日",
-        "exercises": [
-            {
-                "id": "monday-squat",
-                "name": "深蹲",
-                "ref1RM": "squat",
-                "pct": 0.75,
-                "kg": None,
-                "sets": 4,
-                "reps": 6,
-                "rpe": 8,
-                "note": "主项",
-            }
-        ],
-    },
-    "Tuesday": {"type": "rest", "exercises": []},
-    "Wednesday": {"type": "rest", "exercises": []},
-    "Thursday": {"type": "rest", "exercises": []},
-    "Friday": {"type": "rest", "exercises": []},
-    "Saturday": {"type": "rest", "exercises": []},
-    "Sunday": {"type": "rest", "exercises": []},
+    day: {"type": "rest", "exercises": []}
+    for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 }
-
-UPDATED_WEEKLY_PLAN = {
-    **WEEKLY_PLAN,
-    "Monday": {
-        "type": "腿日",
-        "exercises": [
-            {
-                **WEEKLY_PLAN["Monday"]["exercises"][0],
-                "id": "monday-squat-recovery",
-                "sets": 3,
-                "pct": 0.7,
-                "rpe": 7,
-                "note": "浏览器自动化已采纳",
-            }
-        ],
-    },
-}
-
-USER_MESSAGE = "请帮我把周一深蹲降一点量"
-
-
-def build_chat_history():
-    history = []
-    for index in range(12):
-        history.append({"role": "user", "content": f"历史提问 {index + 1}"})
-        history.append({"role": "assistant", "content": f"历史回复 {index + 1}"})
-
-    history.append({"role": "user", "content": USER_MESSAGE})
-    history.append(
-        {
-            "role": "assistant",
-            "content": "建议把周一改成恢复型腿日，先把疲劳压下来。",
-            "suggestion": {
-                "proposalId": "proposal-e2e",
-                "kind": "day_plan_replace",
-                "day": "Monday",
-                "summary": "把周一改成恢复型腿日。",
-                "dayPlan": {
-                    "type": "腿日",
-                    "exercises": [
-                        {
-                            "id": "monday-squat-recovery",
-                            "name": "深蹲",
-                            "tier": "main",
-                            "template": {
-                                "loadMode": "percentage",
-                                "ref1RM": "squat",
-                                "setType": "straight",
-                                "sets": 3,
-                                "repsText": "5",
-                            },
-                            "instance": {
-                                "pct": 0.7,
-                                "kg": None,
-                                "rpe": 7,
-                                "note": "浏览器自动化已采纳",
-                            },
-                            "ref1RM": "squat",
-                            "pct": 0.7,
-                            "kg": None,
-                            "sets": 3,
-                            "reps": 5,
-                            "rpe": 7,
-                            "note": "浏览器自动化已采纳",
-                        }
-                    ],
-                },
-            },
-        }
-    )
-    return history
-
-
-CHAT_HISTORY = build_chat_history()
-
-BACKGROUND_TASK = {
-    "taskId": "task-e2e",
-    "sessionId": 1,
-    "sourceUserIndex": len(CHAT_HISTORY) - 2,
-    "userContent": USER_MESSAGE,
-    "files": [],
-    "createdAt": "2026-06-01T00:00:00.000Z",
-}
-
-
-def json_response(route, payload, status=200):
-    route.fulfill(
-        status=status,
-        content_type="application/json",
-        body=json.dumps(payload, ensure_ascii=False),
-    )
-
-
-def install_backend_mock(page, commit_calls):
-    def handle_api(route):
-        request = route.request
-        path = urlparse(request.url).path.replace("/api", "", 1)
-        method = request.method.upper()
-
-        if method == "GET" and path == "/profile":
-            return json_response(route, PROFILE)
-
-        if method == "PUT" and path == "/profile":
-            return json_response(route, PROFILE)
-
-        if method == "GET" and path == "/weekly-plan":
-            return json_response(route, WEEKLY_PLAN)
-
-        if method == "PUT" and path == "/weekly-plan":
-            return json_response(route, UPDATED_WEEKLY_PLAN)
-
-        if method == "GET" and path == "/daily-log":
-            return json_response(route, {})
-
-        if method == "GET" and path == "/models":
-            return json_response(
-                route,
-                {
-                    "defaultModel": "provider_deepseek_main::deepseek-v4-flash",
-                    "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
-                    "models": [
-                        {
-                            "id": "provider_deepseek_main::deepseek-v4-flash",
-                            "providerId": "provider_deepseek_main",
-                            "providerType": "openai_compatible",
-                            "providerLabel": "DeepSeek 主账号",
-                            "remoteModelId": "deepseek-v4-flash",
-                            "label": "DeepSeek 主账号 / DeepSeek V4 Flash",
-                            "supportsThinking": True,
-                            "thinking": {
-                                "supported": True,
-                                "canDisable": True,
-                                "defaultEnabled": False,
-                                "intensityOptions": [{"id": "standard", "label": "标准"}],
-                                "defaultIntensity": "standard",
-                            },
-                        }
-                    ],
-                    "thinking": {
-                        "enabled": False,
-                        "budget": "standard",
-                        "options": ["off", "standard"],
-                    },
-                },
-            )
-
-        if method == "GET" and path == "/model-config":
-            return json_response(
-                route,
-                {
-                    "version": 1,
-                    "defaultModelRef": "provider_deepseek_main::deepseek-v4-flash",
-                    "providers": [
-                        {
-                            "id": "provider_deepseek_main",
-                            "type": "openai_compatible",
-                            "label": "DeepSeek 主账号",
-                            "enabled": True,
-                            "apiKeyPreview": "sk-t***1234",
-                            "baseUrl": "https://api.deepseek.com",
-                            "selectedModels": [
-                                {
-                                    "remoteId": "deepseek-v4-flash",
-                                    "label": "DeepSeek V4 Flash",
-                                    "enabled": True,
-                                }
-                            ],
-                        },
-                        {
-                            "id": "provider_gemini_main",
-                            "type": "gemini_native",
-                            "label": "Gemini (Google AI Studio)",
-                            "enabled": True,
-                            "apiKeyPreview": "AIza***1234",
-                            "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
-                            "selectedModels": [
-                                {
-                                    "remoteId": "gemini-2.5-flash",
-                                    "label": "Gemini 2.5 Flash",
-                                    "enabled": True,
-                                }
-                            ],
-                        },
-                    ],
-                },
-            )
-
-        if method == "GET" and path == "/chat/sessions/default":
-            return json_response(
-                route,
-                {
-                    "id": 1,
-                    "title": "默认对话",
-                    "createdAt": "2026-06-01T00:00:00Z",
-                    "updatedAt": "2026-06-01T00:10:00Z",
-                },
-            )
-
-        if method == "GET" and path == "/chat/sessions":
-            return json_response(
-                route,
-                [
-                    {
-                        "id": 1,
-                        "title": "默认对话",
-                        "createdAt": "2026-06-01T00:00:00Z",
-                        "updatedAt": "2026-06-01T00:10:00Z",
-                    }
-                ],
-            )
-
-        if method == "GET" and path == "/chat/sessions/1/messages":
-            return json_response(
-                route,
-                [
-                    {
-                        "id": index + 1,
-                        "sessionId": 1,
-                        "role": message["role"],
-                        "content": message["content"],
-                        "suggestion": message.get("suggestion"),
-                        "createdAt": "2026-06-01T00:00:00Z",
-                    }
-                    for index, message in enumerate(CHAT_HISTORY)
-                ],
-            )
-
-        if path == "/chat/sessions/1/draft":
-            if method == "GET":
-                return json_response(
-                    route,
-                    {
-                        "content": "",
-                        "model": "provider_deepseek_main::deepseek-v4-flash",
-                        "thinking": {"enabled": False, "budget": "standard"},
-                    },
-                )
-            if method == "PUT":
-                return json_response(route, {"ok": True})
-
-        if method == "GET" and path == "/chat/background/task-e2e":
-            return json_response(route, {"task_id": "task-e2e", "status": "pending"})
-
-        if method == "POST" and path == "/tools/plan/commit":
-            commit_calls.append(request.post_data_json)
-            return json_response(
-                route,
-                {
-                    "ok": True,
-                    "message": "已采纳",
-                    "plan": UPDATED_WEEKLY_PLAN,
-                },
-            )
-
-        return json_response(route, {"ok": True})
-
-    page.route("http://127.0.0.1:8000/api/**", handle_api)
 
 
 def seed_local_storage(context):
-    # 这里直接模拟“已发送消息 + 后台任务未完成 + 已生成采纳卡片”的真实恢复场景。
-    seed_payload = json.dumps(
-        {
-            "profile": PROFILE,
-            "weeklyPlan": WEEKLY_PLAN,
-            "chatHistory": CHAT_HISTORY,
-            "backgroundTask": BACKGROUND_TASK,
-        },
-        ensure_ascii=False,
-    )
-
     context.add_init_script(
-        f"""
-        const seedPayload = {seed_payload};
-        window.localStorage.setItem('fitloop_profile', JSON.stringify(seedPayload.profile));
-        window.localStorage.setItem('fitloop_weeklyPlan', JSON.stringify(seedPayload.weeklyPlan));
-        window.localStorage.setItem('fitloop_dailyLog', JSON.stringify({{}}));
-        window.localStorage.setItem('fitloop_chatHistory', JSON.stringify(seedPayload.chatHistory));
+        """
+        window.localStorage.setItem('fitloop_profile', JSON.stringify(%s));
+        window.localStorage.setItem('fitloop_weeklyPlan', JSON.stringify(%s));
+        window.localStorage.setItem('fitloop_dailyLog', JSON.stringify({}));
+        window.localStorage.setItem('fitloop_chatHistory', JSON.stringify([]));
         window.localStorage.setItem('fitloop:coach-active-session-id', '1');
         window.localStorage.setItem('fitloop_storageVersion', JSON.stringify('v2-empty-defaults'));
-        window.localStorage.setItem('fitloop:coach-background-task', JSON.stringify(seedPayload.backgroundTask));
         """
+        % (
+            json.dumps(PROFILE, ensure_ascii=False),
+            json.dumps(WEEKLY_PLAN, ensure_ascii=False),
+        )
     )
+
+
+def build_mock_config():
+    return {
+        "profile": BACKEND_PROFILE,
+        "weeklyPlan": WEEKLY_PLAN,
+        "dailyLog": {},
+        "models": {
+            "defaultModel": MODEL_REF,
+            "defaultModelRef": MODEL_REF,
+            "models": [
+                {
+                    "id": MODEL_REF,
+                    "providerId": "provider_deepseek_main",
+                    "providerType": "openai_compatible",
+                    "providerLabel": "DeepSeek 主账号",
+                    "remoteModelId": "deepseek-v4-flash",
+                    "label": "DeepSeek 主账号 / DeepSeek V4 Flash",
+                    "supportsThinking": True,
+                    "thinking": {
+                        "supported": True,
+                        "canDisable": True,
+                        "defaultEnabled": False,
+                        "intensityOptions": [{"id": "standard", "label": "标准"}],
+                        "defaultIntensity": "standard",
+                    },
+                }
+            ],
+            "thinking": {"enabled": False, "budget": "standard", "options": ["off", "standard"]},
+        },
+        "defaultSession": {
+            "id": 1,
+            "title": "默认对话",
+            "createdAt": "2026-06-04T08:00:00Z",
+            "updatedAt": "2026-06-04T08:00:00Z",
+        },
+        "sessions": [
+            {
+                "id": 1,
+                "title": "默认对话",
+                "createdAt": "2026-06-04T08:00:00Z",
+                "updatedAt": "2026-06-04T08:00:00Z",
+            }
+        ],
+        "messagesBySession": {"1": []},
+        "draftsBySession": {
+            "1": {
+                "content": "",
+                "model": MODEL_REF,
+                "thinking": {"enabled": False, "budget": "standard"},
+                "attachedFileIds": [],
+            }
+        },
+        "streamScenarios": [
+            {
+                "type": "sse",
+                "events": [
+                    {"kind": "tool_status", "payload": {"tool": "get_profile", "status": "running"}},
+                    {"kind": "tool_status", "payload": {"tool": "get_weekly_plan", "status": "running"}, "delayMs": 120},
+                    {"kind": "delta", "text": "先把周三深蹲减到", "delayMs": 220},
+                    {"kind": "delta", "text": " 3 组，RPE 控制在 7 左右。", "delayMs": 500},
+                    {"kind": "done", "text": ASSISTANT_REPLY, "delayMs": 120},
+                ],
+            }
+        ],
+        "replyScenarios": [],
+    }
+
+
+def wait_until_composer_ready(page):
+    expect(page.locator("#coach-model-select")).to_have_value(MODEL_REF, timeout=10_000)
+    expect(page.locator("textarea")).to_be_visible(timeout=10_000)
+    expect(
+        page.get_by_text("请先完善档案中的姓名、当前体重、训练目标和深蹲 1RM，再使用 AI 教练。")
+    ).not_to_be_visible(timeout=10_000)
 
 
 def main():
-    commit_calls = []
+    with ensure_vite_dev_server(APP_URL) as app_url:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            seed_local_storage(context)
+            install_coach_backend_fetch_mock(context, build_mock_config())
+            page = context.new_page()
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 1440, "height": 900})
-        seed_local_storage(context)
-        page = context.new_page()
-        install_backend_mock(page, commit_calls)
+            page.goto(app_url)
+            page.get_by_role("button", name="AI 教练").click()
 
-        page.goto(APP_URL)
-        page.get_by_role("button", name="AI 教练").click()
+            wait_until_composer_ready(page)
+            page.locator("textarea").fill(USER_MESSAGE)
+            page.get_by_role("button", name="发送消息").click()
 
-        expect(page.get_by_text(USER_MESSAGE).first).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("思考中")).to_be_visible(timeout=10_000)
-        expect(page.get_by_role("button", name="采纳并更新计划")).to_be_visible()
-        coach_scroll = page.locator('main > div[style*="scrollbar-gutter"]')
-        expect(coach_scroll).to_be_visible()
-        page.wait_for_function(
-            "() => { const el = document.querySelector('main > div[style*=\"scrollbar-gutter\"]'); return !!el && el.scrollTop > 0; }"
-        )
+            expect(page.get_by_text("正在读取用户档案")).to_be_visible(timeout=10_000)
+            page.wait_for_function(
+                "() => window.__coachMockState.eventLog.some((entry) => entry.kind === 'delta')"
+            )
+            expect(page.get_by_text("先把周三深蹲减到")).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("正在读取用户档案")).not_to_be_visible(timeout=10_000)
+            expect(page.get_by_role("button", name="采纳并更新计划")).not_to_be_visible(timeout=1_000)
 
-        page.get_by_role("button", name="模型设置").click()
-        expect(page.get_by_text("模型与供应商设置")).to_be_visible(timeout=5_000)
-        expect(page.get_by_text("Gemini (Google AI Studio)", exact=True)).to_be_visible(timeout=5_000)
-        page.get_by_role("button", name="取消").click()
+            page.wait_for_function(
+                """
+                () => {
+                  const events = window.__coachMockState.eventLog;
+                  return events.some((entry) => entry.kind === 'delta') &&
+                    !events.some((entry) => entry.kind === 'done');
+                }
+                """
+            )
 
-        page.get_by_role("button", name="我的档案").click()
-        page.get_by_role("button", name="AI 教练").click()
+            page.get_by_role("button", name="我的档案").click()
+            page.get_by_role("button", name="AI 教练").click()
 
-        expect(page.get_by_text("思考中")).to_be_visible(timeout=10_000)
-        expect(page.get_by_role("button", name="采纳并更新计划")).to_be_visible()
-        page.wait_for_function(
-            "() => { const el = document.querySelector('main > div[style*=\"scrollbar-gutter\"]'); return !!el && el.scrollTop > 0; }"
-        )
+            expect(page.get_by_text(ASSISTANT_REPLY, exact=True)).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("思考中")).not_to_be_visible(timeout=10_000)
+            expect(page.get_by_role("button", name="采纳并更新计划")).not_to_be_visible(timeout=1_000)
 
-        page.get_by_role("button", name="采纳并更新计划").click()
-        expect(page.get_by_role("button", name="采纳并更新计划")).not_to_be_visible(timeout=5_000)
-        page.get_by_role("button", name="训练计划").click()
-        expect(page.get_by_text("浏览器自动化已采纳")).to_be_visible(timeout=5_000)
+            message_texts = get_message_texts(page)
+            assert len(message_texts) == 2, message_texts
+            assert USER_MESSAGE in message_texts[0], message_texts
+            assert ASSISTANT_REPLY in message_texts[1], message_texts
 
-        assert commit_calls == [{"proposalId": "proposal-e2e"}], commit_calls
-        browser.close()
+            mock_state = page.evaluate("() => window.__coachMockState")
+            assert len(mock_state["streamCalls"]) == 1, mock_state
+            assert mock_state["streamCalls"][0]["userInput"] == USER_MESSAGE, mock_state
+            event_kinds = [entry["kind"] for entry in mock_state["eventLog"]]
+            assert event_kinds.count("delta") == 2, event_kinds
+            assert event_kinds.index("tool_status") < event_kinds.index("delta"), event_kinds
+            assert event_kinds.count("done") == 1, event_kinds
+
+            browser.close()
 
 
 if __name__ == "__main__":
