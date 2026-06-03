@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   buildBackgroundCoachTaskRecord,
   getBackgroundCoachTask,
+  mergeCoachReplySuggestion,
   mergeBackgroundCoachReply,
   requestCoachReply,
   requestCoachReplyStream,
@@ -37,6 +38,7 @@ test('requestCoachReply 会把用户输入交给后端 Agent，不再构建 syst
 
   assert.deepEqual(reply, {
     text: '先把下周一主项容量降一点。',
+    proposal: null,
     suggestion: null,
   })
   assert.equal(calls.length, 1)
@@ -228,6 +230,7 @@ test('requestCoachReplyStream 会把流式文本拼成最终回复并保留 sugg
   ])
   assert.equal(reply.text, '建议先降低深蹲强度，优先恢复动作质量。')
   assert.deepEqual(reply.suggestion, {
+    proposalId: 'proposal-stream-1',
     suggest_plan_update: true,
     day: 'Monday',
     summary: '降低深蹲强度',
@@ -238,6 +241,77 @@ test('requestCoachReplyStream 会把流式文本拼成最终回复并保留 sugg
         field: 'pct',
         oldValue: 0.75,
         newValue: 0.7,
+      },
+    ],
+  })
+})
+
+test('requestCoachReplyStream 会用更完整的 suggestion 升级早到的 proposal，并保留 proposalId', async () => {
+  const reply = await requestCoachReplyStream(
+    {
+      userInput: '把周一训练调整得更保守一点',
+    },
+    {
+      streamImpl: async (_payload, { onProposal, onSuggestion, onDelta }) => {
+        onProposal({
+          proposalId: 'proposal-stream-upgrade',
+          day: 'Monday',
+          summary: '先降一点主项强度',
+        })
+        onDelta('建议先降低一点主项强度。', '建议先降低一点主项强度。')
+        onSuggestion({
+          suggest_plan_update: true,
+          day: 'Monday',
+          summary: '建议先降低一点主项强度。',
+          changes: [
+            {
+              action: 'update',
+              exerciseName: '深蹲',
+              field: 'pct',
+              oldValue: 0.8,
+              newValue: 0.72,
+            },
+          ],
+        })
+
+        return {
+          text: '建议先降低一点主项强度。',
+          proposal: {
+            proposalId: 'proposal-stream-upgrade',
+            day: 'Monday',
+            summary: '先降一点主项强度',
+          },
+          suggestion: {
+            suggest_plan_update: true,
+            day: 'Monday',
+            summary: '建议先降低一点主项强度。',
+            changes: [
+              {
+                action: 'update',
+                exerciseName: '深蹲',
+                field: 'pct',
+                oldValue: 0.8,
+                newValue: 0.72,
+              },
+            ],
+          },
+        }
+      },
+    },
+  )
+
+  assert.deepEqual(reply.suggestion, {
+    proposalId: 'proposal-stream-upgrade',
+    suggest_plan_update: true,
+    day: 'Monday',
+    summary: '建议先降低一点主项强度。',
+    changes: [
+      {
+        action: 'update',
+        exerciseName: '深蹲',
+        field: 'pct',
+        oldValue: 0.8,
+        newValue: 0.72,
       },
     ],
   })
@@ -387,6 +461,93 @@ test('mergeBackgroundCoachReply 成功合并时会把 suggestion 持久到 assis
     content: '建议把硬拉强度下调。',
     suggestion,
   })
+})
+
+test('mergeBackgroundCoachReply 会优先持久化更完整的 suggestion，同时保留 proposalId', () => {
+  const mergeResult = mergeBackgroundCoachReply({
+    currentHistory: [{ role: 'user', content: '离页后继续分析' }],
+    reply: {
+      text: '建议把周五硬拉调轻一点。',
+      proposal: {
+        proposalId: 'proposal-bg-upgrade',
+        day: 'Friday',
+        summary: '下调硬拉强度',
+      },
+      suggestion: {
+        suggest_plan_update: true,
+        day: 'Friday',
+        summary: '建议把周五硬拉调轻一点。',
+        changes: [
+          {
+            action: 'update',
+            exerciseName: '硬拉',
+            field: 'pct',
+            oldValue: 0.78,
+            newValue: 0.7,
+          },
+        ],
+      },
+    },
+    storedTask: { taskId: 'task-1', userContent: '离页后继续分析' },
+  })
+
+  assert.equal(mergeResult.status, 'merged')
+  assert.deepEqual(mergeResult.suggestion, {
+    proposalId: 'proposal-bg-upgrade',
+    suggest_plan_update: true,
+    day: 'Friday',
+    summary: '建议把周五硬拉调轻一点。',
+    changes: [
+      {
+        action: 'update',
+        exerciseName: '硬拉',
+        field: 'pct',
+        oldValue: 0.78,
+        newValue: 0.7,
+      },
+    ],
+  })
+})
+
+test('mergeCoachReplySuggestion 会用更完整的一份作为主体，并补齐 proposalId 等缺失字段', () => {
+  assert.deepEqual(
+    mergeCoachReplySuggestion(
+      {
+        proposalId: 'proposal-merge-1',
+        day: 'Monday',
+        summary: '轻量 proposal',
+      },
+      {
+        suggest_plan_update: true,
+        day: 'Monday',
+        summary: '完整 suggestion',
+        changes: [
+          {
+            action: 'update',
+            exerciseName: '卧推',
+            field: 'sets',
+            oldValue: 5,
+            newValue: 4,
+          },
+        ],
+      },
+    ),
+    {
+      proposalId: 'proposal-merge-1',
+      suggest_plan_update: true,
+      day: 'Monday',
+      summary: '完整 suggestion',
+      changes: [
+        {
+          action: 'update',
+          exerciseName: '卧推',
+          field: 'sets',
+          oldValue: 5,
+          newValue: 4,
+        },
+      ],
+    },
+  )
 })
 
 test('mergeBackgroundCoachReply 在用户已清空当前聊天时不污染当前对话', () => {

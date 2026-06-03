@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef } from 'react'
-import { buildAdoptCardModel } from '../../utils/adoptCard.js'
 import { getCoachEmptyQuestionView } from '../../utils/coachView.js'
 import EmptyState from './EmptyState.jsx'
 import MessageBubble from './MessageBubble.jsx'
@@ -76,8 +75,6 @@ function MessageList({
             message={{
               role: 'assistant',
               content: streamingText || streamStatusLabel || '思考中',
-              suggestion: streamingSuggestion,
-              suggestionCard: buildAdoptCardModel(streamingSuggestion),
             }}
             onAdopt={onAdopt}
             onDismissSuggestion={onDismissSuggestion}

@@ -17,6 +17,7 @@ import { mergeCommittedWeeklyPlan } from '../utils/weeklyPlanCommit.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
 import {
   buildBackgroundCoachTaskRecord,
+  mergeCoachReplySuggestion,
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
@@ -669,7 +670,9 @@ function CoachTab({
     try {
       return await requestCoachReplyStream(payload, {
         onProposal: (proposal) => {
-          setStreamingSuggestion(proposal ?? null)
+          setStreamingSuggestion((currentSuggestion) =>
+            mergeCoachReplySuggestion(currentSuggestion, proposal),
+          )
         },
         onStatusLabel: (statusLabel) => {
           if (hasReceivedStreamText) {
@@ -679,7 +682,9 @@ function CoachTab({
           setStreamStatusLabel(statusLabel || '')
         },
         onSuggestion: (suggestion) => {
-          setStreamingSuggestion((currentSuggestion) => currentSuggestion ?? suggestion ?? null)
+          setStreamingSuggestion((currentSuggestion) =>
+            mergeCoachReplySuggestion(currentSuggestion, suggestion),
+          )
         },
         onText: (fullText) => {
           const visibleText = getVisibleStreamText(fullText)
@@ -1004,7 +1009,7 @@ function CoachTab({
       const reply = await requestReplyWithFallback(requestPayload, {
         signal: activeRequestAbortRef.current?.signal,
       })
-      const assistantSuggestion = reply.proposal || reply.suggestion || null
+      const assistantSuggestion = reply.suggestion || reply.proposal || null
       const assistantMessage = {
         content: reply.text,
         role: 'assistant',

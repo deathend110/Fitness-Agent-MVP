@@ -13,6 +13,95 @@ const STREAM_TOOL_STATUS_LABELS = {
   get_weekly_plan: '读取训练计划',
 }
 
+function hasCoachSuggestionValue(value) {
+  if (value === null || value === undefined) {
+    return false
+  }
+
+  if (typeof value === 'string') {
+    return Boolean(value.trim())
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0
+  }
+
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0
+  }
+
+  return true
+}
+
+function getCoachSuggestionCompletenessScore(suggestion) {
+  if (!suggestion || typeof suggestion !== 'object') {
+    return -1
+  }
+
+  let score = 0
+
+  if (typeof suggestion.summary === 'string' && suggestion.summary.trim()) {
+    score += 2
+  }
+
+  if (typeof suggestion.day === 'string' && suggestion.day.trim()) {
+    score += 1
+  }
+
+  if (suggestion.proposalId) {
+    score += 1
+  }
+
+  if (suggestion.suggest_plan_update === true) {
+    score += 1
+  }
+
+  if (Array.isArray(suggestion.changes) && suggestion.changes.length) {
+    score += 5
+  }
+
+  if (suggestion.kind === 'day_plan_replace' && suggestion.dayPlan && typeof suggestion.dayPlan === 'object') {
+    score += 5
+  }
+
+  return score
+}
+
+export function mergeCoachReplySuggestion(...suggestions) {
+  const validSuggestions = suggestions.filter(
+    (suggestion) => suggestion && typeof suggestion === 'object',
+  )
+
+  if (!validSuggestions.length) {
+    return null
+  }
+
+  const richestSuggestion = validSuggestions.reduce((bestSuggestion, currentSuggestion) => {
+    if (!bestSuggestion) {
+      return currentSuggestion
+    }
+
+    return getCoachSuggestionCompletenessScore(currentSuggestion) >
+      getCoachSuggestionCompletenessScore(bestSuggestion)
+      ? currentSuggestion
+      : bestSuggestion
+  }, null)
+
+  return validSuggestions.reduce((mergedSuggestion, currentSuggestion) => {
+    Object.entries(currentSuggestion).forEach(([key, value]) => {
+      if (!hasCoachSuggestionValue(value)) {
+        return
+      }
+
+      if (!hasCoachSuggestionValue(mergedSuggestion[key])) {
+        mergedSuggestion[key] = value
+      }
+    })
+
+    return mergedSuggestion
+  }, { ...richestSuggestion })
+}
+
 function buildAgentPayload({
   files = [],
   fileIds,
@@ -50,7 +139,11 @@ export async function requestCoachReply(
   { requestImpl = requestBackendCoachReply, signal } = {},
 ) {
   const payload = buildAgentPayload({ files, model, sessionId, thinking, userInput })
-  return requestImpl(payload, { sessionId, signal })
+  return requestImpl(payload, { sessionId, signal }).then((reply) => ({
+    ...reply,
+    proposal: reply?.proposal ?? null,
+    suggestion: mergeCoachReplySuggestion(reply?.proposal, reply?.suggestion),
+  }))
 }
 
 // Phase 3 起后端负责 prompt 与上下文拼装；前端只传当前用户输入和会话配置。
@@ -66,18 +159,38 @@ export async function requestCoachReplyStream(
   } = {},
 ) {
   const payload = buildAgentPayload({ files, model, sessionId, thinking, userInput })
+  const streamState = {
+    proposal: null,
+    suggestion: null,
+  }
+
   return streamImpl(payload, {
-    onProposal,
     sessionId,
-    onSuggestion,
     signal,
     onDelta: (_delta, fullText) => {
       onText?.(fullText)
     },
+    onProposal: (proposal) => {
+      streamState.proposal = mergeCoachReplySuggestion(streamState.proposal, proposal)
+      onProposal?.(proposal)
+    },
+    onSuggestion: (suggestion) => {
+      streamState.suggestion = mergeCoachReplySuggestion(streamState.suggestion, suggestion)
+      onSuggestion?.(suggestion)
+    },
     onToolStatus: (toolStatus) => {
       onStatusLabel?.(resolveCoachStreamStatusLabel(toolStatus))
     },
-  })
+  }).then((reply) => ({
+    ...reply,
+    proposal: mergeCoachReplySuggestion(streamState.proposal, reply?.proposal),
+    suggestion: mergeCoachReplySuggestion(
+      streamState.proposal,
+      streamState.suggestion,
+      reply?.proposal,
+      reply?.suggestion,
+    ),
+  }))
 }
 
 export function resolveCoachStreamStatusLabel(toolStatus) {
@@ -175,7 +288,7 @@ export function shouldShowBackgroundCoachPendingIndicator({
 
 export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTask } = {}) {
   const assistantText = typeof reply?.text === 'string' ? reply.text.trim() : ''
-  const suggestion = reply?.proposal ?? reply?.suggestion ?? null
+  const suggestion = mergeCoachReplySuggestion(reply?.proposal, reply?.suggestion)
 
   if (!assistantText) {
     return {
