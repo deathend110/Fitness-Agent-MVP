@@ -67,12 +67,12 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
             for exercise in exercises:
                 _validate_custom_strength_exercise(exercise, normalized_main_lifts)
 
-    schema_ready_main_lifts = _build_schema_ready_main_lifts(normalized_main_lifts, referenced_main_lifts)
-    definition["mainLifts"] = schema_ready_main_lifts
+    definition["mainLifts"] = normalized_main_lifts
     try:
         normalized_definition = CustomStrengthDefinitionSchema.model_validate(definition).model_dump()
     except ValidationError as exc:
         raise ValueError(_format_schema_validation_error(exc)) from None
+    # schema 允许未引用主项省略 tm，但序列化会补出 tm=None；这里回填 normalize 产出的稳定契约。
     normalized_definition["mainLifts"] = normalized_main_lifts
     _prune_category_specific_exercise_fields(normalized_definition)
     return normalized_definition
@@ -124,24 +124,6 @@ def _collect_referenced_main_lifts(weeks: list[dict[str, Any]]) -> set[str]:
                 if isinstance(lift_key, str) and lift_key:
                     referenced_lifts.add(lift_key)
     return referenced_lifts
-
-
-def _build_schema_ready_main_lifts(
-    normalized_main_lifts: dict[str, dict[str, float]],
-    referenced_main_lifts: set[str],
-) -> dict[str, dict[str, float]]:
-    schema_ready_main_lifts: dict[str, dict[str, float]] = {}
-    for lift_key, lift_value in normalized_main_lifts.items():
-        if "tm" in lift_value:
-            schema_ready_main_lifts[lift_key] = dict(lift_value)
-            continue
-        if lift_key in referenced_main_lifts:
-            schema_ready_main_lifts[lift_key] = dict(lift_value)
-            continue
-        # 现有 schema 仍要求 tm 必填；这里只为通过结构校验补临时占位，最终返回值会恢复为空对象。
-        schema_ready_main_lifts[lift_key] = {"tm": 1.0}
-    return schema_ready_main_lifts
-
 
 def _parse_positive_int(raw_value: Any, field_name: str) -> int:
     if isinstance(raw_value, bool) or not isinstance(raw_value, int):
@@ -213,6 +195,8 @@ def _validate_custom_strength_exercise(
         lift_key = progression.get("liftKey")
         if not isinstance(lift_key, str) or not lift_key:
             raise ValueError("progression.liftKey 必填。")
+        if lift_key not in VALID_MAIN_LIFTS:
+            raise ValueError("progression.liftKey 必须引用合法主项。")
         if lift_key not in main_lifts:
             raise ValueError(f"{lift_key} 缺少对应 TM。")
         percent_tm = _parse_positive_float(progression.get("percentTm"), "percentTm")

@@ -124,7 +124,7 @@ class CyclePresetSchema(BaseModel):
 class CustomStrengthMainLiftSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    tm: float = Field(..., gt=0)
+    tm: float | None = Field(default=None, gt=0)
 
 
 class CustomStrengthExerciseSchema(BaseModel):

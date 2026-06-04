@@ -102,6 +102,16 @@ def test_normalize_custom_strength_definition_accepts_missing_tm_for_unreference
     }
 
 
+def test_normalize_custom_strength_definition_rejects_invalid_main_progression_lift_key_with_stable_error() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"][0]["progression"]["liftKey"] = "pullup"
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "progression.liftKey 必须引用合法主项。"
+
+
 def test_normalize_custom_strength_definition_rejects_invalid_main_lift_key() -> None:
     payload = build_valid_definition()
     payload["mainLifts"]["pullup"] = {"tm": 60}
