@@ -24,6 +24,7 @@ def main() -> None:
         expect(monday_card.get_by_text("已排 1 个动作")).to_be_visible()
         expect(tuesday_card.get_by_text("已排 1 个动作")).to_have_count(0)
         expect(page.get_by_text("训练类型", exact=True)).to_have_count(0)
+        expect(page.get_by_text("manual_strength", exact=True)).to_have_count(0)
 
         page.screenshot(path=str(OUTPUT_DIR / "plan-header-layout-full.png"), full_page=True)
         browser.close()

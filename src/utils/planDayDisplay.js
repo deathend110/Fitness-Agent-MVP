@@ -14,6 +14,17 @@ function getHistoryTitle(count = 0) {
   return `保留 ${count} 个历史动作`
 }
 
+function getTrainingPreviewTitle(planType = '') {
+  const normalizedType = typeof planType === 'string' ? planType.trim() : ''
+
+  if (!normalizedType || normalizedType === 'rest') {
+    return '训练日'
+  }
+
+  const allowedDisplayTypes = new Set(['腿日', '推日', '拉日', '有氧', '训练日'])
+  return allowedDisplayTypes.has(normalizedType) ? normalizedType : '训练日'
+}
+
 function createHeaderModel(dayLabel = '', dateLabel = '') {
   return {
     eyebrow: '',
@@ -86,7 +97,7 @@ export function buildPlanDayDisplayModel({
     historyHint: null,
     preview: {
       eyebrow: exerciseCount === 0 ? '待补充' : '训练日',
-      title: plan.type || '训练日',
+      title: getTrainingPreviewTitle(plan.type),
       meta: getExerciseCountLabel(exerciseCount),
     },
     emptyState:
