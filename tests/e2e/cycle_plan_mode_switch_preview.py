@@ -233,7 +233,7 @@ def open_plan_settings(page) -> None:
     settings_button = page.get_by_role("button", name="计划设置")
     panel = page.get_by_text("计划设置入口")
     if panel.count() > 0 and panel.first.is_visible():
-      return
+        return
     settings_button.click()
     expect(panel).to_be_visible(timeout=10_000)
 
@@ -254,7 +254,7 @@ def main() -> None:
 
             open_plan_settings(page)
             page.get_by_role("button", name="周期计划", exact=True).click()
-            page.locator("input[type='date']").fill("2026-06-01")
+            page.locator("input[type='date']").first.fill("2026-06-01")
             page.get_by_role("button", name="Monday").click()
             page.get_by_role("button", name="Wednesday").click()
             page.get_by_role("button", name="Friday").click()
