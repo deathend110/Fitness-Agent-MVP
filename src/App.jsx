@@ -67,6 +67,19 @@ function App() {
   const syncedWeeklyPlanRef = useRef(null)
   const syncedDailyLogRef = useRef(null)
 
+  function handleWeeklyPlanChange(nextWeeklyPlanOrUpdater) {
+    const nextWeeklyPlan = normalizeWeeklyPlan(
+      typeof nextWeeklyPlanOrUpdater === 'function'
+        ? nextWeeklyPlanOrUpdater(weeklyPlan)
+        : nextWeeklyPlanOrUpdater,
+    )
+
+    setWeeklyPlan(nextWeeklyPlan)
+    if (planSource.activeSource === 'manual') {
+      setEffectiveWeeklyPlan(nextWeeklyPlan)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     const abortController = new AbortController()
@@ -233,9 +246,11 @@ function App() {
     dailyLog: nextDailyLog,
     chatHistory: nextChatHistory,
   }) {
+    const normalizedWeeklyPlan = normalizeWeeklyPlan(nextWeeklyPlan)
+
     setProfile(nextProfile)
-    setWeeklyPlan(normalizeWeeklyPlan(nextWeeklyPlan))
-    setEffectiveWeeklyPlan(normalizeWeeklyPlan(nextWeeklyPlan))
+    setWeeklyPlan(normalizedWeeklyPlan)
+    setEffectiveWeeklyPlan(normalizedWeeklyPlan)
     setPlanSource({ activeSource: 'manual' })
     setActiveCyclePlan(null)
     setDailyLog(nextDailyLog)
@@ -299,7 +314,7 @@ function App() {
             onPlanSettingsClick={() => {}}
             onPlanSourceChange={setPlanSource}
             planSource={planSource}
-            onWeeklyPlanChange={setWeeklyPlan}
+            onWeeklyPlanChange={handleWeeklyPlanChange}
             profile={profile}
             weeklyPlan={weeklyPlan}
           />
@@ -308,10 +323,10 @@ function App() {
         return (
           <TodayTab
             dailyLog={dailyLog}
+            effectiveWeeklyPlan={effectiveWeeklyPlan}
             onDailyLogChange={setDailyLog}
             onOpenCoach={handleOpenCoachTab}
             profile={profile}
-            weeklyPlan={weeklyPlan}
           />
         )
       case 'coach':
@@ -319,10 +334,10 @@ function App() {
           <CoachTab
             chatHistory={chatHistory}
             dailyLog={dailyLog}
+            effectiveWeeklyPlan={effectiveWeeklyPlan}
             onChatHistoryChange={setChatHistory}
-            onWeeklyPlanChange={setWeeklyPlan}
+            onWeeklyPlanChange={handleWeeklyPlanChange}
             profile={profile}
-            weeklyPlan={weeklyPlan}
           />
         )
       default:
