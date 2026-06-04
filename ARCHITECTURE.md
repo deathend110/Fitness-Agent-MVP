@@ -404,6 +404,7 @@ docs/
 - `backend/providers/gemini_client.py`
   - 负责把 Gemini `generateContent` 包装成当前聊天主链路可复用的最小客户端
   - 当前用于 `/api/chat/reply`、`/api/chat/stream` 和后台任务的 Gemini 文本请求，先解决“Gemini 模型名误发到 DeepSeek”这一运行时路由问题
+  - `stream_chat_with_usage` 现在走 Gemini 原生 `streamGenerateContent?alt=sse` 真流式接口，逐块吐出增量文本，与 OpenAI-compatible / DeepSeek 链路一致；与 OpenAI 的 `[DONE]` 哨兵不同，Gemini 以 `candidates[0].finishReason` 标记生成结束，`usageMetadata` 一般随最后一块到达并在流末补发一个 usage 事件
   - 现在额外暴露原始 `generateContent` 响应，供 Gemini-native 工具循环直接处理 `functionCall / functionResponse`
   - 当前会把统一工具回环传入的 `tool_choice` 映射为 Gemini 官方 `toolConfig.functionCallingConfig`，避免 Gemini 路径只能“看模型心情”决定是否发起函数调用
 

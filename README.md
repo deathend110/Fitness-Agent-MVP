@@ -153,6 +153,7 @@ HTTPS_PROXY=
 - `MODEL_PROVIDER_CONFIG_PATH` 用来覆盖模型配置 JSON 的路径，缺失文件时会自动根据当前后端设置生成首份文件
 - `GET /api/models` 现在返回带 `provider::remoteModel` 形式的 `modelRef`，聊天、草稿和后台任务会统一按这个引用解析真实模型
 - 选择 Gemini 模型后，`/api/chat/reply` 与 `/api/chat/stream` 会直接实例化 Gemini 运行时客户端；如果仍看到 DeepSeek 模型名相关报错，通常说明当前进程还没有加载到最新代码
+- Gemini 流式聊天现在走原生 `streamGenerateContent?alt=sse` 真流式接口逐块吐出增量文本，与 OpenAI-compatible / DeepSeek 链路一致；不同于 OpenAI 的 `[DONE]` 哨兵，Gemini 以 `candidates[0].finishReason` 标记生成结束，`usageMetadata` 随最后一块到达并在流末补发 usage 事件
 - 前端流式聊天现在统一使用 `POST /api/chat/stream` 发送 JSON body，不再把 `userInput / messages / thinking / fileIds` 拼进 query string，避免长输入和附件上下文把 URL 拉得过长
 - AI 教练工具调用现在分为两条运行时链路：OpenAI-compatible `chat_completions` 会按 `assistant(tool_calls) -> tool` 顺序补齐消息，OpenAI-compatible `responses` 会按 `function_call -> function_call_output` 回环，Gemini-native 会按官方 `functionCall -> functionResponse` 结构继续下一轮请求
 - 当前正式的 OpenAI-compatible 流式计划卡链路固定为：先在工具回环里拿到 proposal，再开始流式输出 assistant 正文；正文结束后才发 proposal 卡数据，随后补发 suggestion，最后再发 done
