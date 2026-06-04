@@ -78,3 +78,14 @@ test('ProfileTab 源码包含摘要区、分组表单和默认收起的数据管
   assert.match(source, /isDataPanelOpen/)
   assert.match(source, /aria-expanded=/)
 })
+
+test('ProfileTab 源码为档案页定义浅色渐变头图和分色摘要卡', () => {
+  const source = readFileSync('src/tabs/ProfileTab.jsx', 'utf-8')
+
+  assert.match(source, /from-\[#fdfdff\] via-\[#f6f8ff\] to-\[#eef4ff\]/)
+  assert.match(source, /card\.tone/)
+  assert.match(source, /border-sky-200\/70/)
+  assert.match(source, /border-emerald-200\/70/)
+  assert.match(source, /border-violet-200\/70/)
+  assert.match(source, /border-amber-200\/80/)
+})
