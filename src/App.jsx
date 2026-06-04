@@ -292,7 +292,12 @@ function App() {
           <PlanTab
             activeCyclePlan={activeCyclePlan}
             effectiveWeeklyPlan={effectiveWeeklyPlan}
+            onActiveCyclePlanChange={setActiveCyclePlan}
+            onEffectiveWeeklyPlanChange={(nextPlan) =>
+              setEffectiveWeeklyPlan(normalizeWeeklyPlan(nextPlan))
+            }
             onPlanSettingsClick={() => {}}
+            onPlanSourceChange={setPlanSource}
             planSource={planSource}
             onWeeklyPlanChange={setWeeklyPlan}
             profile={profile}
