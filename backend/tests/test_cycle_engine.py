@@ -69,9 +69,24 @@ def test_build_cycle_week_plan_for_madcow_prefers_tm_for_percentage_movements() 
     assert monday_squat["ref1RM"] == "squat"
     assert monday_squat["pct"] == 0.8
     assert friday_top_set["pct"] == 0.9
+    assert monday_squat["loadRef"] == {"lift": "squat", "value": 162.0, "source": "tm"}
+    assert friday_top_set["loadRef"] == {"lift": "squat", "value": 162.0, "source": "tm"}
     assert set(monday_squat["instance"]) == {"pct", "kg", "note"}
     assert "sourceMax" not in monday_squat["instance"]
     assert "targetWeight" not in friday_top_set["instance"]
+
+
+def test_build_cycle_week_plan_falls_back_to_one_rm_when_tm_is_missing() -> None:
+    weekly_plan = build_cycle_week_plan(
+        preset_key="candito_6week",
+        week_index=1,
+        base_lifts=_build_base_lifts(squat_tm=None),
+    )
+
+    monday_squat = weekly_plan["Monday"]["exercises"][0]
+
+    assert monday_squat["loadRef"] == {"lift": "squat", "value": 180.0, "source": "oneRm"}
+    assert monday_squat["instance"] == {"pct": 0.8, "kg": None, "note": ""}
 
 
 def test_build_cycle_week_plan_for_texas_method_has_hlm_day_type_differences() -> None:

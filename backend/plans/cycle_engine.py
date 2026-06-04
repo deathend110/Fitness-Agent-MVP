@@ -330,6 +330,7 @@ def _materialize_exercise(
         "reps": int(exercise_template["reps"]),
         "kg": None,
         "note": exercise_template.get("note") or "",
+        "loadRef": _build_load_ref(base_lifts, exercise_template.get("ref1RM")) if load_mode == "percentage" else None,
     }
     return _materialize_canonical_exercise(exercise_source=exercise_source, fallback_id=exercise_source["id"])
 
@@ -349,6 +350,7 @@ def _materialize_canonical_exercise(
     tier = exercise_source.get("tier") if isinstance(exercise_source.get("tier"), str) and exercise_source.get("tier") else (
         "main" if load_mode == "percentage" else "accessory"
     )
+    load_ref = _normalize_load_ref(exercise_source.get("loadRef"), ref_1rm, load_mode)
     return {
         "id": exercise_source.get("id") if isinstance(exercise_source.get("id"), str) and exercise_source.get("id") else fallback_id,
         "name": exercise_source.get("name") if isinstance(exercise_source.get("name"), str) else "",
@@ -371,6 +373,7 @@ def _materialize_canonical_exercise(
         "reps": reps,
         "kg": kg if load_mode == "fixed" else None,
         "note": note,
+        "loadRef": load_ref,
     }
 
 
@@ -392,6 +395,32 @@ def _resolve_source_max(base_lifts: dict[str, dict[str, Any]], ref_1rm: str) -> 
     if tm_value is not None:
         return tm_value
     return _read_number(lift_payload.get("oneRm"))
+
+
+def _build_load_ref(base_lifts: dict[str, dict[str, Any]], ref_1rm: Any) -> dict[str, Any] | None:
+    if not isinstance(ref_1rm, str) or not ref_1rm:
+        return None
+    lift_payload = base_lifts.get(ref_1rm)
+    if not isinstance(lift_payload, dict):
+        return {"lift": ref_1rm, "value": None, "source": None}
+    tm_value = _read_number(lift_payload.get("tm"))
+    if tm_value is not None:
+        return {"lift": ref_1rm, "value": tm_value, "source": "tm"}
+    one_rm_value = _read_number(lift_payload.get("oneRm"))
+    return {"lift": ref_1rm, "value": one_rm_value, "source": "oneRm" if one_rm_value is not None else None}
+
+
+def _normalize_load_ref(raw_load_ref: Any, ref_1rm: str | None, load_mode: str) -> dict[str, Any] | None:
+    if load_mode != "percentage":
+        return None
+    if not isinstance(raw_load_ref, dict):
+        return {"lift": ref_1rm, "value": None, "source": None} if ref_1rm else None
+    lift = raw_load_ref.get("lift") if isinstance(raw_load_ref.get("lift"), str) and raw_load_ref.get("lift") else ref_1rm
+    value = _read_number(raw_load_ref.get("value"))
+    source = raw_load_ref.get("source") if raw_load_ref.get("source") in {"tm", "oneRm"} else None
+    if lift is None:
+        return None
+    return {"lift": lift, "value": value, "source": source}
 
 
 def _coerce_int(value: Any, default: int) -> int:
