@@ -255,6 +255,35 @@ def test_normalize_custom_strength_definition_rejects_invalid_reference_lift_on_
     assert str(exc_info.value) == "referenceLift 必须引用合法主项。"
 
 
+def test_normalize_custom_strength_definition_rejects_reference_lift_missing_from_current_main_lifts() -> None:
+    payload = build_valid_definition()
+    payload["mainLifts"].pop("bench")
+    payload["weeks"][0]["days"].append(
+        {
+            "dayIndex": 2,
+            "label": "周二",
+            "type": "upper_hypertrophy",
+            "exercises": [
+                {
+                    "id": "w1d2-bench-variation",
+                    "name": "Paused Bench",
+                    "category": "variation",
+                    "progression": {"mode": "static"},
+                    "prescription": {"sets": 4, "reps": 6},
+                    "referenceLift": "bench",
+                    "loadText": "RPE 8",
+                    "notes": "",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "referenceLift 必须引用当前 mainLifts 中已定义的主项。"
+
+
 def test_normalize_custom_strength_definition_cleans_category_specific_reference_lift_and_load_text_fields() -> None:
     payload = build_valid_definition()
     main_exercise = payload["weeks"][0]["days"][0]["exercises"][0]

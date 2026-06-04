@@ -146,7 +146,7 @@ def _validate_custom_strength_exercise(
     if category not in VALID_CATEGORIES:
         raise ValueError("动作 category 非法。")
     exercise["prescription"] = _validate_prescription(exercise.get("prescription"))
-    _normalize_exercise_category_fields(exercise, category)
+    _normalize_exercise_category_fields(exercise, category, main_lifts)
 
     progression = exercise.get("progression")
     if not isinstance(progression, dict):
@@ -178,7 +178,11 @@ def _validate_custom_strength_exercise(
     exercise["progression"] = {"mode": "static"}
 
 
-def _normalize_exercise_category_fields(exercise: dict[str, Any], category: str) -> None:
+def _normalize_exercise_category_fields(
+    exercise: dict[str, Any],
+    category: str,
+    main_lifts: dict[str, dict[str, float]],
+) -> None:
     raw_load_text = exercise.get("loadText")
     normalized_load_text = raw_load_text if isinstance(raw_load_text, str) else ""
 
@@ -193,6 +197,8 @@ def _normalize_exercise_category_fields(exercise: dict[str, Any], category: str)
         if reference_lift is not None:
             if not isinstance(reference_lift, str) or reference_lift not in VALID_MAIN_LIFTS:
                 raise ValueError("referenceLift 必须引用合法主项。")
+            if reference_lift not in main_lifts:
+                raise ValueError("referenceLift 必须引用当前 mainLifts 中已定义的主项。")
             exercise["referenceLift"] = reference_lift
         else:
             exercise.pop("referenceLift", None)
