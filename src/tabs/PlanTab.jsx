@@ -89,11 +89,44 @@ function PlanTab({
   const activeCycleStatus = getCycleStatusLabel(activeCyclePlan?.cycle?.status)
   const activeCycleSummary = buildCyclePresetSummary(activeCyclePlan)
 
-  function handleDayTypeChange(dayKey, nextType) {
-    onWeeklyPlanChange((currentPlan) => updateDayType(currentPlan, dayKey, nextType))
+  function isCycleOverrideMode() {
+    return (
+      planSource.activeSource === 'cycle' &&
+      Boolean(activeCyclePlan?.cycle?.id) &&
+      Number.isInteger(activeCyclePlan?.cycle?.currentWeekIndex)
+    )
+  }
+
+  async function applyPlanMutation(planUpdater) {
+    if (!isCycleOverrideMode()) {
+      onWeeklyPlanChange(planUpdater)
+      return true
+    }
+
+    const nextPlan = planUpdater(displayedWeeklyPlan)
+    const response = await backendClient.updateCycleWeekOverride(
+      activeCyclePlan.cycle.id,
+      activeCyclePlan.cycle.currentWeekIndex,
+      nextPlan,
+    )
+    const nextEffectivePlan = readNextEffectivePlan(response) ?? nextPlan
+    onEffectiveWeeklyPlanChange?.(nextEffectivePlan)
+    return true
+  }
+
+  async function handleDayTypeChange(dayKey, nextType) {
+    try {
+      await applyPlanMutation((currentPlan) => updateDayType(currentPlan, dayKey, nextType))
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    }
   }
 
   function handleWeekNumberChange(nextWeekNumber) {
+    if (planSource.activeSource === 'cycle') {
+      return
+    }
+
     onWeeklyPlanChange((currentPlan) => ({
       ...currentPlan,
       weekMeta: {
@@ -119,7 +152,7 @@ function PlanTab({
     setEditingState(clearPlanEditorState())
   }
 
-  function saveExercise() {
+  async function saveExercise() {
     if (!editingState.dayKey || !editingState.draft) {
       return
     }
@@ -134,25 +167,35 @@ function PlanTab({
       return
     }
 
-    if (editingState.exerciseId === NEW_PLAN_EXERCISE_ID) {
-      onWeeklyPlanChange((currentPlan) =>
-        addExerciseToDay(currentPlan, editingState.dayKey, nextExercise),
-      )
-    } else {
-      onWeeklyPlanChange((currentPlan) =>
-        updateExerciseInDay(currentPlan, editingState.dayKey, editingState.exerciseId, {
-          ...nextExercise,
-          id: editingState.exerciseId,
-        }),
-      )
-    }
+    try {
+      if (editingState.exerciseId === NEW_PLAN_EXERCISE_ID) {
+        await applyPlanMutation((currentPlan) =>
+          addExerciseToDay(currentPlan, editingState.dayKey, nextExercise),
+        )
+      } else {
+        await applyPlanMutation((currentPlan) =>
+          updateExerciseInDay(currentPlan, editingState.dayKey, editingState.exerciseId, {
+            ...nextExercise,
+            id: editingState.exerciseId,
+          }),
+        )
+      }
 
-    cancelEditing()
+      cancelEditing()
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    }
   }
 
-  function deleteExercise(dayKey, exerciseId) {
-    onWeeklyPlanChange((currentPlan) => removeExerciseFromDay(currentPlan, dayKey, exerciseId))
-    setEditingState((current) => clearPlanEditorStateAfterDelete(current, dayKey, exerciseId))
+  async function deleteExercise(dayKey, exerciseId) {
+    try {
+      await applyPlanMutation((currentPlan) =>
+        removeExerciseFromDay(currentPlan, dayKey, exerciseId),
+      )
+      setEditingState((current) => clearPlanEditorStateAfterDelete(current, dayKey, exerciseId))
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    }
   }
 
   async function openPlanSettings() {

@@ -89,3 +89,22 @@ test('PlanTab 源码包含手动周期设置流程的关键入口', () => {
   assert.match(source, /getCyclePresets|createCyclePlan/)
   assert.match(source, /生成下一周|确认进入下一周|停止周期/)
 })
+
+test('PlanTab 源码在周期来源下会走当前周 override 更新链路', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /planSource\.activeSource === 'cycle'/)
+  assert.match(source, /activeCyclePlan\?\.cycle\?\.id/)
+  assert.match(source, /activeCyclePlan\?\.cycle\?\.currentWeekIndex/)
+  assert.match(source, /backendClient\.updateCycleWeekOverride/)
+  assert.match(source, /onEffectiveWeeklyPlanChange\?\.\(/)
+})
+
+test('PlanTab 源码在手动来源下仍保留 onWeeklyPlanChange 更新链路', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /if \(!isCycleOverrideMode\(\)\) \{/)
+  assert.match(source, /onWeeklyPlanChange\(planUpdater\)/)
+  assert.match(source, /if \(planSource\.activeSource === 'cycle'\) \{\s*return/)
+  assert.match(source, /weekMeta/)
+})
