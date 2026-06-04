@@ -172,6 +172,66 @@ test('周期计划与计划来源接口会命中正确的后端路由', async ()
   assert.equal(requests[8].options.method, 'POST')
 })
 
+test('createCyclePlan 会保留 custom_strength 载荷结构并发送到 cycles 接口', async () => {
+  const requests = []
+  const client = createBackendClient({
+    baseUrl: 'http://127.0.0.1:8000/api',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options })
+
+      return {
+        ok: true,
+        json: async () => ({ ok: true }),
+      }
+    },
+  })
+
+  await client.createCyclePlan({
+    presetKey: 'custom_strength',
+    startDate: '2026-06-09',
+    goal: 'strength',
+    baseLifts: {
+      squat: { tm: 180 },
+      bench: { tm: 120 },
+    },
+    config: {
+      planType: 'custom_strength',
+      name: '四周力量周期',
+      startDate: '2026-06-09',
+      totalWeeks: 2,
+      mainLifts: {
+        squat: { tm: 180 },
+        bench: { tm: 120 },
+      },
+      weeks: [],
+    },
+  })
+
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/cycles')
+  assert.equal(requests[0].options.method, 'POST')
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    presetKey: 'custom_strength',
+    startDate: '2026-06-09',
+    goal: 'strength',
+    baseLifts: {
+      squat: { tm: 180 },
+      bench: { tm: 120 },
+    },
+    config: {
+      planType: 'custom_strength',
+      name: '四周力量周期',
+      startDate: '2026-06-09',
+      totalWeeks: 2,
+      mainLifts: {
+        squat: { tm: 180 },
+        bench: { tm: 120 },
+      },
+      weeks: [],
+    },
+  })
+})
+
 test('commitCoachSuggestion 会优先走 proposal commit，缺少 proposalId 时才回退 legacy adopt', async () => {
   const requests = []
   const client = createBackendClient({
