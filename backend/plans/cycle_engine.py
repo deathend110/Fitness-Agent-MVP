@@ -3,10 +3,18 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from backend.db.models import WEEKDAY_ORDER
 from backend.plans.preset_library import get_cycle_preset
 
 DEFAULT_SET_TYPE = "straight"
+WEEKDAY_ORDER = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
 
 
 def build_cycle_week_plan(
