@@ -194,14 +194,13 @@ def _normalize_exercise_category_fields(
 
     if category == "variation":
         reference_lift = exercise.get("referenceLift")
-        if reference_lift is not None:
-            if not isinstance(reference_lift, str) or reference_lift not in VALID_MAIN_LIFTS:
-                raise ValueError("referenceLift 必须引用合法主项。")
-            if reference_lift not in main_lifts:
-                raise ValueError("referenceLift 必须引用当前 mainLifts 中已定义的主项。")
-            exercise["referenceLift"] = reference_lift
-        else:
-            exercise.pop("referenceLift", None)
+        if not isinstance(reference_lift, str) or not reference_lift:
+            raise ValueError("variation.referenceLift 必填，且必须引用当前 mainLifts 中已定义的主项。")
+        if reference_lift not in VALID_MAIN_LIFTS:
+            raise ValueError("referenceLift 必须引用合法主项。")
+        if reference_lift not in main_lifts:
+            raise ValueError("referenceLift 必须引用当前 mainLifts 中已定义的主项。")
+        exercise["referenceLift"] = reference_lift
         exercise["loadText"] = normalized_load_text
         return
 

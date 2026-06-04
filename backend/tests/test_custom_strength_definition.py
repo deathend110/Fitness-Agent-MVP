@@ -97,7 +97,9 @@ def test_normalize_custom_strength_definition_rejects_invalid_main_lift_key() ->
 
 def test_normalize_custom_strength_definition_rejects_percent_tm_on_variation() -> None:
     payload = build_valid_definition()
-    payload["weeks"][0]["days"][0]["exercises"][0]["category"] = "variation"
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = "variation"
+    exercise["referenceLift"] = "squat"
 
     with pytest.raises(ValueError, match="variation.*static"):
         normalize_custom_strength_definition(payload)
@@ -178,8 +180,10 @@ def test_normalize_custom_strength_definition_rejects_unstable_day_index_type() 
 
 def test_normalize_custom_strength_definition_rejects_non_static_mode_on_variation() -> None:
     payload = build_valid_definition()
-    payload["weeks"][0]["days"][0]["exercises"][0]["category"] = "variation"
-    payload["weeks"][0]["days"][0]["exercises"][0]["progression"] = {
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = "variation"
+    exercise["referenceLift"] = "squat"
+    exercise["progression"] = {
         "mode": "weird_mode",
     }
 
@@ -187,20 +191,32 @@ def test_normalize_custom_strength_definition_rejects_non_static_mode_on_variati
         normalize_custom_strength_definition(payload)
 
 
-@pytest.mark.parametrize("category", ["variation", "accessory"])
-def test_normalize_custom_strength_definition_accepts_static_mode_on_non_main_exercise(
-    category: str,
-) -> None:
+def test_normalize_custom_strength_definition_rejects_variation_without_reference_lift_with_stable_value_error() -> None:
     payload = build_valid_definition()
-    payload["weeks"][0]["days"][0]["exercises"][0]["category"] = category
-    payload["weeks"][0]["days"][0]["exercises"][0]["progression"] = {
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = "variation"
+    exercise["progression"] = {
+        "mode": "static",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "variation.referenceLift 必填，且必须引用当前 mainLifts 中已定义的主项。"
+
+
+def test_normalize_custom_strength_definition_accepts_accessory_without_reference_lift() -> None:
+    payload = build_valid_definition()
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = "accessory"
+    exercise["progression"] = {
         "mode": "static",
     }
 
     normalized = normalize_custom_strength_definition(payload)
 
     exercise = normalized["weeks"][0]["days"][0]["exercises"][0]
-    assert exercise["category"] == category
+    assert exercise["category"] == "accessory"
     assert exercise["progression"]["mode"] == "static"
 
 
@@ -395,13 +411,27 @@ def test_normalize_custom_strength_definition_normalizes_unordered_days_to_stabl
     assert [day["dayIndex"] for day in normalized["weeks"][0]["days"]] == [1, 2]
 
 
-@pytest.mark.parametrize("category", ["variation", "accessory"])
-def test_normalize_custom_strength_definition_cleans_percent_tm_fields_from_static_non_main_progression(
-    category: str,
-) -> None:
+def test_normalize_custom_strength_definition_cleans_percent_tm_fields_from_static_variation_progression() -> None:
     payload = build_valid_definition()
     exercise = payload["weeks"][0]["days"][0]["exercises"][0]
-    exercise["category"] = category
+    exercise["category"] = "variation"
+    exercise["referenceLift"] = "squat"
+    exercise["progression"] = {
+        "mode": "static",
+        "percentTm": 0.8,
+        "liftKey": "squat",
+    }
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    progression = normalized["weeks"][0]["days"][0]["exercises"][0]["progression"]
+    assert progression == {"mode": "static"}
+
+
+def test_normalize_custom_strength_definition_cleans_percent_tm_fields_from_static_accessory_progression() -> None:
+    payload = build_valid_definition()
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = "accessory"
     exercise["progression"] = {
         "mode": "static",
         "percentTm": 0.8,
