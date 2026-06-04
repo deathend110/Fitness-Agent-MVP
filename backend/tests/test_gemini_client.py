@@ -6,7 +6,12 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from backend.agent.deepseek_client import DeepSeekChatResult, DeepSeekClient, DeepSeekStreamEvent
+from backend.agent.deepseek_client import (
+    DeepSeekChatResult,
+    DeepSeekClient,
+    DeepSeekClientError,
+    DeepSeekStreamEvent,
+)
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import Base
@@ -166,8 +171,28 @@ async def test_gemini_native_client_maps_auto_tool_choice_to_function_calling_co
     }
 
 
-@pytest.mark.asyncio
-async def test_gemini_native_client_streams_single_full_text_event() -> None:
+class _FakeStreamResponse:
+    """模拟 httpx streaming 响应：暴露 is_success / status_code 与 aiter_lines。"""
+
+    def __init__(self, *, lines: list[str], status_code: int = 200, is_success: bool = True) -> None:
+        self._lines = lines
+        self.status_code = status_code
+        self.is_success = is_success
+
+    async def __aenter__(self) -> "_FakeStreamResponse":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+def _make_stream_client_factory(lines: list[str], snapshot: dict[str, object]):
+    """构造一个 client_factory，stream() 回放给定 SSE 行并记录请求 url/params。"""
+
     class FakeClient:
         async def __aenter__(self) -> "FakeClient":
             return self
@@ -175,23 +200,61 @@ async def test_gemini_native_client_streams_single_full_text_event() -> None:
         async def __aexit__(self, exc_type, exc, tb) -> bool:
             return False
 
-        async def post(self, *_args, **_kwargs):
-            class Response:
-                status_code = 200
-                is_success = True
+        def stream(
+            self,
+            method: str,
+            url: str,
+            *,
+            params: dict[str, str] | None = None,
+            json: dict[str, object] | None = None,
+            headers: dict[str, str] | None = None,
+        ) -> _FakeStreamResponse:
+            snapshot["method"] = method
+            snapshot["url"] = url
+            snapshot["params"] = params or {}
+            snapshot["json"] = json or {}
+            snapshot["headers"] = headers or {}
+            return _FakeStreamResponse(lines=lines)
 
-                def json(self) -> dict[str, object]:
-                    return {
-                        "candidates": [{"content": {"parts": [{"text": "Gemini 一次性返回整段文本。"}]}}],
-                        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15},
+    return lambda **_: FakeClient()
+
+
+def _sse(payload: dict[str, object]) -> str:
+    import json as _json
+
+    return "data: " + _json.dumps(payload, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_gemini_native_client_streams_incremental_text_then_usage() -> None:
+    snapshot: dict[str, object] = {}
+    lines = [
+        _sse({"candidates": [{"content": {"parts": [{"text": "第一段"}]}}]}),
+        "",
+        _sse({"candidates": [{"content": {"parts": [{"text": "第二段"}]}}]}),
+        "",
+        _sse(
+            {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "第三段"}]},
+                        "finishReason": "STOP",
                     }
-
-            return Response()
+                ],
+                "usageMetadata": {
+                    "promptTokenCount": 10,
+                    "candidatesTokenCount": 5,
+                    "totalTokenCount": 15,
+                },
+            }
+        ),
+        "",
+    ]
 
     client = GeminiNativeClient(
         api_key="AIza-test",
         base_url="https://generativelanguage.googleapis.com/v1beta",
-        client_factory=lambda **_: FakeClient(),
+        client_factory=_make_stream_client_factory(lines, snapshot),
     )
     events = [
         event
@@ -202,9 +265,114 @@ async def test_gemini_native_client_streams_single_full_text_event() -> None:
     ]
 
     assert events == [
-        DeepSeekStreamEvent(text="Gemini 一次性返回整段文本。"),
+        DeepSeekStreamEvent(text="第一段"),
+        DeepSeekStreamEvent(text="第二段"),
+        DeepSeekStreamEvent(text="第三段"),
         DeepSeekStreamEvent(usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
     ]
+    assert str(snapshot["url"]).endswith(":streamGenerateContent")
+    assert snapshot["params"] == {"key": "AIza-test", "alt": "sse"}
+
+
+@pytest.mark.asyncio
+async def test_gemini_native_client_stream_tolerates_empty_parts_final_chunk() -> None:
+    # MAX_TOKENS 收尾块只带 finishReason、没有 parts 文本，不能崩，且要正常完成。
+    snapshot: dict[str, object] = {}
+    lines = [
+        _sse({"candidates": [{"content": {"parts": [{"text": "仅有的一段"}]}}]}),
+        "",
+        _sse({"candidates": [{"finishReason": "MAX_TOKENS"}]}),
+        "",
+    ]
+
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=_make_stream_client_factory(lines, snapshot),
+    )
+    events = [
+        event
+        async for event in client.stream_chat_with_usage(
+            messages=[{"role": "user", "content": "给我一个恢复建议"}],
+            model="gemini-2.5-flash",
+        )
+    ]
+
+    assert events == [DeepSeekStreamEvent(text="仅有的一段")]
+
+
+@pytest.mark.asyncio
+async def test_gemini_native_client_stream_raises_on_malformed_json_line() -> None:
+    snapshot: dict[str, object] = {}
+    lines = [
+        "data: {not valid json",
+        "",
+    ]
+
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=_make_stream_client_factory(lines, snapshot),
+    )
+
+    with pytest.raises(DeepSeekClientError) as exc_info:
+        async for _ in client.stream_chat_with_usage(
+            messages=[{"role": "user", "content": "给我一个恢复建议"}],
+            model="gemini-2.5-flash",
+        ):
+            pass
+
+    assert exc_info.value.code == "stream_parse_error"
+
+
+@pytest.mark.asyncio
+async def test_gemini_native_client_stream_raises_when_no_finish_reason() -> None:
+    # 流在没有任何 finishReason 的情况下结束，视为中途中断。
+    snapshot: dict[str, object] = {}
+    lines = [
+        _sse({"candidates": [{"content": {"parts": [{"text": "半截内容"}]}}]}),
+        "",
+    ]
+
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=_make_stream_client_factory(lines, snapshot),
+    )
+
+    with pytest.raises(DeepSeekClientError) as exc_info:
+        async for _ in client.stream_chat_with_usage(
+            messages=[{"role": "user", "content": "给我一个恢复建议"}],
+            model="gemini-2.5-flash",
+        ):
+            pass
+
+    assert exc_info.value.code == "stream_interrupted"
+
+
+@pytest.mark.asyncio
+async def test_gemini_native_client_stream_raises_when_no_text_yielded() -> None:
+    # 只有 finishReason 块、全程没有任何可展示文本，应报 empty_content。
+    snapshot: dict[str, object] = {}
+    lines = [
+        _sse({"candidates": [{"finishReason": "STOP"}]}),
+        "",
+    ]
+
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=_make_stream_client_factory(lines, snapshot),
+    )
+
+    with pytest.raises(DeepSeekClientError) as exc_info:
+        async for _ in client.stream_chat_with_usage(
+            messages=[{"role": "user", "content": "给我一个恢复建议"}],
+            model="gemini-2.5-flash",
+        ):
+            pass
+
+    assert exc_info.value.code == "empty_content"
 
 
 def test_build_provider_bound_client_returns_gemini_native_client_for_gemini_provider() -> None:

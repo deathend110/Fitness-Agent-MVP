@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
+import json
+from json import JSONDecodeError
 from typing import Any
 
 import httpx
@@ -124,17 +126,88 @@ class GeminiNativeClient:
         tool_choice: str | dict[str, Any] | None = None,
         reasoning_effort: str | None = None,
     ) -> AsyncIterator[DeepSeekStreamEvent]:
-        result = await self.request_chat_with_usage(
+        # 走 Gemini 原生 streamGenerateContent?alt=sse 真流式接口，逐块吐出增量文本，
+        # 与 DeepSeek / OpenAI 兼容链路保持一致；非流式 payload 直接复用。
+        self._assert_api_key()
+        payload = self._build_payload(
             messages=messages,
-            model=model,
             thinking=thinking,
             tools=tools,
             tool_choice=tool_choice,
             reasoning_effort=reasoning_effort,
         )
-        yield DeepSeekStreamEvent(text=result.content)
-        if result.usage is not None:
-            yield DeepSeekStreamEvent(usage=result.usage)
+
+        # saw_done 标记是否收到完成信号。与 OpenAI 的 `[DONE]` 哨兵不同，
+        # Gemini SSE 不发送独立结束行，而是在 candidates[0].finishReason 出现非空值
+        # （STOP / MAX_TOKENS 等）时表示生成结束，因此用 finishReason 判断完成。
+        saw_done = False
+        yielded_text = False
+        usage: dict[str, int] | None = None
+
+        try:
+            async with self.client_factory(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST",
+                    self._build_stream_url(model),
+                    params={"key": self.api_key, "alt": "sse"},
+                    json=payload,
+                    headers={},
+                ) as response:
+                    self._raise_for_error_response(response)
+
+                    async for raw_line in response.aiter_lines():
+                        data = self._parse_sse_data_line(raw_line)
+                        if data is None:
+                            continue
+
+                        try:
+                            event = json.loads(data)
+                        except JSONDecodeError as exc:
+                            raise DeepSeekClientError(
+                                "Gemini 流式响应解析失败，请稍后重试。",
+                                code="stream_parse_error",
+                            ) from exc
+
+                        # usage 一般只在最后一块的 usageMetadata 出现，保留最新非空值。
+                        event_usage = self._read_usage_payload(event)
+                        if event_usage is not None:
+                            usage = event_usage
+
+                        # finishReason 出现即视为生成结束，但不 break：最终 usage 块可能
+                        # 与 finishReason 同块或在后续块到达，继续消费直到流自然关闭。
+                        if self._read_finish_reason(event) is not None:
+                            saw_done = True
+
+                        # 每个增量块与完整响应同形（candidates[0].content.parts[].text），
+                        # 直接复用 _read_text_content 取本块文本。MAX_TOKENS 等收尾块可能
+                        # 只带 finishReason 而无 parts，此处 delta 为空跳过，不能崩。
+                        delta = self._read_text_content(event)
+                        if not delta:
+                            continue
+
+                        yielded_text = True
+                        yield DeepSeekStreamEvent(text=delta)
+
+        except httpx.HTTPError as exc:
+            raise DeepSeekClientError(
+                f"Gemini 流式请求失败：{exc}",
+                code="network_error",
+            ) from exc
+
+        if not saw_done:
+            raise DeepSeekClientError(
+                "Gemini 流式响应在完成前中断，请稍后重试。",
+                code="stream_interrupted",
+            )
+
+        if not yielded_text:
+            raise DeepSeekClientError(
+                "Gemini 流式响应已结束，但没有返回可展示的消息内容。",
+                code="empty_content",
+            )
+
+        if usage is not None:
+            yield DeepSeekStreamEvent(usage=usage)
 
     async def generate_content_raw(
         self,
@@ -189,6 +262,36 @@ class GeminiNativeClient:
 
     def _build_url(self, model: str) -> str:
         return f"{self.base_url}/models/{model}:generateContent"
+
+    def _build_stream_url(self, model: str) -> str:
+        # 流式专用端点，配合 params 里的 alt=sse 才会按 SSE 逐块下发。
+        return f"{self.base_url}/models/{model}:streamGenerateContent"
+
+    @staticmethod
+    def _parse_sse_data_line(line: str) -> str | None:
+        # 解析单行 SSE：跳过空行、注释行（以 : 开头）与非 data 行，返回 data 后的有效载荷。
+        trimmed = line.strip()
+        if not trimmed or trimmed.startswith(":") or not trimmed.startswith("data:"):
+            return None
+
+        return trimmed[5:].strip()
+
+    @staticmethod
+    def _read_finish_reason(response_payload: Any) -> str | None:
+        # 安全取出 candidates[0].finishReason；Gemini 用它（而非 [DONE]）标记生成结束。
+        if not isinstance(response_payload, dict):
+            return None
+
+        candidates = response_payload.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return None
+
+        first_candidate = candidates[0]
+        if not isinstance(first_candidate, dict):
+            return None
+
+        finish_reason = first_candidate.get("finishReason")
+        return finish_reason if isinstance(finish_reason, str) and finish_reason else None
 
     def _build_payload(
         self,
