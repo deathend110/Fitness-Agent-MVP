@@ -8,12 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agent.active_plan import load_effective_weekly_plan
 from backend.agent.adopt_plan import (
     build_day_plan_replace_proposal,
     build_plan_change_proposal,
 )
 from backend.agent.memory import MemoryRetriever
-from backend.db.models import DailyLog, Profile, UploadedFile, WEEKDAY_ORDER, WeeklyPlanDay
+from backend.db.models import DailyLog, Profile, UploadedFile
 from backend.db.seed import DEFAULT_PROFILE_ID
 
 
@@ -249,13 +250,7 @@ async def _get_profile(session: AsyncSession, _args: BaseModel) -> dict[str, Any
 
 
 async def _get_weekly_plan(session: AsyncSession, _args: BaseModel) -> dict[str, Any]:
-    result = await session.execute(select(WeeklyPlanDay))
-    days = {item.day_key: item for item in result.scalars().all()}
-    return {
-        day_key: {"type": days[day_key].type, "exercises": days[day_key].exercises}
-        for day_key in WEEKDAY_ORDER
-        if day_key in days
-    }
+    return await load_effective_weekly_plan(session)
 
 
 async def _get_daily_log(session: AsyncSession, args: DailyLogToolArgs) -> dict[str, Any]:

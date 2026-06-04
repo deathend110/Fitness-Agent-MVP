@@ -13,15 +13,27 @@ from backend.plans.cycle_engine import merge_cycle_week_override
 async def load_effective_weekly_plan(session: AsyncSession) -> dict[str, Any]:
     source_state = await session.get(PlanSourceState, DEFAULT_PLAN_SOURCE_STATE_ID)
     if source_state is not None and source_state.active_source == "cycle":
-        cycle = await _load_open_cycle(session)
-        if cycle is not None:
-            snapshot = await session.get(
-                CycleWeekSnapshot,
-                {"cycle_id": cycle.id, "week_index": cycle.current_week_index},
-            )
-            if snapshot is not None:
-                return merge_cycle_week_override(snapshot.generated_plan, snapshot.override_plan)
+        cycle_context = await load_active_cycle_context(session)
+        if cycle_context is not None:
+            return cycle_context["effectivePlan"]
     return await _load_manual_weekly_plan(session)
+
+
+async def load_active_cycle_context(session: AsyncSession) -> dict[str, Any] | None:
+    cycle = await _load_open_cycle(session)
+    if cycle is None:
+        return None
+    snapshot = await session.get(
+        CycleWeekSnapshot,
+        {"cycle_id": cycle.id, "week_index": cycle.current_week_index},
+    )
+    if snapshot is None:
+        return None
+    return {
+        "cycle": cycle,
+        "snapshot": snapshot,
+        "effectivePlan": merge_cycle_week_override(snapshot.generated_plan, snapshot.override_plan),
+    }
 
 
 async def _load_open_cycle(session: AsyncSession) -> ActiveCyclePlan | None:

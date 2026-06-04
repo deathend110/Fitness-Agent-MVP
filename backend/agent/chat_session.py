@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agent.active_plan import load_active_cycle_context, load_effective_weekly_plan
 from backend.agent.context_manager import AgentContext, PromptAssembler, SummaryCompressor
 from backend.agent.tool_loop import ToolLoopOrchestrator, ToolLoopResult
 from backend.agent.deepseek_client import (
@@ -1004,8 +1005,26 @@ async def build_agent_request(
         summaries=await _load_session_summaries(session, session_id),
         recent_messages=await _load_recent_messages(session, session_id),
     )
+    cycle_context = await load_active_cycle_context(session)
+    messages = list(context.messages)
+    if cycle_context is not None:
+        cycle = cycle_context["cycle"]
+        messages.insert(
+            1 if messages and messages[0].get("role") == "system" else 0,
+            {
+                "role": "system",
+                "content": "\n".join(
+                    [
+                        "当前计划来源：周期计划",
+                        f"当前周期标签 / preset：{cycle.preset_key}",
+                        f"当前周次：第 {cycle.current_week_index} 周",
+                        f"当前状态：{cycle.status}",
+                    ]
+                ),
+            },
+        )
     return AgentRequest(
-        messages=context.messages,
+        messages=messages,
         debug={
             **context.debug,
             "source": "agent_orchestrator",
@@ -1448,16 +1467,7 @@ async def _load_profile(session: AsyncSession) -> dict[str, Any] | None:
 
 
 async def _load_weekly_plan(session: AsyncSession) -> dict[str, Any]:
-    result = await session.execute(select(WeeklyPlanDay))
-    days = {item.day_key: item for item in result.scalars().all()}
-    return {
-        day_key: {
-            "type": days[day_key].type,
-            "exercises": days[day_key].exercises,
-        }
-        for day_key in WEEKDAY_ORDER
-        if day_key in days
-    }
+    return await load_effective_weekly_plan(session)
 
 
 async def _load_recent_daily_logs(session: AsyncSession, limit: int = 7) -> dict[str, Any]:
