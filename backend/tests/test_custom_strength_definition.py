@@ -238,6 +238,42 @@ def test_normalize_custom_strength_definition_normalizes_unordered_weeks_to_stab
     assert [week["weekIndex"] for week in normalized["weeks"]] == [1, 2, 3, 4]
 
 
+def test_normalize_custom_strength_definition_normalizes_unordered_days_to_stable_order() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"] = [
+        {
+            "dayIndex": 2,
+            "label": "周二",
+            "type": "upper_strength",
+            "exercises": [],
+        },
+        deepcopy(payload["weeks"][0]["days"][0]),
+    ]
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    assert [day["dayIndex"] for day in normalized["weeks"][0]["days"]] == [1, 2]
+
+
+@pytest.mark.parametrize("category", ["variation", "accessory"])
+def test_normalize_custom_strength_definition_cleans_percent_tm_fields_from_static_non_main_progression(
+    category: str,
+) -> None:
+    payload = build_valid_definition()
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = category
+    exercise["progression"] = {
+        "mode": "static",
+        "percentTm": 0.8,
+        "liftKey": "squat",
+    }
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    progression = normalized["weeks"][0]["days"][0]["exercises"][0]["progression"]
+    assert progression == {"mode": "static"}
+
+
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [

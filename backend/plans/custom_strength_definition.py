@@ -80,6 +80,8 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
             normalized_day_indexes.append(_parse_day_index(day.get("dayIndex")))
         if len(normalized_day_indexes) != len(set(normalized_day_indexes)):
             raise ValueError(f"第 {week_index} 周的 dayIndex 必须唯一。")
+        # normalize 阶段需要保证 days 顺序稳定，避免合法但乱序的输入继续残留到下游。
+        week["days"] = sorted(days, key=lambda day: day["dayIndex"])
 
 
 def _parse_positive_int(raw_value: Any, field_name: str) -> int:
@@ -148,6 +150,8 @@ def _validate_custom_strength_exercise(
 
     if progression_mode != "static":
         raise ValueError(f"{category} 动作第一版必须使用 static。")
+    # non-main + static 只保留稳定语义，避免残留 liftKey / percentTm 造成误解。
+    exercise["progression"] = {"mode": "static"}
 
 
 def _format_schema_validation_error(exc: ValidationError) -> str:
