@@ -57,7 +57,9 @@ function normalizeWeeks(weeks) {
   }
 
   // mapper 只稳定外层数组，保留每个 week/day/exercise 的既有结构，避免误改编辑器已维护的内容。
-  return weeks.map((week) => ({ ...week }))
+  return weeks
+    .filter((week) => week && typeof week === 'object')
+    .map((week) => ({ ...week }))
 }
 
 export function createCustomStrengthDraft() {

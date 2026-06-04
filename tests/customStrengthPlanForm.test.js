@@ -160,3 +160,23 @@ test('buildCreateCustomStrengthCyclePayload 不会误改 weeks 内已有 day 与
   assert.notEqual(payload.config.weeks, existingWeeks)
   assert.notEqual(payload.baseLifts, payload.config.mainLifts)
 })
+
+test('buildCreateCustomStrengthCyclePayload 会过滤 weeks 中的异常数组元素', () => {
+  const validWeek = {
+    weekIndex: 2,
+    days: [{ dayIndex: 3, label: '周三', type: 'pull', exercises: [] }],
+  }
+
+  const payload = buildCreateCustomStrengthCyclePayload({
+    name: '坏周元素草稿',
+    startDate: '2026-06-09',
+    totalWeeks: 9,
+    mainLifts: {
+      deadlift: { tm: '200' },
+    },
+    weeks: [null, 1, 'bad', undefined, validWeek],
+  })
+
+  assert.equal(payload.config.totalWeeks, 1)
+  assert.deepEqual(payload.config.weeks, [validWeek])
+})
