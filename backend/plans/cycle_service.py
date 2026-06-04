@@ -123,6 +123,9 @@ async def generate_next_week(session: AsyncSession, cycle_id: int) -> CycleWeekS
         await session.refresh(cycle)
         return build_cycle_week_snapshot_schema(existing_snapshot)
 
+    if cycle.preset_key == "custom_strength":
+        raise ValueError("自定义力量周期已到最后一周，不能继续生成下一周。")
+
     generated_plan = build_cycle_week_plan(
         preset_key=cycle.preset_key,
         week_index=next_week_index,
@@ -286,6 +289,7 @@ def _build_cycle_creation_seed(payload: CycleCreateRequestSchema) -> dict[str, A
 def _build_custom_strength_cycle_seed(payload: CycleCreateRequestSchema) -> dict[str, Any]:
     # 自定义力量创建链路需要在 service 层完成归一化和编译，这样 API contract 仍保持显式且下游无需理解来源差异。
     definition = normalize_custom_strength_definition(payload.config)
+    _validate_custom_strength_request_consistency(payload, definition)
     compiled_weeks = build_custom_strength_cycle_weeks(definition)
     if not compiled_weeks:
         raise ValueError("自定义力量周期至少需要 1 周计划。")
@@ -297,6 +301,30 @@ def _build_custom_strength_cycle_seed(payload: CycleCreateRequestSchema) -> dict
         "config": definition,
         "compiled_weeks": compiled_weeks,
     }
+
+
+def _validate_custom_strength_request_consistency(
+    payload: CycleCreateRequestSchema,
+    definition: dict[str, Any],
+) -> None:
+    if payload.startDate != definition["startDate"]:
+        raise ValueError("自定义力量周期的 startDate 与 config.startDate 不一致。")
+    if _normalize_custom_strength_base_lifts(payload.baseLifts) != definition["mainLifts"]:
+        raise ValueError("自定义力量周期的 baseLifts 与 config.mainLifts 不一致。")
+
+
+def _normalize_custom_strength_base_lifts(base_lifts: dict[str, Any]) -> dict[str, dict[str, float]]:
+    normalized: dict[str, dict[str, float]] = {}
+    for lift_key, lift_payload in base_lifts.items():
+        if lift_key not in {"squat", "bench", "deadlift", "ohp"}:
+            continue
+        if not isinstance(lift_payload, dict):
+            continue
+        tm_value = lift_payload.get("tm")
+        if isinstance(tm_value, bool) or not isinstance(tm_value, int | float):
+            continue
+        normalized[lift_key] = {"tm": float(tm_value)}
+    return normalized
 
 
 def _build_week_bounds(start_date: str, week_index: int) -> tuple[str, str]:

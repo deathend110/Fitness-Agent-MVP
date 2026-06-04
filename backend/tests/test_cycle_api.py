@@ -167,6 +167,19 @@ def _build_custom_strength_cycle_payload() -> dict[str, Any]:
     }
 
 
+def _build_custom_strength_cycle_payload_with_conflict(
+    *,
+    start_date: str | None = None,
+    squat_tm: float | None = None,
+) -> dict[str, Any]:
+    payload = _build_custom_strength_cycle_payload()
+    if start_date is not None:
+        payload["startDate"] = start_date
+    if squat_tm is not None:
+        payload["baseLifts"]["squat"]["tm"] = squat_tm
+    return payload
+
+
 @pytest.mark.asyncio
 async def test_plan_source_defaults_to_manual_and_can_switch_to_cycle(api_client: tuple[AsyncClient, Any]) -> None:
     client, session_factory = api_client
@@ -314,6 +327,57 @@ async def test_generate_next_week_creates_pending_snapshot_without_advancing_cur
     active_response = await client.get("/api/cycles/active")
     assert active_response.json()["cycle"]["currentWeekIndex"] == 1
     assert active_response.json()["cycle"]["pendingWeekIndex"] == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_next_week_rejects_custom_strength_after_last_precompiled_week(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+    create_response = await client.post("/api/cycles", json=_build_custom_strength_cycle_payload())
+    cycle_id = create_response.json()["cycle"]["id"]
+
+    confirm_response = await client.post(f"/api/cycles/{cycle_id}/confirm-next-week")
+    assert confirm_response.status_code == 200
+    assert confirm_response.json()["cycle"]["currentWeekIndex"] == 2
+
+    response = await client.post(f"/api/cycles/{cycle_id}/generate-next-week")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "自定义力量周期已到最后一周，不能继续生成下一周。"
+
+
+@pytest.mark.asyncio
+async def test_create_cycle_rejects_custom_strength_when_top_level_start_date_conflicts(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    response = await client.post(
+        "/api/cycles",
+        json=_build_custom_strength_cycle_payload_with_conflict(start_date="2026-06-16"),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "自定义力量周期的 startDate 与 config.startDate 不一致。"
+
+
+@pytest.mark.asyncio
+async def test_create_cycle_rejects_custom_strength_when_top_level_base_lifts_conflict(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    response = await client.post(
+        "/api/cycles",
+        json=_build_custom_strength_cycle_payload_with_conflict(squat_tm=181),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "自定义力量周期的 baseLifts 与 config.mainLifts 不一致。"
 
 
 @pytest.mark.asyncio
