@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from math import isfinite
 from typing import Any
 
 from backend.schemas import CustomStrengthDefinitionSchema
@@ -74,14 +75,19 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
 def _parse_positive_int(raw_value: Any, field_name: str) -> int:
     if isinstance(raw_value, bool) or not isinstance(raw_value, int):
         raise ValueError(f"{field_name} 必须为合法正整数。")
+    if raw_value <= 0:
+        raise ValueError(f"{field_name} 必须为合法正整数。")
     return raw_value
 
 
 def _parse_positive_float(raw_value: Any, field_name: str) -> float:
     try:
-        return float(raw_value)
+        parsed_value = float(raw_value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{field_name} 必须为合法数字。") from exc
+    if not isfinite(parsed_value):
+        raise ValueError(f"{field_name} 必须为有限数字。")
+    return parsed_value
 
 
 def _validate_custom_strength_exercise(
@@ -109,6 +115,8 @@ def _validate_custom_strength_exercise(
         percent_tm = _parse_positive_float(progression.get("percentTm"), "percentTm")
         if percent_tm <= 0:
             raise ValueError("主项动作的 percentTm 必须大于 0。")
+        # 在进入 schema 前就把百分比归一化为稳定 float，避免保留原始字符串。
+        progression["percentTm"] = percent_tm
         return
 
     if progression_mode != "static":

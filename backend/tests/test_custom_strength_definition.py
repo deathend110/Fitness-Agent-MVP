@@ -158,6 +158,34 @@ def test_normalize_custom_strength_definition_rejects_non_static_mode_on_variati
         normalize_custom_strength_definition(payload)
 
 
+@pytest.mark.parametrize("category", ["variation", "accessory"])
+def test_normalize_custom_strength_definition_accepts_static_mode_on_non_main_exercise(
+    category: str,
+) -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"][0]["category"] = category
+    payload["weeks"][0]["days"][0]["exercises"][0]["progression"] = {
+        "mode": "static",
+    }
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    exercise = normalized["weeks"][0]["days"][0]["exercises"][0]
+    assert exercise["category"] == category
+    assert exercise["progression"]["mode"] == "static"
+
+
+def test_normalize_custom_strength_definition_normalizes_percent_tm_string_to_float() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"][0]["progression"]["percentTm"] = "0.75"
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    percent_tm = normalized["weeks"][0]["days"][0]["exercises"][0]["progression"]["percentTm"]
+    assert percent_tm == 0.75
+    assert isinstance(percent_tm, float)
+
+
 @pytest.mark.parametrize(
     ("field", "invalid_value"),
     [
@@ -177,6 +205,28 @@ def test_normalize_custom_strength_definition_raises_stable_value_error_for_inva
         payload["weeks"][0]["days"][0]["exercises"][0]["progression"]["percentTm"] = invalid_value
 
     with pytest.raises(ValueError, match=field):
+        normalize_custom_strength_definition(payload)
+
+
+@pytest.mark.parametrize("invalid_value", ["NaN", "inf", "-inf", float("nan"), float("inf"), float("-inf")])
+def test_normalize_custom_strength_definition_rejects_non_finite_percent_tm(
+    invalid_value,
+) -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"][0]["progression"]["percentTm"] = invalid_value
+
+    with pytest.raises(ValueError, match="percentTm"):
+        normalize_custom_strength_definition(payload)
+
+
+@pytest.mark.parametrize("invalid_day_index", [0, -1])
+def test_normalize_custom_strength_definition_rejects_non_positive_day_index(
+    invalid_day_index: int,
+) -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["dayIndex"] = invalid_day_index
+
+    with pytest.raises(ValueError, match="dayIndex"):
         normalize_custom_strength_definition(payload)
 
 
