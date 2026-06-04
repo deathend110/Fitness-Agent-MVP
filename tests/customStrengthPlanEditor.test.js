@@ -21,3 +21,11 @@ test('PlanTab 会把 custom strength 草稿与 preset 周期草稿拆开编排',
   assert.match(source, /buildCreateCustomStrengthCyclePayload\(customStrengthDraft\)/)
   assert.match(source, /function handleCreateCustomStrengthCyclePlan\(/)
 })
+
+test('CustomStrengthPlanEditor 会把 canCreate 与 isSubmitting 一起用于创建按钮禁用条件', () => {
+  const source = readFileSync('src/components/plan-settings/CustomStrengthPlanEditor.jsx', 'utf-8')
+
+  assert.match(source, /function CustomStrengthPlanEditor\(\{ canCreate, draft, isSubmitting, onChange, onSubmit \}\)/)
+  assert.match(source, /disabled=\{isSubmitting \|\| !canCreate\}/)
+  assert.match(source, /创建自定义力量周期计划/)
+})
