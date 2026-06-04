@@ -180,3 +180,20 @@ test('buildCreateCustomStrengthCyclePayload 会过滤 weeks 中的异常数组�
   assert.equal(payload.config.totalWeeks, 1)
   assert.deepEqual(payload.config.weeks, [validWeek])
 })
+
+test('buildCreateCustomStrengthCyclePayload 会过滤 weeks 中的数组型坏元素', () => {
+  const validWeek = { weekIndex: 1, days: [] }
+
+  const payload = buildCreateCustomStrengthCyclePayload({
+    name: '数组型坏周草稿',
+    startDate: '2026-06-09',
+    totalWeeks: 5,
+    mainLifts: {
+      squat: { tm: '180' },
+    },
+    weeks: [[], [1], validWeek],
+  })
+
+  assert.equal(payload.config.totalWeeks, 1)
+  assert.deepEqual(payload.config.weeks, [validWeek])
+})
