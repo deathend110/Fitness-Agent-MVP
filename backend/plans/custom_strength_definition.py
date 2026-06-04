@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 from math import isfinite
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -11,6 +13,7 @@ from backend.schemas import CustomStrengthDefinitionSchema
 
 VALID_CATEGORIES = {"main", "variation", "accessory"}
 VALID_MAIN_LIFTS = {"squat", "bench", "deadlift", "ohp"}
+ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, Any]:
@@ -18,6 +21,7 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
     if definition.get("planType") != "custom_strength":
         raise ValueError("planType 必须为 custom_strength。")
 
+    definition["startDate"] = _parse_iso_start_date(definition.get("startDate"))
     total_weeks = _parse_positive_int(definition.get("totalWeeks"), "totalWeeks")
     weeks = definition.get("weeks") if isinstance(definition.get("weeks"), list) else []
     if total_weeks <= 0 or len(weeks) != total_weeks:
@@ -109,6 +113,16 @@ def _parse_day_index(raw_value: Any) -> int:
     if day_index > 7:
         raise ValueError("dayIndex 必须为 1..7 的合法正整数。")
     return day_index
+
+
+def _parse_iso_start_date(raw_value: Any) -> str:
+    # 计划起始日需要在定义层就拒绝非标准日期字符串，避免 datetime/schema 宽松解析造成脏数据混入。
+    if not isinstance(raw_value, str) or not ISO_DATE_PATTERN.fullmatch(raw_value):
+        raise ValueError("startDate 必须为 YYYY-MM-DD 格式的合法日期。")
+    try:
+        return date.fromisoformat(raw_value).isoformat()
+    except ValueError as exc:
+        raise ValueError("startDate 必须为 YYYY-MM-DD 格式的合法日期。") from exc
 
 
 def _validate_prescription(prescription: Any) -> dict[str, int]:

@@ -60,6 +60,25 @@ def test_normalize_custom_strength_definition_accepts_minimum_valid_definition()
     assert normalized["weeks"][0]["days"][0]["exercises"][0]["category"] == "main"
 
 
+@pytest.mark.parametrize("invalid_start_date", ["not-a-date", "2026-06-09T00:00:00"])
+def test_normalize_custom_strength_definition_rejects_invalid_start_date_with_stable_value_error(
+    invalid_start_date: str,
+) -> None:
+    payload = build_valid_definition()
+    payload["startDate"] = invalid_start_date
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "startDate 必须为 YYYY-MM-DD 格式的合法日期。"
+
+
+def test_normalize_custom_strength_definition_accepts_valid_start_date_and_keeps_stable_iso_format() -> None:
+    normalized = normalize_custom_strength_definition(build_valid_definition())
+
+    assert normalized["startDate"] == "2026-06-09"
+
+
 def test_normalize_custom_strength_definition_rejects_missing_tm_for_referenced_main_lift() -> None:
     payload = build_valid_definition()
     payload["mainLifts"].pop("squat")
