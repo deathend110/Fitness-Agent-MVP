@@ -68,8 +68,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
-  - 通过“计划设置”管理 `非周期计划 / 周期计划` 的手动切换
-  - 管理周期模板选择、开始日期、目标、`1RM / TM`、训练日、生成下一周、确认推进和停止周期
+  - 通过“计划设置”分开管理“设置页当前选择模式”和“真实生效的计划来源”
+  - 管理周期模板选择、开始日期、目标、`1RM / TM`、训练日、启用当前周期、生成下一周、确认推进和停止周期
   - 管理按日训练类型、动作增删改和动作表单状态
   - 周期模式激活时展示的是 `effectiveWeeklyPlan` 对应的当前周投影
 
@@ -272,7 +272,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 ### 计划来源与有效周计划
 
-1. 前端通过“计划设置”选择 `manual` 或 `cycle`
+1. 前端通过“计划设置”选择当前设置模式，并在用户确认后再切换 `manual` 或 `cycle`
 2. `manual` 来源直接读取和写回 [backend/api/weekly_plan.py](backend/api/weekly_plan.py)
 3. `cycle` 来源通过 [backend/api/cycle_plans.py](backend/api/cycle_plans.py) 创建或推进活动周期
 4. [backend/agent/active_plan.py](backend/agent/active_plan.py) 根据 `plan_source_state` 决定返回：

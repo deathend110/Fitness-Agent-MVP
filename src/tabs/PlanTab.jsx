@@ -4,16 +4,14 @@ import PlanDayCard, { createEmptyExerciseDraft } from '../components/PlanDayCard
 import PlanWeekGrid from '../components/plan-grid/PlanWeekGrid.jsx'
 import PlanWeekGridColumn from '../components/plan-grid/PlanWeekGridColumn.jsx'
 import PlanHeaderToolbar from '../components/plan-header/PlanHeaderToolbar.jsx'
+import PlanSettingsPanel from '../components/plan-settings/PlanSettingsPanel.jsx'
 import {
   buildCreateCyclePlanPayload,
   createCyclePlanDraft,
-  cyclePlanWeekdayOptions,
-  toggleTrainingDay,
 } from '../utils/cyclePlanForm.js'
 import {
-  buildCyclePresetSummary,
-  getCyclePlanSourceLabel,
-  getCycleStatusLabel,
+  buildCycleSettingsStatus,
+  resolvePlanSettingsMode,
 } from '../utils/cyclePlanView.js'
 import { getTodayStr } from '../utils/calc.js'
 import { buildExerciseSavePayload, getRpeValidationError } from '../utils/exerciseForm.js'
@@ -59,6 +57,9 @@ function PlanTab({
   const [cycleDraft, setCycleDraft] = useState(() =>
     createCyclePlanDraft(profile, activeCyclePlan),
   )
+  const [planSettingsMode, setPlanSettingsMode] = useState(() =>
+    resolvePlanSettingsMode(planSource, activeCyclePlan),
+  )
   const [cyclePresets, setCyclePresets] = useState([])
   const [isCyclePresetsLoading, setIsCyclePresetsLoading] = useState(false)
   const [isCycleSubmitting, setIsCycleSubmitting] = useState(false)
@@ -88,9 +89,7 @@ function PlanTab({
       }),
     [displayedWeeklyPlan, todayStr],
   )
-  const planSourceLabel = getCyclePlanSourceLabel(planSource)
-  const activeCycleStatus = getCycleStatusLabel(activeCyclePlan?.cycle?.status)
-  const activeCycleSummary = buildCyclePresetSummary(activeCyclePlan)
+  const cycleSettingsStatus = buildCycleSettingsStatus({ planSource, activeCyclePlan })
 
   function isCycleOverrideMode() {
     return (
@@ -202,7 +201,13 @@ function PlanTab({
   }
 
   async function openPlanSettings() {
-    setIsPlanSettingsOpen((current) => !current)
+    setIsPlanSettingsOpen((current) => {
+      const nextOpen = !current
+      if (nextOpen) {
+        setPlanSettingsMode(resolvePlanSettingsMode(planSource, activeCyclePlan))
+      }
+      return nextOpen
+    })
 
     if (cyclePresets.length > 0 || isCyclePresetsLoading) {
       return
@@ -223,26 +228,54 @@ function PlanTab({
     setCycleDraft(nextDraft)
   }
 
-  function handleCycleSourceSwitch(nextSource) {
-    if (nextSource === 'manual') {
-      setIsCycleSubmitting(true)
-      backendClient
-        .updatePlanSource({ activeSource: 'manual' })
-        .then((nextPlanSource) => {
-          onPlanSourceChange?.(nextPlanSource ?? { activeSource: 'manual' })
-          onEffectiveWeeklyPlanChange?.(weeklyPlan)
-          setCycleActionMessage('已切换回非周期计划。')
-        })
-        .catch((error) => {
-          setCycleActionMessage(error.message)
-        })
-        .finally(() => {
-          setIsCycleSubmitting(false)
-        })
+  function handleSelectPlanSettingsMode(nextMode) {
+    setPlanSettingsMode(resolvePlanSettingsMode(planSource, activeCyclePlan, nextMode))
+  }
+
+  async function handleSwitchToManualSource() {
+    setIsCycleSubmitting(true)
+    setCycleActionMessage('')
+
+    try {
+      const nextPlanSource = await backendClient.updatePlanSource({ activeSource: 'manual' })
+      onPlanSourceChange?.(nextPlanSource ?? { activeSource: 'manual' })
+      onEffectiveWeeklyPlanChange?.(weeklyPlan)
+      setPlanSettingsMode('manual')
+      setCycleActionMessage('已切换回非周期计划。')
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    } finally {
+      setIsCycleSubmitting(false)
+    }
+  }
+
+  async function handleSwitchToCycleSource() {
+    if (!activeCyclePlan?.cycle?.id) {
+      setCycleActionMessage('请先创建周期计划，再启用周期计划来源。')
       return
     }
 
-    onPlanSourceChange?.({ activeSource: 'cycle' })
+    setIsCycleSubmitting(true)
+    setCycleActionMessage('')
+    try {
+      const nextPlanSource = await backendClient.updatePlanSource({ activeSource: 'cycle' })
+      const nextActiveCyclePlan = await backendClient.getActiveCyclePlan()
+      const nextEffectivePlan = readNextEffectivePlan(nextActiveCyclePlan)
+
+      onPlanSourceChange?.(nextPlanSource ?? { activeSource: 'cycle' })
+      if (nextActiveCyclePlan) {
+        onActiveCyclePlanChange?.(nextActiveCyclePlan)
+      }
+      if (nextEffectivePlan) {
+        onEffectiveWeeklyPlanChange?.(nextEffectivePlan)
+      }
+      setPlanSettingsMode('cycle')
+      setCycleActionMessage('已切换到周期计划。')
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    } finally {
+      setIsCycleSubmitting(false)
+    }
   }
 
   function buildNextActiveCyclePayload(response) {
@@ -275,6 +308,7 @@ function PlanTab({
       if (nextEffectivePlan) {
         onEffectiveWeeklyPlanChange?.(nextEffectivePlan)
       }
+      setPlanSettingsMode('cycle')
       setCycleActionMessage('周期计划已创建。')
     } catch (error) {
       setCycleActionMessage(error.message)
@@ -345,6 +379,7 @@ function PlanTab({
       onPlanSourceChange?.({ activeSource: 'manual' })
       onActiveCyclePlanChange?.(nextActiveCyclePlan)
       onEffectiveWeeklyPlanChange?.(weeklyPlan)
+      setPlanSettingsMode('manual')
       setCycleActionMessage('已停止当前周期。')
     } catch (error) {
       setCycleActionMessage(error.message)
@@ -364,200 +399,24 @@ function PlanTab({
       />
 
       {isPlanSettingsOpen ? (
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm shadow-black/10">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">计划设置入口</p>
-              <p className="text-sm text-slate-500">{planSourceLabel.label}</p>
-              {activeCycleSummary ? (
-                <p className="text-xs text-slate-500">
-                  {activeCycleSummary} · {activeCycleStatus.label}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium"
-                onClick={() => handleCycleSourceSwitch('manual')}
-                type="button"
-              >
-                非周期计划
-              </button>
-              <button
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium"
-                onClick={() => handleCycleSourceSwitch('cycle')}
-                type="button"
-              >
-                周期计划
-              </button>
-            </div>
-          </div>
-
-          {planSource.activeSource === 'cycle' ? (
-            <div className="space-y-4 rounded-xl bg-slate-50 p-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1 text-sm">
-                  <span className="font-medium text-slate-700">周期模板</span>
-                  <select
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                    onChange={(event) =>
-                      updateCycleDraft({
-                        ...cycleDraft,
-                        presetKey: event.target.value,
-                      })
-                    }
-                    value={cycleDraft.presetKey}
-                  >
-                    {isCyclePresetsLoading ? <option value="">加载中...</option> : null}
-                    {cyclePresets.map((preset) => (
-                      <option key={preset.key} value={preset.key}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1 text-sm">
-                  <span className="font-medium text-slate-700">开始日期</span>
-                  <input
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                    onChange={(event) =>
-                      updateCycleDraft({
-                        ...cycleDraft,
-                        startDate: event.target.value,
-                      })
-                    }
-                    type="date"
-                    value={cycleDraft.startDate}
-                  />
-                </label>
-              </div>
-
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-700">目标</span>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                  onChange={(event) =>
-                    updateCycleDraft({
-                      ...cycleDraft,
-                      goal: event.target.value,
-                    })
-                  }
-                  placeholder="例如：strength / 增肌"
-                  value={cycleDraft.goal}
-                />
-              </label>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                {['squat', 'bench', 'deadlift'].map((liftKey) => (
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3" key={liftKey}>
-                    <p className="text-sm font-semibold text-slate-800">{liftKey}</p>
-                    <input
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      onChange={(event) =>
-                        updateCycleDraft({
-                          ...cycleDraft,
-                          baseLifts: {
-                            ...cycleDraft.baseLifts,
-                            [liftKey]: {
-                              ...cycleDraft.baseLifts[liftKey],
-                              oneRm: event.target.value,
-                            },
-                          },
-                        })
-                      }
-                      placeholder="1RM"
-                      value={cycleDraft.baseLifts[liftKey].oneRm}
-                    />
-                    <input
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      onChange={(event) =>
-                        updateCycleDraft({
-                          ...cycleDraft,
-                          baseLifts: {
-                            ...cycleDraft.baseLifts,
-                            [liftKey]: {
-                              ...cycleDraft.baseLifts[liftKey],
-                              tm: event.target.value,
-                            },
-                          },
-                        })
-                      }
-                      placeholder="TM"
-                      value={cycleDraft.baseLifts[liftKey].tm}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-slate-700">训练日</p>
-                <div className="flex flex-wrap gap-2">
-                  {cyclePlanWeekdayOptions.map((dayKey) => (
-                    <button
-                      className="rounded-full border border-slate-200 px-3 py-1 text-sm"
-                      key={dayKey}
-                      onClick={() =>
-                        updateCycleDraft({
-                          ...cycleDraft,
-                          config: {
-                            ...cycleDraft.config,
-                            trainingDays: toggleTrainingDay(
-                              cycleDraft.config.trainingDays,
-                              dayKey,
-                            ),
-                          },
-                        })
-                      }
-                      type="button"
-                    >
-                      {dayKey}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-                  disabled={isCycleSubmitting}
-                  onClick={handleCreateCyclePlan}
-                  type="button"
-                >
-                  创建周期计划
-                </button>
-                <button
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium"
-                  disabled={isCycleSubmitting || !activeCyclePlan?.cycle?.id}
-                  onClick={handleGenerateNextWeek}
-                  type="button"
-                >
-                  生成下一周
-                </button>
-                <button
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium"
-                  disabled={isCycleSubmitting || !activeCyclePlan?.cycle?.id}
-                  onClick={handleConfirmNextWeek}
-                  type="button"
-                >
-                  确认进入下一周
-                </button>
-                <button
-                  className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-medium text-rose-600"
-                  disabled={isCycleSubmitting || !activeCyclePlan?.cycle?.id}
-                  onClick={handleStopCyclePlan}
-                  type="button"
-                >
-                  停止周期
-                </button>
-              </div>
-
-              {cycleActionMessage ? (
-                <p className="text-sm text-slate-500">{cycleActionMessage}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
+        <PlanSettingsPanel
+          activeCyclePlan={activeCyclePlan}
+          cycleActionMessage={cycleActionMessage}
+          cycleDraft={cycleDraft}
+          cyclePresets={cyclePresets}
+          isCyclePresetsLoading={isCyclePresetsLoading}
+          isCycleSubmitting={isCycleSubmitting}
+          onConfirmNextWeek={handleConfirmNextWeek}
+          onCreateCyclePlan={handleCreateCyclePlan}
+          onGenerateNextWeek={handleGenerateNextWeek}
+          onSelectSettingsMode={handleSelectPlanSettingsMode}
+          onStopCyclePlan={handleStopCyclePlan}
+          onSwitchToCycleSource={handleSwitchToCycleSource}
+          onSwitchToManualSource={handleSwitchToManualSource}
+          onUpdateCycleDraft={updateCycleDraft}
+          planSettingsMode={planSettingsMode}
+          settingsStatus={cycleSettingsStatus}
+        />
       ) : null}
 
       <PlanWeekGrid

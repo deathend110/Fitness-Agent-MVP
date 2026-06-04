@@ -266,6 +266,7 @@ def main() -> None:
 
             open_plan_settings(page)
             page.get_by_role("button", name="非周期计划", exact=True).click()
+            page.get_by_role("button", name="切换为非周期计划").click()
 
             expect(page.get_by_text("当前来源：非周期计划")).to_be_visible(timeout=10_000)
             expect(page.get_by_text(MANUAL_EXERCISE_NAME)).to_be_visible(timeout=10_000)
