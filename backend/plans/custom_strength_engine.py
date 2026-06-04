@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.plans import cycle_engine
 from backend.plans.cycle_engine import _materialize_canonical_exercise
 
 WEEKDAY_ORDER = (
@@ -100,7 +101,8 @@ def _materialize_exercise(
     load_mode = "percentage" if category == "main" else "fixed"
     ref_1rm = _resolve_ref_1rm(exercise, category)
     pct = _resolve_pct(exercise, category)
-    load_ref = _build_load_ref(main_lifts=main_lifts, ref_1rm=ref_1rm) if category == "main" else None
+    # 复用周期引擎已有 loadRef 语义，避免 TM / oneRm 优先级与 source 字段漂移。
+    load_ref = cycle_engine._build_load_ref(main_lifts, ref_1rm) if category == "main" else None
     exercise_id = _build_exercise_id(
         raw_id=exercise.get("id"),
         week_index=week_index,
@@ -158,23 +160,6 @@ def _resolve_pct(exercise: dict[str, Any], category: str) -> float | None:
     if isinstance(percent_tm, int | float):
         return float(percent_tm)
     return None
-
-
-def _build_load_ref(
-    *,
-    main_lifts: dict[str, dict[str, Any]],
-    ref_1rm: str | None,
-) -> dict[str, Any] | None:
-    if ref_1rm is None:
-        return None
-    lift_payload = main_lifts.get(ref_1rm)
-    if not isinstance(lift_payload, dict):
-        return {"lift": ref_1rm, "value": None, "source": None}
-    tm = _read_number(lift_payload.get("tm"))
-    if tm is not None:
-        return {"lift": ref_1rm, "value": tm, "source": "tm"}
-    one_rm = _read_number(lift_payload.get("oneRm"))
-    return {"lift": ref_1rm, "value": one_rm, "source": "oneRm" if one_rm is not None else None}
 
 
 def _build_exercise_id(

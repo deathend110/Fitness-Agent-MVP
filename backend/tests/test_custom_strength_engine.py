@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import pytest
 
+from backend.plans import cycle_engine
 from backend.plans.custom_strength_definition import normalize_custom_strength_definition
 from backend.plans.custom_strength_engine import build_custom_strength_cycle_weeks
 
@@ -137,6 +138,7 @@ def test_build_custom_strength_cycle_weeks_materializes_canonical_fields_for_mai
 
     assert main_exercise["template"]["setType"] == "straight"
     assert main_exercise["template"]["repsText"] == "5"
+    assert main_exercise["tier"] == "main"
     assert main_exercise["instance"]["note"] == "主项周一"
 
     assert variation["id"] == "custom-w1-d1-2"
@@ -147,6 +149,35 @@ def test_build_custom_strength_cycle_weeks_materializes_canonical_fields_for_mai
     assert variation["instance"]["note"] == "底部停顿 2 秒"
     assert variation["instance"]["pct"] is None
     assert variation["instance"]["kg"] is None
+
+
+def test_build_custom_strength_cycle_weeks_reuses_cycle_engine_load_ref_builder_for_one_rm_fallback() -> None:
+    definition = normalize_custom_strength_definition(_build_definition())
+    definition["mainLifts"]["squat"] = {"oneRm": 200}
+
+    original_builder = cycle_engine._build_load_ref
+    calls: list[tuple[dict, str]] = []
+
+    def spy_builder(base_lifts: dict, ref_1rm: str) -> dict | None:
+        calls.append((deepcopy(base_lifts), ref_1rm))
+        return original_builder(base_lifts, ref_1rm)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(cycle_engine, "_build_load_ref", spy_builder)
+    try:
+        weekly_plan = build_custom_strength_cycle_weeks(definition)
+    finally:
+        monkeypatch.undo()
+
+    main_exercise = weekly_plan[0]["Monday"]["exercises"][0]
+
+    assert calls
+    assert all(call == (definition["mainLifts"], "squat") for call in calls)
+    assert main_exercise["loadRef"] == {"lift": "squat", "value": 200.0, "source": "oneRm"}
+    assert main_exercise["template"]["setType"] == "straight"
+    assert main_exercise["template"]["repsText"] == "5"
+    assert main_exercise["tier"] == "main"
+    assert main_exercise["instance"]["note"] == "主项周一"
 
 
 def test_build_custom_strength_cycle_weeks_rejects_invalid_day_and_exercise_payloads() -> None:
