@@ -123,12 +123,12 @@ class CyclePresetSchema(BaseModel):
 class ActiveCyclePlanSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    id: int | None = None
-    presetKey: str = ""
-    status: str = "draft"
-    startDate: str = ""
-    currentWeekIndex: int = 1
-    pendingWeekIndex: int | None = None
+    id: int
+    presetKey: str
+    status: Literal["draft", "active", "completed", "archived"]
+    startDate: str
+    currentWeekIndex: int = Field(..., ge=1)
+    pendingWeekIndex: int | None = Field(default=None, ge=1)
     goal: str = ""
     baseLifts: dict[str, Any] = Field(default_factory=dict)
     config: dict[str, Any] = Field(default_factory=dict)

@@ -80,8 +80,19 @@ class PlanSourceState(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # 该表只保存当前训练计划入口，显式限制来源值，避免前后端把未知模式写入后破坏演示态切换。
-    active_source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    active_source: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="manual",
+        server_default=text("'manual'"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=utc_now,
+    )
 
 
 class ActiveCyclePlan(Base):
@@ -106,18 +117,39 @@ class ActiveCyclePlan(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     preset_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="draft",
+        server_default=text("'draft'"),
+    )
     start_date: Mapped[str] = mapped_column(String(10), nullable=False)
-    current_week_index: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    current_week_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=text("1"),
+    )
     pending_week_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    goal: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    goal: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     # base_lifts 保留 oneRm/tm 等原始周期参数，后续周生成和重新确认都依赖这份基线快照。
     base_lifts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     last_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=utc_now,
+    )
 
 
 class CycleWeekSnapshot(Base):
@@ -135,11 +167,26 @@ class CycleWeekSnapshot(Base):
     generated_plan: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     # override_plan 保存用户或 AI 对某周计划的覆盖结果，不能在读写过程中被规范化丢失。
     override_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    is_confirmed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    is_confirmed: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default=text("0"),
+    )
     week_start: Mapped[str] = mapped_column(String(10), nullable=False)
     week_end: Mapped[str] = mapped_column(String(10), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=utc_now,
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=utc_now,
+    )
 
 
 class ChatSession(Base):

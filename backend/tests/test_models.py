@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import os
+import subprocess
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError
 
 from backend.db.database import create_all_tables, create_engine_and_session_factory
 from backend.db.models import (
@@ -19,6 +22,7 @@ from backend.db.models import (
     WeeklyPlanDay,
     utc_now,
 )
+from backend.schemas import ActiveCyclePlanSchema
 from backend.db.seed import DEFAULT_PLAN_SOURCE_STATE_ID, DEFAULT_PROFILE_ID, seed_if_empty
 
 
@@ -372,6 +376,182 @@ async def test_cycle_plan_models_update_updated_at_on_change(tmp_path: Path):
 
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cycle_plan_models_allow_database_side_timestamp_defaults(tmp_path: Path):
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'cycle-plan-db-defaults.db'}"
+    engine, session_factory = create_engine_and_session_factory(database_url)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+            await connection.exec_driver_sql(
+                """
+                INSERT INTO plan_source_state (id, active_source)
+                VALUES (1, 'manual')
+                """
+            )
+            await connection.exec_driver_sql(
+                """
+                INSERT INTO active_cycle_plan (
+                    id, preset_key, status, start_date, current_week_index, goal, base_lifts, config
+                ) VALUES (
+                    1, 'strength-4day', 'draft', '2026-06-02', 1, '力量提升',
+                    '{"squat":{"oneRm":180,"tm":162}}', '{"daysPerWeek":4}'
+                )
+                """
+            )
+            await connection.exec_driver_sql(
+                """
+                INSERT INTO cycle_week_snapshot (
+                    cycle_id, week_index, generated_plan, override_plan, week_start, week_end
+                ) VALUES (
+                    1, 1, '{"Monday":{"type":"lower"}}', NULL, '2026-06-02', '2026-06-08'
+                )
+                """
+            )
+
+            result = await connection.exec_driver_sql("SELECT updated_at FROM plan_source_state WHERE id = 1")
+            source_updated_at = result.scalar_one()
+
+            result = await connection.exec_driver_sql(
+                "SELECT created_at, updated_at FROM active_cycle_plan WHERE id = 1"
+            )
+            cycle_created_at, cycle_updated_at = result.one()
+
+            result = await connection.exec_driver_sql(
+                """
+                SELECT created_at, updated_at FROM cycle_week_snapshot
+                WHERE cycle_id = 1 AND week_index = 1
+                """
+            )
+            snapshot_created_at, snapshot_updated_at = result.one()
+
+        assert source_updated_at is not None
+        assert cycle_created_at is not None
+        assert cycle_updated_at is not None
+        assert snapshot_created_at is not None
+        assert snapshot_updated_at is not None
+
+    finally:
+        await engine.dispose()
+
+
+def test_active_cycle_plan_schema_requires_real_identity_fields():
+    schema = ActiveCyclePlanSchema(
+        id=7,
+        presetKey="strength-4day",
+        status="active",
+        startDate="2026-06-02",
+        currentWeekIndex=2,
+        pendingWeekIndex=3,
+        goal="力量提升",
+        baseLifts={"squat": {"oneRm": 180, "tm": 162}},
+        config={"daysPerWeek": 4},
+        createdAt=utc_now(),
+        updatedAt=utc_now(),
+    )
+
+    assert schema.presetKey == "strength-4day"
+
+    with pytest.raises(ValidationError):
+        ActiveCyclePlanSchema(
+            id=8,
+            status="draft",
+            startDate="2026-06-02",
+            currentWeekIndex=0,
+            goal="增肌",
+            baseLifts={},
+            config={},
+            createdAt=utc_now(),
+            updatedAt=utc_now(),
+        )
+
+
+def test_alembic_upgrade_head_creates_cycle_plan_tables_and_constraints(tmp_path: Path):
+    database_path = tmp_path / "alembic-cycle-plan.db"
+    database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
+    env = os.environ.copy()
+    env["DATABASE_URL"] = database_url
+
+    result = subprocess.run(
+        ["uv", "run", "alembic", "-c", "backend/alembic.ini", "upgrade", "head"],
+        cwd=r"g:\VSCODE-G\Fitness Agent MVP\.worktrees\cycle-plan-mode",
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+    import sqlite3
+
+    with sqlite3.connect(database_path) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table'
+                """
+            )
+        }
+        index_rows = list(
+            connection.execute(
+                """
+                SELECT name, sql FROM sqlite_master
+                WHERE type = 'index' AND tbl_name = 'active_cycle_plan'
+                """
+            )
+        )
+
+        connection.execute(
+            """
+            INSERT INTO plan_source_state (id, active_source)
+            VALUES (1, 'manual')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO active_cycle_plan (
+                preset_key, status, start_date, current_week_index, goal, base_lifts, config
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "strength-4day",
+                "draft",
+                "2026-06-02",
+                1,
+                "力量提升",
+                '{"squat":{"oneRm":180,"tm":162}}',
+                '{"daysPerWeek":4}',
+            ),
+        )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO active_cycle_plan (
+                    preset_key, status, start_date, current_week_index, goal, base_lifts, config
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "hypertrophy-5day",
+                    "active",
+                    "2026-06-09",
+                    1,
+                    "增肌",
+                    '{"bench":{"oneRm":120,"tm":108}}',
+                    '{"daysPerWeek":5}',
+                ),
+            )
+
+    assert "plan_source_state" in tables
+    assert "active_cycle_plan" in tables
+    assert "cycle_week_snapshot" in tables
+    assert any(row[0] == "ux_active_cycle_plan_single_open_cycle" for row in index_rows)
 
 
 @pytest.mark.asyncio
