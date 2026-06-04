@@ -229,14 +229,6 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [backend/files/parsers/](backend/files/parsers/)
   - 负责 Markdown、DOCX、Excel、图片摘要解析
 
-- [backend/plans/preset_library.py](backend/plans/preset_library.py)
-  - 管理周期计划预制模板注册表
-  - 当前提供 `candito_6week`、`madcow_5x5`、`texas_method` 三类模板元数据
-
-- [backend/plans/cycle_engine.py](backend/plans/cycle_engine.py)
-  - 负责按模板和基础力量参数生成确定性单周计划
-  - 负责合并单周 override，并保持输出兼容当前 `weeklyPlan` 结构
-
 ## 数据流
 
 ### 档案、周计划、今日日志
@@ -269,15 +261,6 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 4. 后端校验 proposal 并写回 `weekly_plan_day`
 5. 同步把相关 assistant 消息中的 suggestion 状态更新为 `committed`
 
-### 周期计划周生成
-
-1. 上层模块提供 `presetKey / weekIndex / baseLifts`
-2. [backend/plans/preset_library.py](backend/plans/preset_library.py) 校验模板和支持周次
-3. [backend/plans/cycle_engine.py](backend/plans/cycle_engine.py) 生成 7 天 `weeklyPlan`
-4. 百分比动作优先使用 `tm`，缺失时回退到 `oneRm`
-5. 输出同时保留扁平兼容字段与 `template / instance` 两层结构
-6. 如某周存在 override，合并逻辑只替换 override 声明过的 day
-
 ## 存储结构
 
 当前主数据源是 SQLite。关键表如下：
@@ -287,12 +270,6 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - `weekly_plan_day`
   - 一周七天的训练类型与动作数组
-
-- `active_cycle_plan`
-  - 当前周期计划元数据、基础力量快照和运行配置
-
-- `cycle_week_snapshot`
-  - 某个周期某一周的 generated plan 与 override plan 快照
 
 - `daily_log`
   - 某日体重、热量、蛋白质、睡眠、疲劳、步数、训练完成情况、备注和手动 TDEE
@@ -323,12 +300,6 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - `usage_record`
   - 模型使用量记录
-
-当前周期计划引擎虽然还未接入 API，但已经与上述周期表结构对齐：
-
-- `base_lifts` 继续保留 `oneRm / tm`
-- `generated_plan / override_plan` 统一使用兼容现有前后端的 `weeklyPlan` 形状
-- 百分比动作的 `ref1RM` 继续使用 `squat / bench / deadlift` 稳定键名
 
 ## AI 教练链路
 
