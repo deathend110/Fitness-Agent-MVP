@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import ActiveCyclePlan, CycleWeekSnapshot, PlanSourceState
 from backend.db.seed import DEFAULT_PLAN_SOURCE_STATE_ID
+from backend.plans.custom_strength_definition import normalize_custom_strength_definition
+from backend.plans.custom_strength_engine import build_custom_strength_cycle_weeks
 from backend.plans.cycle_engine import build_cycle_week_plan, merge_cycle_week_override
 from backend.plans.preset_library import list_cycle_presets
 from backend.schemas import (
@@ -54,45 +56,45 @@ async def create_active_cycle(
     if existing_cycle is not None:
         raise ValueError("当前存在未结束的活动周期，请先结束后再创建新周期。")
 
+    cycle_seed = _build_cycle_creation_seed(payload)
     cycle = ActiveCyclePlan(
-        preset_key=payload.presetKey,
+        preset_key=cycle_seed["preset_key"],
         status="active",
-        start_date=payload.startDate,
+        start_date=cycle_seed["start_date"],
         current_week_index=1,
         pending_week_index=None,
-        goal=payload.goal,
-        base_lifts=payload.baseLifts,
-        config=payload.config,
+        goal=cycle_seed["goal"],
+        base_lifts=cycle_seed["base_lifts"],
+        config=cycle_seed["config"],
     )
     session.add(cycle)
     await session.flush()
 
-    generated_plan = build_cycle_week_plan(
-        preset_key=payload.presetKey,
-        week_index=1,
-        base_lifts=payload.baseLifts,
-        config=payload.config,
-    )
-    week_start, week_end = _build_week_bounds(payload.startDate, 1)
-    snapshot = CycleWeekSnapshot(
-        cycle_id=cycle.id,
-        week_index=1,
-        generated_plan=generated_plan,
-        override_plan=None,
-        is_confirmed=True,
-        week_start=week_start,
-        week_end=week_end,
-    )
-    session.add(snapshot)
+    for week_index, generated_plan in enumerate(cycle_seed["compiled_weeks"], start=1):
+        week_start, week_end = _build_week_bounds(cycle_seed["start_date"], week_index)
+        session.add(
+            CycleWeekSnapshot(
+                cycle_id=cycle.id,
+                week_index=week_index,
+                generated_plan=generated_plan,
+                override_plan=None,
+                is_confirmed=week_index == 1,
+                week_start=week_start,
+                week_end=week_end,
+            )
+        )
 
     source_state = await get_or_create_plan_source_state(session)
     source_state.active_source = "cycle"
-    cycle.last_confirmed_at = snapshot.updated_at
+    first_snapshot = await session.get(CycleWeekSnapshot, {"cycle_id": cycle.id, "week_index": 1})
+    cycle.last_confirmed_at = first_snapshot.updated_at if first_snapshot is not None else None
     await session.commit()
     await session.refresh(cycle)
-    await session.refresh(snapshot)
     await session.refresh(source_state)
-    return build_active_cycle_detail(cycle, snapshot)
+    if first_snapshot is None:
+        raise ValueError("当前周快照创建失败。")
+    await session.refresh(first_snapshot)
+    return build_active_cycle_detail(cycle, first_snapshot)
 
 
 async def load_active_cycle_detail(session: AsyncSession) -> ActiveCycleDetailSchema | None:
@@ -259,6 +261,42 @@ async def _get_cycle_or_raise(session: AsyncSession, cycle_id: int) -> ActiveCyc
     if cycle is None:
         raise ValueError("活动周期不存在。")
     return cycle
+
+
+def _build_cycle_creation_seed(payload: CycleCreateRequestSchema) -> dict[str, Any]:
+    if payload.presetKey == "custom_strength":
+        return _build_custom_strength_cycle_seed(payload)
+
+    generated_plan = build_cycle_week_plan(
+        preset_key=payload.presetKey,
+        week_index=1,
+        base_lifts=payload.baseLifts,
+        config=payload.config,
+    )
+    return {
+        "preset_key": payload.presetKey,
+        "start_date": payload.startDate,
+        "goal": payload.goal,
+        "base_lifts": payload.baseLifts,
+        "config": payload.config,
+        "compiled_weeks": [generated_plan],
+    }
+
+
+def _build_custom_strength_cycle_seed(payload: CycleCreateRequestSchema) -> dict[str, Any]:
+    # 自定义力量创建链路需要在 service 层完成归一化和编译，这样 API contract 仍保持显式且下游无需理解来源差异。
+    definition = normalize_custom_strength_definition(payload.config)
+    compiled_weeks = build_custom_strength_cycle_weeks(definition)
+    if not compiled_weeks:
+        raise ValueError("自定义力量周期至少需要 1 周计划。")
+    return {
+        "preset_key": "custom_strength",
+        "start_date": definition["startDate"],
+        "goal": payload.goal,
+        "base_lifts": definition["mainLifts"],
+        "config": definition,
+        "compiled_weeks": compiled_weeks,
+    }
 
 
 def _build_week_bounds(start_date: str, week_index: int) -> tuple[str, str]:

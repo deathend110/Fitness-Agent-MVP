@@ -95,6 +95,78 @@ def _build_create_cycle_payload() -> dict[str, Any]:
     }
 
 
+def _build_custom_strength_cycle_payload() -> dict[str, Any]:
+    return {
+        "presetKey": "custom_strength",
+        "startDate": "2026-06-09",
+        "goal": "strength",
+        "baseLifts": {
+            "squat": {"tm": 180},
+            "bench": {"tm": 120},
+        },
+        "config": {
+            "planType": "custom_strength",
+            "name": "四周力量周期",
+            "startDate": "2026-06-09",
+            "totalWeeks": 2,
+            "mainLifts": {
+                "squat": {"tm": 180},
+                "bench": {"tm": 120},
+            },
+            "weeks": [
+                {
+                    "weekIndex": 1,
+                    "days": [
+                        {
+                            "dayIndex": 1,
+                            "label": "周一",
+                            "type": "lower_strength",
+                            "exercises": [
+                                {
+                                    "id": "w1d1-squat",
+                                    "name": "Back Squat",
+                                    "category": "main",
+                                    "progression": {
+                                        "mode": "percent_tm",
+                                        "liftKey": "squat",
+                                        "percentTm": 0.75,
+                                    },
+                                    "prescription": {"sets": 5, "reps": 5},
+                                    "notes": "",
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "weekIndex": 2,
+                    "days": [
+                        {
+                            "dayIndex": 1,
+                            "label": "周一",
+                            "type": "lower_intensity",
+                            "exercises": [
+                                {
+                                    "id": "w2d1-squat",
+                                    "name": "Back Squat",
+                                    "category": "main",
+                                    "progression": {
+                                        "mode": "percent_tm",
+                                        "liftKey": "squat",
+                                        "percentTm": 0.8,
+                                    },
+                                    "prescription": {"sets": 4, "reps": 4},
+                                    "notes": "",
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ],
+        },
+    }
+
+
 @pytest.mark.asyncio
 async def test_plan_source_defaults_to_manual_and_can_switch_to_cycle(api_client: tuple[AsyncClient, Any]) -> None:
     client, session_factory = api_client
@@ -147,6 +219,43 @@ async def test_create_cycle_creates_active_cycle_first_snapshot_and_switches_sou
     assert source.active_source == "cycle"
     assert snapshot is not None
     assert snapshot.is_confirmed is True
+
+
+@pytest.mark.asyncio
+async def test_create_custom_strength_cycle_generates_all_week_snapshots(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    response = await client.post("/api/cycles", json=_build_custom_strength_cycle_payload())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["cycle"]["presetKey"] == "custom_strength"
+    assert payload["cycle"]["baseLifts"] == {
+        "squat": {"tm": 180.0},
+        "bench": {"tm": 120.0},
+    }
+    assert payload["cycle"]["config"]["planType"] == "custom_strength"
+    assert payload["effectivePlan"]["Monday"]["exercises"][0]["pct"] == 0.75
+
+    async with session_factory() as session:
+        cycle = (await session.execute(select(ActiveCyclePlan))).scalar_one()
+        snapshots = (
+            await session.execute(
+                select(CycleWeekSnapshot)
+                .where(CycleWeekSnapshot.cycle_id == cycle.id)
+                .order_by(CycleWeekSnapshot.week_index.asc())
+            )
+        ).scalars().all()
+
+    assert len(snapshots) == 2
+    assert snapshots[0].week_index == 1
+    assert snapshots[0].is_confirmed is True
+    assert snapshots[1].week_index == 2
+    assert snapshots[1].is_confirmed is False
+    assert snapshots[1].generated_plan["Monday"]["type"] == "lower_intensity"
 
 
 @pytest.mark.asyncio
