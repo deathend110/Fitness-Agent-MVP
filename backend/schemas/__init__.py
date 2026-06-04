@@ -139,6 +139,39 @@ class ActiveCyclePlanSchema(BaseModel):
     updatedAt: datetime | None = None
 
 
+class CycleCreateRequestSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    presetKey: str
+    startDate: str
+    goal: str = ""
+    baseLifts: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class CycleWeekSnapshotSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    cycleId: int
+    weekIndex: int
+    generatedPlan: dict[str, Any]
+    overridePlan: dict[str, Any] | None = None
+    effectivePlan: dict[str, Any]
+    isConfirmed: bool
+    weekStart: str
+    weekEnd: str
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
+
+class ActiveCycleDetailSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    cycle: ActiveCyclePlanSchema
+    currentWeek: CycleWeekSnapshotSchema
+    effectivePlan: dict[str, Any]
+
+
 class ChatSessionCreateSchema(BaseModel):
     title: str | None = None
 
