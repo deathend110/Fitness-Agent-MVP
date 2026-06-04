@@ -6,8 +6,18 @@ import pytest
 from sqlalchemy import select
 
 from backend.db.database import create_all_tables, create_engine_and_session_factory
-from backend.db.models import Base, ChatMessage, DailyLog, Profile, WeeklyPlanDay, utc_now
-from backend.db.seed import DEFAULT_PROFILE_ID, seed_if_empty
+from backend.db.models import (
+    ActiveCyclePlan,
+    Base,
+    ChatMessage,
+    CycleWeekSnapshot,
+    DailyLog,
+    PlanSourceState,
+    Profile,
+    WeeklyPlanDay,
+    utc_now,
+)
+from backend.db.seed import DEFAULT_PLAN_SOURCE_STATE_ID, DEFAULT_PROFILE_ID, seed_if_empty
 
 
 @pytest.mark.asyncio
@@ -156,10 +166,13 @@ async def test_seed_if_empty_creates_blank_profile_weekdays_and_is_idempotent(tm
 
         async with session_factory() as session:
             profile_count = len((await session.execute(select(Profile))).scalars().all())
+            source_state = await session.get(PlanSourceState, DEFAULT_PLAN_SOURCE_STATE_ID)
             weekly_days = (await session.execute(select(WeeklyPlanDay).order_by(WeeklyPlanDay.day_key))).scalars().all()
             daily_logs = len((await session.execute(select(DailyLog))).scalars().all())
 
         assert profile_count == 1
+        assert source_state is not None
+        assert source_state.active_source == "manual"
         assert daily_logs == 0
         assert len(weekly_days) == 7
         assert {day.day_key for day in weekly_days} == {
@@ -173,6 +186,87 @@ async def test_seed_if_empty_creates_blank_profile_weekdays_and_is_idempotent(tm
         }
         assert all(day.type == "rest" for day in weekly_days)
         assert all(day.exercises == [] for day in weekly_days)
+
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cycle_plan_models_round_trip_preserves_source_active_cycle_and_snapshot(tmp_path: Path):
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'cycle-plan-models.db'}"
+    engine, session_factory = create_engine_and_session_factory(database_url)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        async with session_factory() as session:
+            source_state = PlanSourceState(
+                id=1,
+                active_source="cycle",
+            )
+            active_cycle = ActiveCyclePlan(
+                preset_key="hypertrophy-4day",
+                status="active",
+                start_date="2026-06-02",
+                current_week_index=2,
+                pending_week_index=3,
+                goal="增肌",
+                base_lifts={
+                    "squat": {"rm": 160, "tm": 144},
+                    "bench": {"rm": 110, "tm": 99},
+                },
+                config={
+                    "daysPerWeek": 4,
+                    "progression": "volume-first",
+                },
+            )
+            session.add_all([source_state, active_cycle])
+            await session.flush()
+
+            snapshot = CycleWeekSnapshot(
+                cycle_id=active_cycle.id,
+                week_index=2,
+                generated_plan={
+                    "Monday": {
+                        "type": "lower",
+                        "exercises": [{"name": "深蹲", "sets": 5, "reps": 5}],
+                    }
+                },
+                override_plan={
+                    "Monday": {
+                        "type": "lower",
+                        "exercises": [{"name": "暂停深蹲", "sets": 4, "reps": 4}],
+                    }
+                },
+                is_confirmed=True,
+                week_start="2026-06-08",
+                week_end="2026-06-14",
+            )
+            session.add(snapshot)
+            await session.commit()
+
+        async with session_factory() as session:
+            stored_source = await session.get(PlanSourceState, 1)
+            stored_cycle = (await session.execute(select(ActiveCyclePlan))).scalar_one()
+            stored_snapshot = await session.get(
+                CycleWeekSnapshot,
+                {"cycle_id": stored_cycle.id, "week_index": 2},
+            )
+
+        assert stored_source is not None
+        assert stored_source.active_source == "cycle"
+
+        assert stored_cycle.base_lifts["squat"]["tm"] == 144
+        assert stored_cycle.base_lifts["bench"]["tm"] == 99
+
+        assert stored_snapshot is not None
+        assert stored_snapshot.override_plan == {
+            "Monday": {
+                "type": "lower",
+                "exercises": [{"name": "暂停深蹲", "sets": 4, "reps": 4}],
+            }
+        }
 
     finally:
         await engine.dispose()

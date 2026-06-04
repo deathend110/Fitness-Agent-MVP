@@ -103,6 +103,41 @@ class DailyLogMapSchema(RootModel[dict[str, DailyLogEntrySchema]]):
     pass
 
 
+class PlanSourceSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    activeSource: Literal["manual", "cycle"] = "manual"
+    updatedAt: datetime | None = None
+
+
+class CyclePresetSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    key: str
+    label: str
+    description: str = ""
+    goal: str = ""
+    defaultConfig: dict[str, Any] = Field(default_factory=dict)
+
+
+class ActiveCyclePlanSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int | None = None
+    presetKey: str = ""
+    status: str = "draft"
+    startDate: str = ""
+    currentWeekIndex: int = 1
+    pendingWeekIndex: int | None = None
+    goal: str = ""
+    baseLifts: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+    lastGeneratedAt: datetime | None = None
+    lastConfirmedAt: datetime | None = None
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
+
 class ChatSessionCreateSchema(BaseModel):
     title: str | None = None
 
