@@ -115,9 +115,9 @@ class CyclePresetSchema(BaseModel):
 
     key: str
     label: str
-    description: str = ""
-    goal: str = ""
-    defaultConfig: dict[str, Any] = Field(default_factory=dict)
+    summary: str = ""
+    supportedWeeks: list[int] = Field(default_factory=list)
+    supportsTm: bool = False
 
 
 class ActiveCyclePlanSchema(BaseModel):

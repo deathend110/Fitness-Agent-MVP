@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from backend.db.database import create_all_tables, create_engine_and_session_factory
 from backend.db.models import (
@@ -213,8 +215,8 @@ async def test_cycle_plan_models_round_trip_preserves_source_active_cycle_and_sn
                 pending_week_index=3,
                 goal="增肌",
                 base_lifts={
-                    "squat": {"rm": 160, "tm": 144},
-                    "bench": {"rm": 110, "tm": 99},
+                    "squat": {"oneRm": 160, "tm": 144},
+                    "bench": {"oneRm": 110, "tm": 99},
                 },
                 config={
                     "daysPerWeek": 4,
@@ -248,15 +250,16 @@ async def test_cycle_plan_models_round_trip_preserves_source_active_cycle_and_sn
 
         async with session_factory() as session:
             stored_source = await session.get(PlanSourceState, 1)
-            stored_cycle = (await session.execute(select(ActiveCyclePlan))).scalar_one()
+            stored_cycle = await session.get(ActiveCyclePlan, active_cycle.id)
             stored_snapshot = await session.get(
                 CycleWeekSnapshot,
-                {"cycle_id": stored_cycle.id, "week_index": 2},
+                {"cycle_id": active_cycle.id, "week_index": 2},
             )
 
         assert stored_source is not None
         assert stored_source.active_source == "cycle"
 
+        assert stored_cycle is not None
         assert stored_cycle.base_lifts["squat"]["tm"] == 144
         assert stored_cycle.base_lifts["bench"]["tm"] == 99
 
@@ -267,6 +270,105 @@ async def test_cycle_plan_models_round_trip_preserves_source_active_cycle_and_sn
                 "exercises": [{"name": "暂停深蹲", "sets": 4, "reps": 4}],
             }
         }
+
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_active_cycle_plan_rejects_second_open_cycle(tmp_path: Path):
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'cycle-plan-open-unique.db'}"
+    engine, session_factory = create_engine_and_session_factory(database_url)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        async with session_factory() as session:
+            session.add(
+                ActiveCyclePlan(
+                    preset_key="strength-4day",
+                    status="draft",
+                    start_date="2026-06-02",
+                    current_week_index=1,
+                    goal="力量提升",
+                    base_lifts={"squat": {"oneRm": 180, "tm": 162}},
+                    config={"daysPerWeek": 4},
+                )
+            )
+            await session.commit()
+
+        async with session_factory() as session:
+            session.add(
+                ActiveCyclePlan(
+                    preset_key="hypertrophy-5day",
+                    status="active",
+                    start_date="2026-06-09",
+                    current_week_index=1,
+                    goal="增肌",
+                    base_lifts={"bench": {"oneRm": 120, "tm": 108}},
+                    config={"daysPerWeek": 5},
+                )
+            )
+            with pytest.raises(IntegrityError):
+                await session.commit()
+
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cycle_plan_models_update_updated_at_on_change(tmp_path: Path):
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'cycle-plan-updated-at.db'}"
+    engine, session_factory = create_engine_and_session_factory(database_url)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        async with session_factory() as session:
+            source_state = PlanSourceState(id=1, active_source="manual")
+            active_cycle = ActiveCyclePlan(
+                preset_key="strength-4day",
+                status="draft",
+                start_date="2026-06-02",
+                current_week_index=1,
+                goal="力量提升",
+                base_lifts={"deadlift": {"oneRm": 220, "tm": 198}},
+                config={"daysPerWeek": 4},
+            )
+            session.add_all([source_state, active_cycle])
+            await session.flush()
+
+            snapshot = CycleWeekSnapshot(
+                cycle_id=active_cycle.id,
+                week_index=1,
+                generated_plan={"Tuesday": {"type": "pull"}},
+                override_plan=None,
+                is_confirmed=False,
+                week_start="2026-06-02",
+                week_end="2026-06-08",
+            )
+            session.add(snapshot)
+            await session.commit()
+
+            original_source_updated_at = source_state.updated_at
+            original_cycle_updated_at = active_cycle.updated_at
+            original_snapshot_updated_at = snapshot.updated_at
+
+            await asyncio.sleep(0.01)
+            source_state.active_source = "cycle"
+            active_cycle.pending_week_index = 2
+            snapshot.override_plan = {"Tuesday": {"type": "pull", "note": "减量周"}}
+            await session.commit()
+
+            await session.refresh(source_state)
+            await session.refresh(active_cycle)
+            await session.refresh(snapshot)
+
+        assert source_state.updated_at > original_source_updated_at
+        assert active_cycle.updated_at > original_cycle_updated_at
+        assert snapshot.updated_at > original_snapshot_updated_at
 
     finally:
         await engine.dispose()
