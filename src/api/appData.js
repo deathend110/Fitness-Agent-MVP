@@ -97,6 +97,8 @@ export async function loadAppData(options = {}) {
   const client = options.client ?? createBackendClient(options.clientOptions)
   const profile = fromBackendProfile(await client.getProfile({ signal: options.signal }))
   const weeklyPlan = await client.getWeeklyPlan({ signal: options.signal })
+  const planSource = await client.getPlanSource({ signal: options.signal })
+  const activeCyclePlan = await client.getActiveCyclePlan({ signal: options.signal })
   const dailyLog = fromBackendDailyLog(
     await client.getDailyLog(
       {
@@ -106,10 +108,14 @@ export async function loadAppData(options = {}) {
       { signal: options.signal },
     ),
   )
+  const effectiveWeeklyPlan = activeCyclePlan?.effectivePlan ?? weeklyPlan
 
   return {
     profile,
     weeklyPlan,
+    effectiveWeeklyPlan,
+    planSource,
+    activeCyclePlan,
     dailyLog,
   }
 }

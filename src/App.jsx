@@ -43,6 +43,11 @@ function App() {
   const [weeklyPlan, setWeeklyPlan] = useState(() =>
     normalizeWeeklyPlan(loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan)),
   )
+  const [planSource, setPlanSource] = useState(() => ({ activeSource: 'manual' }))
+  const [effectiveWeeklyPlan, setEffectiveWeeklyPlan] = useState(() =>
+    normalizeWeeklyPlan(loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan)),
+  )
+  const [activeCyclePlan, setActiveCyclePlan] = useState(null)
   const [dailyLog, setDailyLog] = useState(() =>
     loadInitialState(storageKeys.dailyLog, defaultDailyLog),
   )
@@ -76,6 +81,11 @@ function App() {
 
         setProfile(nextData.profile)
         setWeeklyPlan(normalizeWeeklyPlan(nextData.weeklyPlan))
+        setPlanSource(nextData.planSource ?? { activeSource: 'manual' })
+        setEffectiveWeeklyPlan(
+          normalizeWeeklyPlan(nextData.effectiveWeeklyPlan ?? nextData.weeklyPlan),
+        )
+        setActiveCyclePlan(nextData.activeCyclePlan ?? null)
         setDailyLog(nextData.dailyLog)
         syncedProfileRef.current = nextData.profile
         syncedWeeklyPlanRef.current = normalizeWeeklyPlan(nextData.weeklyPlan)
@@ -225,6 +235,9 @@ function App() {
   }) {
     setProfile(nextProfile)
     setWeeklyPlan(normalizeWeeklyPlan(nextWeeklyPlan))
+    setEffectiveWeeklyPlan(normalizeWeeklyPlan(nextWeeklyPlan))
+    setPlanSource({ activeSource: 'manual' })
+    setActiveCyclePlan(null)
     setDailyLog(nextDailyLog)
     setChatHistory(nextChatHistory)
   }
@@ -277,6 +290,10 @@ function App() {
       case 'plan':
         return (
           <PlanTab
+            activeCyclePlan={activeCyclePlan}
+            effectiveWeeklyPlan={effectiveWeeklyPlan}
+            onPlanSettingsClick={() => {}}
+            planSource={planSource}
             onWeeklyPlanChange={setWeeklyPlan}
             profile={profile}
             weeklyPlan={weeklyPlan}

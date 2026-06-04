@@ -31,7 +31,7 @@ function getOneRmOptions(profile = {}) {
   ]
 }
 
-function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
+function PlanTab({ profile, weeklyPlan, onPlanSettingsClick, onWeeklyPlanChange }) {
   const [editingState, setEditingState] = useState(() => clearPlanEditorState())
 
   const oneRmOptions = getOneRmOptions(profile)
@@ -123,7 +123,11 @@ function PlanTab({ profile, weeklyPlan, onWeeklyPlanChange }) {
 
   return (
     <div className="space-y-5">
-      <PlanHeaderToolbar headerModel={headerModel} onWeekNumberChange={handleWeekNumberChange} />
+      <PlanHeaderToolbar
+        headerModel={headerModel}
+        onPlanSettingsClick={onPlanSettingsClick}
+        onWeekNumberChange={handleWeekNumberChange}
+      />
 
       <PlanWeekGrid
         layoutModel={layoutModel}
