@@ -66,7 +66,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [src/tabs/TodayTab.jsx](src/tabs/TodayTab.jsx)
   - 编辑今日日志
-  - 展示每日摘要、今日计划和体重趋势图
+  - 按“身体数据 / 摄入记录 / 恢复与状态”组织录入区
+  - 展示复杂指标、已保存摘要、今日计划和体重趋势图
 
 - [src/tabs/CoachTab.jsx](src/tabs/CoachTab.jsx)
   - AI 教练页的页面编排中心

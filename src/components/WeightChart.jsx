@@ -20,24 +20,28 @@ function renderTooltipValue(value) {
 function WeightChart({ model }) {
   if (!model.hasEnoughData) {
     return (
-      <article className="rounded-xl border border-dashed border-fitloop-line bg-fitloop-panel p-4 shadow-xl shadow-black/20">
-        <p className="text-sm font-medium text-slate-100">体重趋势</p>
-        <p className="mt-3 text-sm leading-6 text-slate-300">{model.emptyMessage}</p>
+      <article className="rounded-[1.75rem] border border-dashed border-fitloop-line bg-fitloop-panel/90 p-5 shadow-sm shadow-black/20 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Trend</p>
+        <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-100">体重趋势</p>
+        <p className="mt-3 text-sm leading-7 text-slate-300">{model.emptyMessage}</p>
       </article>
     )
   }
 
   return (
-    <article className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-xl shadow-black/20">
+    <article className="rounded-[1.75rem] border border-fitloop-line bg-fitloop-panel/90 p-5 shadow-sm shadow-black/20 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-100">体重趋势</p>
-          <p className="mt-1 text-xs text-slate-400">近 14 天有效记录</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Trend</p>
+          <p className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-100">体重趋势</p>
+          <p className="mt-2 text-sm leading-7 text-slate-300">近 14 天有效记录</p>
         </div>
-        <p className="text-xs text-fitloop-orange">{model.points.length} 条记录</p>
+        <p className="rounded-2xl border border-fitloop-orange/30 bg-fitloop-orange/8 px-4 py-2 text-xs font-semibold text-fitloop-orange">
+          {model.points.length} 条记录
+        </p>
       </div>
 
-      <div className="mt-4 h-56">
+      <div className="mt-5 h-64 rounded-[1.5rem] border border-fitloop-line bg-gradient-to-b from-white to-[#f4f7ff] p-3">
         <ResponsiveContainer height="100%" width="100%">
           <LineChart data={model.points} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
             <CartesianGrid stroke="rgba(215, 222, 240, 0.8)" vertical={false} />

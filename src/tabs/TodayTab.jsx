@@ -1,30 +1,13 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import DailyMetricsPanel from '../components/DailyMetricsPanel.jsx'
-import { formatDecimalDisplay, getTodayKey, getTodayStr } from '../utils/calc.js'
+import { getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildTodayLogPayload, readTodayLogForm } from '../utils/dailyLog.js'
 import { buildDailyMetricsPanelModel } from '../utils/dailyMetricsPanel.js'
+import { buildTodayLogFieldGroups, buildTodayLogSummaryItems } from '../utils/todayLogView.js'
 import { buildTodayPlanSummary } from '../utils/todayPlan.js'
 import { buildWeightChartModel } from '../utils/weightChart.js'
 
 const WeightChart = lazy(() => import('../components/WeightChart.jsx'))
-
-const metricFields = [
-  { key: 'weight', label: '体重 (kg)', inputMode: 'decimal', step: '0.1' },
-  { key: 'kcal', label: '热量 (kcal)', inputMode: 'numeric', step: '1' },
-  { key: 'protein', label: '蛋白质 (g)', inputMode: 'numeric', step: '1' },
-  { key: 'sleep', label: '睡眠 (h)', inputMode: 'decimal', step: '0.1' },
-  { key: 'steps', label: '步数 (步)', inputMode: 'numeric', step: '1' },
-  { key: 'tdee', label: 'TDEE (kcal)', inputMode: 'numeric', step: '1' },
-  { key: 'fatigue', label: '疲劳度 (1-5)', inputMode: 'numeric', step: '1', min: '1', max: '5' },
-]
-
-function formatMetric(value, suffix = '') {
-  if (value === null || value === undefined || value === '') {
-    return '--'
-  }
-
-  return `${formatDecimalDisplay(value)}${suffix}`
-}
 
 function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach }) {
   const todayDate = getTodayStr()
@@ -34,6 +17,8 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach
   const todayPlanSummary = buildTodayPlanSummary(todayPlan, profile?.oneRM)
   const dailyMetricsPanel = buildDailyMetricsPanelModel(profile, weeklyPlan, dailyLog)
   const weightChartModel = buildWeightChartModel(dailyLog, todayDate)
+  const fieldGroups = useMemo(() => buildTodayLogFieldGroups(), [])
+  const summaryItems = useMemo(() => buildTodayLogSummaryItems(todayLog), [todayLog])
   const [draft, setDraft] = useState(() => readTodayLogForm(todayLog))
   const [saveHint, setSaveHint] = useState('')
 
@@ -58,100 +43,186 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach
   }
 
   return (
-    <section className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel/90 p-8 shadow-2xl shadow-black/20">
-      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Today</p>
-      <h2 className="mt-3 text-3xl font-semibold text-slate-100">今日日志</h2>
-      
-
-      <div className="mt-8 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-        <form
-          className="rounded-2xl border border-fitloop-line bg-fitloop-ink/30 p-5 shadow-sm shadow-black/20"
-          onSubmit={handleSubmit}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayDate}</p>
-              <h3 className="mt-3 text-lg font-semibold text-slate-100">填写今天的数据</h3>
-            </div>
-            <button
-              className="rounded-md border border-fitloop-orange bg-fitloop-orange px-4 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110"
-              type="submit"
-            >
-              保存今日日志
-            </button>
-          </div>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {metricFields.map((field) => (
-              <label className="space-y-2" key={field.key}>
-                <span className="text-sm text-slate-300">{field.label}</span>
-                <input
-                  className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-                  inputMode={field.inputMode}
-                  max={field.max}
-                  min={field.min}
-                  onChange={(event) => updateDraftField(field.key, event.target.value)}
-                  placeholder="可留空"
-                  step={field.step}
-                  type="number"
-                  value={draft[field.key]}
-                />
-              </label>
-            ))}
-          </div>
-
-          <label className="mt-4 flex items-center gap-3 rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-3 text-sm text-slate-200">
-            <input
-              checked={draft.trainingDone}
-              className="h-4 w-4 accent-fitloop-orange"
-              onChange={(event) => updateDraftField('trainingDone', event.target.checked)}
-              type="checkbox"
-            />
-            今天已完成训练
-          </label>
-
-          <label className="mt-4 block space-y-2">
-            <span className="text-sm text-slate-300">训练备注</span>
-            <textarea
-              className="min-h-32 w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-              onChange={(event) => updateDraftField('trainingNotes', event.target.value)}
-              placeholder="例如：主项速度下降、某个部位发紧、是否需要下调训练量。"
-              value={draft.trainingNotes}
-            />
-          </label>
-
-          <p className="mt-4 text-sm text-fitloop-mint" role="status">
-            {saveHint || '可选字段留空时会以空值保存，不会影响页面渲染。'}
-          </p>
-        </form>
-
-        <div className="space-y-4">
-          <DailyMetricsPanel model={dailyMetricsPanel} onOpenCoach={onOpenCoach} />
-
-          <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayDate}</p>
-            <h3 className="mt-3 text-lg font-semibold text-slate-100">已保存摘要</h3>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <p className="text-sm text-slate-300">体重：{formatMetric(todayLog?.weight, ' kg')}</p>
-              <p className="text-sm text-slate-300">热量：{formatMetric(todayLog?.kcal, ' kcal')}</p>
-              <p className="text-sm text-slate-300">蛋白质：{formatMetric(todayLog?.protein, ' g')}</p>
-              <p className="text-sm text-slate-300">睡眠：{formatMetric(todayLog?.sleep, ' h')}</p>
-              <p className="text-sm text-slate-300">步数：{formatMetric(todayLog?.steps, ' 步')}</p>
-              <p className="text-sm text-slate-300">TDEE：{formatMetric(todayLog?.tdee, ' kcal')}</p>
-              <p className="text-sm text-slate-300">疲劳度：{formatMetric(todayLog?.fatigue, ' / 5')}</p>
-              <p className="text-sm text-slate-300">
-                训练完成：{todayLog?.trainingDone ? '是' : '否'}
-              </p>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-slate-300">
-              训练备注：{todayLog?.trainingNotes || '今天还没有训练备注。'}
+    <section className="overflow-hidden rounded-[2rem] border border-fitloop-line bg-white/80 shadow-2xl shadow-black/20 backdrop-blur-sm">
+      <header className="border-b border-fitloop-line bg-gradient-to-b from-white/95 via-white/90 to-[#f7f9ff] px-5 py-6 sm:px-8 sm:py-8">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fitloop-orange">Today</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-100 sm:text-4xl">
+              今日日志
+            </h2>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
+              把今天的身体状态、摄入记录和恢复情况集中写在一处。先完成记录，再快速回看复杂指标、已保存结果、体重趋势和今日计划。
             </p>
-          </article>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <div className="rounded-full border border-fitloop-orange/30 bg-fitloop-orange/8 px-4 py-2 text-xs text-slate-300">
+                <span className="font-semibold text-slate-100">记录优先</span>
+                <span className="ml-2">首屏只聚焦今天的数据输入</span>
+              </div>
+              <div className="rounded-full border border-fitloop-orange/30 bg-white/90 px-4 py-2 text-xs text-slate-300">
+                <span className="font-semibold text-slate-100">当前计划</span>
+                <span className="ml-2">{todayPlanSummary.typeLabel}</span>
+              </div>
+              <div className="rounded-full border border-fitloop-orange/30 bg-white/90 px-4 py-2 text-xs text-slate-300">
+                <span className="font-semibold text-slate-100">保存状态</span>
+                <span className="ml-2">{saveHint || '等待保存'}</span>
+              </div>
+            </div>
+          </div>
 
+          <div className="w-full max-w-xs rounded-2xl border border-fitloop-orange/30 bg-fitloop-orange/8 px-4 py-4 lg:text-right">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Today</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">{todayDate}</p>
+          </div>
+        </div>
+      </header>
+
+      <div className="bg-gradient-to-b from-[#f4f7ff]/70 via-white/85 to-white/95 px-5 py-5 sm:px-8 sm:py-7">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
+          <form
+            className="rounded-[1.75rem] border border-fitloop-line bg-fitloop-panel/90 shadow-sm shadow-black/20"
+            onSubmit={handleSubmit}
+          >
+            <div className="flex flex-col gap-4 border-b border-fitloop-line px-5 py-5 sm:px-7 sm:py-7 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Daily Input</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-100">
+                  今天的数据录入
+                </h3>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+                  先完成今天的身体、摄入和恢复记录。每个字段都沿用当前真实实现，不引入额外业务项。
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-fitloop-orange/30 bg-fitloop-orange/8 px-4 py-4 lg:text-right">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Input State</p>
+                <p className="mt-2 text-sm font-semibold text-slate-100">{saveHint ? '已保存' : '等待保存'}</p>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 sm:px-7 sm:py-7">
+              <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+                {fieldGroups.map((group) => (
+                  <section
+                    className="rounded-[1.5rem] border border-fitloop-line bg-gradient-to-b from-white to-[#f5f7ff] p-4"
+                    key={group.key}
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      {group.title}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-slate-300">{group.description}</p>
+
+                    <div className="mt-4 grid gap-4">
+                      {group.fields.map((field) => (
+                        <label className="grid gap-2" key={field.key}>
+                          <span className="text-sm font-medium text-slate-300">
+                            {field.label}
+                            {field.unit ? <span className="ml-1 text-slate-400">({field.unit})</span> : null}
+                          </span>
+                          <input
+                            className="h-12 w-full rounded-2xl border border-fitloop-line bg-white px-4 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                            inputMode={field.inputMode}
+                            max={field.max}
+                            min={field.min}
+                            onChange={(event) => updateDraftField(field.key, event.target.value)}
+                            placeholder="可留空"
+                            step={field.step}
+                            type="number"
+                            value={draft[field.key]}
+                          />
+                          <span className="text-xs leading-6 text-slate-400">{field.hint}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+
+              <label className="mt-5 flex flex-col gap-4 rounded-3xl border border-emerald-400/25 bg-emerald-500/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">今天已完成训练</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    用独立状态条表达完成情况，而不是一个孤立的裸 checkbox。
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-3 self-start rounded-full border border-emerald-400/25 bg-white px-4 py-2 text-sm font-semibold text-fitloop-mint sm:self-auto">
+                  <input
+                    checked={draft.trainingDone}
+                    className="h-4 w-4 accent-fitloop-orange"
+                    onChange={(event) => updateDraftField('trainingDone', event.target.checked)}
+                    type="checkbox"
+                  />
+                  {draft.trainingDone ? '已完成' : '未完成'}
+                </span>
+              </label>
+
+              <section className="mt-5 rounded-[1.5rem] border border-fitloop-line bg-fitloop-ink/30 p-4">
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium text-slate-300">训练备注</span>
+                  <textarea
+                    className="min-h-36 w-full rounded-2xl border border-fitloop-line bg-white px-4 py-3 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+                    onChange={(event) => updateDraftField('trainingNotes', event.target.value)}
+                    placeholder="例如：主项速度下降、某个部位发紧、是否需要下调训练量。"
+                    value={draft.trainingNotes}
+                  />
+                  <span className="text-xs leading-6 text-slate-400">
+                    主观反馈仍然是今日日志的一部分，不只记录数字。
+                  </span>
+                </label>
+              </section>
+
+              <div className="mt-5 flex flex-col gap-4 rounded-[1.5rem] border border-fitloop-line bg-gradient-to-r from-fitloop-orange/8 to-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">保存今日日志</p>
+                  <p className="mt-2 text-sm leading-6 text-fitloop-mint" role="status">
+                    {saveHint || '可选字段留空时会以空值保存，不会影响页面渲染。'}
+                  </p>
+                </div>
+                <button
+                  className="rounded-2xl border border-fitloop-orange bg-fitloop-orange px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-black/20 transition hover:brightness-110"
+                  type="submit"
+                >
+                  保存今日日志
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <div className="grid gap-6">
+            <DailyMetricsPanel model={dailyMetricsPanel} onOpenCoach={onOpenCoach} />
+
+            <article className="rounded-[1.75rem] border border-fitloop-line bg-fitloop-panel/90 p-5 shadow-sm shadow-black/20 sm:p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Saved Result</p>
+              <h3 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-100">已保存摘要</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-300">
+                不是再重复一遍表单，而是明确告诉用户当前已经回写成功的今日结果。
+              </p>
+
+              <div className="mt-5 grid gap-x-4 gap-y-3 sm:grid-cols-2">
+                {summaryItems.map((item) => (
+                  <div className="border-b border-dashed border-fitloop-line pb-3" key={item.key}>
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">{item.label}</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-100">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-fitloop-line bg-fitloop-ink/30 px-4 py-4">
+                <p className="text-sm font-semibold text-slate-100">训练备注</p>
+                <p className="mt-3 text-sm leading-7 text-slate-300">
+                  {todayLog?.trainingNotes || '今天还没有训练备注。'}
+                </p>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-2">
           <Suspense
             fallback={(
-              <article className="rounded-md border border-fitloop-line bg-fitloop-ink/30 p-4">
-                <p className="text-sm font-medium text-slate-100">体重趋势</p>
+              <article className="rounded-[1.75rem] border border-fitloop-line bg-fitloop-panel/90 p-5 shadow-sm shadow-black/20">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Trend</p>
+                <p className="mt-3 text-lg font-semibold text-slate-100">体重趋势</p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">图表组件加载中...</p>
               </article>
             )}
@@ -159,22 +230,33 @@ function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach
             <WeightChart model={weightChartModel} />
           </Suspense>
 
-          <article className="rounded-2xl border border-fitloop-line bg-fitloop-panel p-5 shadow-sm shadow-black/20">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">{todayPlanKey}</p>
-            <h3 className="mt-3 text-lg font-semibold text-slate-100">今日计划</h3>
-            <p className="mt-4 text-sm text-slate-300">训练类型：{todayPlanSummary.typeLabel}</p>
+          <article className="rounded-[1.75rem] border border-fitloop-line bg-fitloop-panel/90 p-5 shadow-sm shadow-black/20 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fitloop-orange">Today Plan</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-slate-100">今日计划</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-300">
+                  保留当前 todayPlanSummary 的语义，只服务今天录完之后的快速回看。
+                </p>
+              </div>
+              <div className="rounded-full border border-fitloop-orange/30 bg-fitloop-orange/8 px-4 py-2 text-xs font-semibold text-fitloop-orange">
+                {todayPlanSummary.typeLabel}
+              </div>
+            </div>
 
             {todayPlanSummary.isRestDay ? (
-              <p className="mt-4 text-sm leading-6 text-slate-300">{todayPlanSummary.message}</p>
+              <p className="mt-5 rounded-2xl border border-fitloop-line bg-fitloop-ink/30 px-4 py-4 text-sm leading-7 text-slate-300">
+                {todayPlanSummary.message}
+              </p>
             ) : (
-              <ul className="mt-4 space-y-3">
+              <ul className="mt-5 grid gap-3">
                 {todayPlanSummary.exercises.map((exercise) => (
                   <li
-                    className="rounded-xl border border-fitloop-line/80 bg-fitloop-ink/30 px-3 py-3"
+                    className="rounded-3xl border border-fitloop-line bg-white px-4 py-4"
                     key={exercise.id}
                   >
-                    <p className="text-sm font-medium text-slate-100">{exercise.name}</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-300">{exercise.detail}</p>
+                    <p className="text-sm font-semibold text-slate-100">{exercise.name}</p>
+                    <p className="mt-2 text-sm leading-7 text-slate-300">{exercise.detail}</p>
                   </li>
                 ))}
               </ul>
