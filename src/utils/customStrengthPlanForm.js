@@ -51,6 +51,15 @@ function compactMainLifts(mainLifts = {}) {
   }, {})
 }
 
+function normalizeWeeks(weeks) {
+  if (!Array.isArray(weeks)) {
+    return []
+  }
+
+  // mapper 只稳定外层数组，保留每个 week/day/exercise 的既有结构，避免误改编辑器已维护的内容。
+  return weeks.map((week) => ({ ...week }))
+}
+
 export function createCustomStrengthDraft() {
   return {
     name: '',
@@ -68,20 +77,21 @@ export function createCustomStrengthDraft() {
 
 export function buildCreateCustomStrengthCyclePayload(draft = {}) {
   const mainLifts = compactMainLifts(draft?.mainLifts)
+  const weeks = normalizeWeeks(draft?.weeks)
 
   return {
     presetKey: 'custom_strength',
     startDate: normalizeText(draft?.startDate),
     goal: 'strength',
-    baseLifts: mainLifts,
+    baseLifts: { ...mainLifts },
     config: {
       planType: 'custom_strength',
       name: normalizeText(draft?.name),
       startDate: normalizeText(draft?.startDate),
-      totalWeeks: Number.isFinite(draft?.totalWeeks) ? draft.totalWeeks : Number(draft?.totalWeeks) || 0,
+      totalWeeks: weeks.length,
       // 顶层 baseLifts 和 config.mainLifts 必须保持同构，避免后端触发冗余字段冲突校验。
-      mainLifts,
-      weeks: Array.isArray(draft?.weeks) ? draft.weeks : [],
+      mainLifts: { ...mainLifts },
+      weeks,
     },
   }
 }
