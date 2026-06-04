@@ -131,6 +131,34 @@ def test_build_cycle_week_plan_keeps_default_days_when_training_days_config_is_i
     assert weekly_plan["Wednesday"]["type"] == "upper_strength"
 
 
+def test_build_cycle_week_plan_uses_first_configured_days_when_week_has_fewer_training_days() -> None:
+    weekly_plan = build_cycle_week_plan(
+        preset_key="candito_6week",
+        week_index=6,
+        base_lifts=_build_base_lifts(),
+        config={"trainingDays": ["Tuesday", "Thursday", "Saturday", "Sunday"]},
+    )
+
+    assert weekly_plan["Tuesday"]["type"] == "lower_test"
+    assert weekly_plan["Thursday"]["type"] == "upper_test"
+    assert weekly_plan["Saturday"]["type"] == "pull_test"
+    assert weekly_plan["Sunday"] == {"type": "rest", "exercises": []}
+    assert weekly_plan["Monday"] == {"type": "rest", "exercises": []}
+
+
+def test_build_cycle_week_plan_falls_back_to_default_when_training_days_are_too_few() -> None:
+    weekly_plan = build_cycle_week_plan(
+        preset_key="candito_6week",
+        week_index=1,
+        base_lifts=_build_base_lifts(),
+        config={"trainingDays": ["Tuesday", "Thursday", "Saturday"]},
+    )
+
+    assert weekly_plan["Monday"]["type"] == "lower_strength"
+    assert weekly_plan["Wednesday"]["type"] == "upper_strength"
+    assert weekly_plan["Saturday"]["type"] == "upper_power"
+
+
 def test_merge_cycle_week_override_only_replaces_declared_days() -> None:
     generated = build_cycle_week_plan(
         preset_key="candito_6week",

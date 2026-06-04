@@ -89,26 +89,33 @@ def _resolve_training_day_templates(
     day_templates: dict[str, dict[str, Any]],
     config: dict[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
-    training_days = config.get("trainingDays") if isinstance(config, dict) else None
-    if not _is_valid_training_days(training_days, len(day_templates)):
-        return deepcopy(day_templates)
-
     ordered_template_days = [
         day_key
         for day_key in WEEKDAY_ORDER
         if isinstance(day_templates.get(day_key), dict) and day_templates[day_key].get("exercises")
     ]
+    training_days = config.get("trainingDays") if isinstance(config, dict) else None
+    resolved_training_days = _resolve_training_days(training_days, len(ordered_template_days))
+    if resolved_training_days is None:
+        return deepcopy(day_templates)
+
     remapped_templates: dict[str, dict[str, Any]] = {}
-    for source_day, target_day in zip(ordered_template_days, training_days, strict=False):
+    for source_day, target_day in zip(ordered_template_days, resolved_training_days, strict=False):
         remapped_templates[target_day] = deepcopy(day_templates[source_day])
     return remapped_templates
 
 
-def _is_valid_training_days(training_days: Any, expected_count: int) -> bool:
-    if not isinstance(training_days, list) or len(training_days) != expected_count:
-        return False
+def _resolve_training_days(training_days: Any, expected_count: int) -> list[str] | None:
+    if not isinstance(training_days, list):
+        return None
     normalized_days = [day for day in training_days if isinstance(day, str) and day in WEEKDAY_ORDER]
-    return len(normalized_days) == expected_count and len(set(normalized_days)) == expected_count
+    if len(normalized_days) != len(training_days):
+        return None
+    if len(set(normalized_days)) != len(normalized_days):
+        return None
+    if len(normalized_days) < expected_count:
+        return None
+    return normalized_days[:expected_count]
 
 
 def _build_candito_week_templates(week_index: int) -> dict[str, dict[str, Any]]:
