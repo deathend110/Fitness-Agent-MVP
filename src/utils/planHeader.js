@@ -9,9 +9,9 @@ const PLAN_HEADER_VIEW_TABS = [
 ]
 const PLAN_SETTINGS_BUTTON = {
   label: '计划设置',
-  hint: '打开训练计划设置入口，后续可在这里切换手动计划与周期计划。',
+  hint: '打开训练计划设置入口，切换手动计划与周期计划。',
   title: '训练计划设置',
-  description: '进入训练计划设置入口，查看当前计划来源并准备接入周期计划配置。',
+  description: '进入训练计划设置入口，查看当前计划来源并管理周期计划配置。',
   confirmLabel: '打开设置',
   isPlaceholder: false,
 }
