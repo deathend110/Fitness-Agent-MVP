@@ -87,6 +87,21 @@ def test_normalize_custom_strength_definition_rejects_missing_tm_for_referenced_
         normalize_custom_strength_definition(payload)
 
 
+def test_normalize_custom_strength_definition_accepts_missing_tm_for_unreferenced_main_lift() -> None:
+    payload = build_valid_definition()
+    payload["mainLifts"] = {
+        "squat": {"tm": 180},
+        "bench": {},
+    }
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    assert normalized["mainLifts"] == {
+        "squat": {"tm": 180.0},
+        "bench": {},
+    }
+
+
 def test_normalize_custom_strength_definition_rejects_invalid_main_lift_key() -> None:
     payload = build_valid_definition()
     payload["mainLifts"]["pullup"] = {"tm": 60}
@@ -111,6 +126,16 @@ def test_normalize_custom_strength_definition_rejects_total_weeks_mismatch() -> 
 
     with pytest.raises(ValueError, match="totalWeeks"):
         normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_non_list_weeks_with_clear_container_error() -> None:
+    payload = build_valid_definition()
+    payload["weeks"] = {}
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "weeks 必须为列表。"
 
 
 def test_normalize_custom_strength_definition_rejects_non_consecutive_week_index() -> None:

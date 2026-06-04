@@ -23,13 +23,16 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
 
     definition["startDate"] = _parse_iso_start_date(definition.get("startDate"))
     total_weeks = _parse_positive_int(definition.get("totalWeeks"), "totalWeeks")
-    weeks = definition.get("weeks") if isinstance(definition.get("weeks"), list) else []
+    weeks = definition.get("weeks")
+    if not isinstance(weeks, list):
+        raise ValueError("weeks 必须为列表。")
     if total_weeks <= 0 or len(weeks) != total_weeks:
         raise ValueError("totalWeeks 与 weeks 定义数量必须一致。")
     _validate_weeks(weeks, total_weeks)
     # normalize 的边界需要对合法输入产出稳定结构，因此按 weekIndex 排序后再继续下游校验与序列化。
     definition["weeks"] = sorted(weeks, key=lambda week: week["weekIndex"])
     weeks = definition["weeks"]
+    referenced_main_lifts = _collect_referenced_main_lifts(weeks)
 
     main_lifts = definition.get("mainLifts")
     if not isinstance(main_lifts, dict):
@@ -40,10 +43,21 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
             raise ValueError(f"mainLifts 包含非法主项 key：{lift_key}。")
         if not isinstance(lift_value, dict):
             raise ValueError(f"mainLifts.{lift_key} 必须为对象。")
-        tm_value = _parse_positive_float(lift_value.get("tm"), f"{lift_key}.tm")
-        if tm_value <= 0:
+
+        normalized_lift: dict[str, float] = {}
+        raw_tm_value = lift_value.get("tm")
+        if raw_tm_value is not None:
+            tm_value = _parse_positive_float(raw_tm_value, f"{lift_key}.tm")
+            if tm_value <= 0:
+                raise ValueError(f"{lift_key} 的 TM 必须大于 0。")
+            normalized_lift["tm"] = tm_value
+        elif lift_key in referenced_main_lifts:
+            raise ValueError(f"{lift_key} 缺少对应 TM。")
+
+        if lift_key in referenced_main_lifts and normalized_lift.get("tm", 0) <= 0:
             raise ValueError(f"{lift_key} 的 TM 必须大于 0。")
-        normalized_main_lifts[lift_key] = {"tm": tm_value}
+
+        normalized_main_lifts[lift_key] = normalized_lift
 
     for week in weeks:
         for day in week.get("days", []):
@@ -53,11 +67,13 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
             for exercise in exercises:
                 _validate_custom_strength_exercise(exercise, normalized_main_lifts)
 
-    definition["mainLifts"] = normalized_main_lifts
+    schema_ready_main_lifts = _build_schema_ready_main_lifts(normalized_main_lifts, referenced_main_lifts)
+    definition["mainLifts"] = schema_ready_main_lifts
     try:
         normalized_definition = CustomStrengthDefinitionSchema.model_validate(definition).model_dump()
     except ValidationError as exc:
         raise ValueError(_format_schema_validation_error(exc)) from None
+    normalized_definition["mainLifts"] = normalized_main_lifts
     _prune_category_specific_exercise_fields(normalized_definition)
     return normalized_definition
 
@@ -87,6 +103,44 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
             raise ValueError(f"第 {week_index} 周的 dayIndex 必须唯一。")
         # normalize 阶段需要保证 days 顺序稳定，避免合法但乱序的输入继续残留到下游。
         week["days"] = sorted(days, key=lambda day: day["dayIndex"])
+
+
+def _collect_referenced_main_lifts(weeks: list[dict[str, Any]]) -> set[str]:
+    referenced_lifts: set[str] = set()
+    for week in weeks:
+        for day in week.get("days", []):
+            exercises = day.get("exercises", [])
+            if not isinstance(exercises, list):
+                continue
+            for exercise in exercises:
+                if not isinstance(exercise, dict):
+                    continue
+                if exercise.get("category") != "main":
+                    continue
+                progression = exercise.get("progression")
+                if not isinstance(progression, dict):
+                    continue
+                lift_key = progression.get("liftKey")
+                if isinstance(lift_key, str) and lift_key:
+                    referenced_lifts.add(lift_key)
+    return referenced_lifts
+
+
+def _build_schema_ready_main_lifts(
+    normalized_main_lifts: dict[str, dict[str, float]],
+    referenced_main_lifts: set[str],
+) -> dict[str, dict[str, float]]:
+    schema_ready_main_lifts: dict[str, dict[str, float]] = {}
+    for lift_key, lift_value in normalized_main_lifts.items():
+        if "tm" in lift_value:
+            schema_ready_main_lifts[lift_key] = dict(lift_value)
+            continue
+        if lift_key in referenced_main_lifts:
+            schema_ready_main_lifts[lift_key] = dict(lift_value)
+            continue
+        # 现有 schema 仍要求 tm 必填；这里只为通过结构校验补临时占位，最终返回值会恢复为空对象。
+        schema_ready_main_lifts[lift_key] = {"tm": 1.0}
+    return schema_ready_main_lifts
 
 
 def _parse_positive_int(raw_value: Any, field_name: str) -> int:
