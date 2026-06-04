@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from copy import deepcopy
-
 import pytest
 
-from backend.plans import cycle_engine
 from backend.plans.custom_strength_definition import normalize_custom_strength_definition
 from backend.plans.custom_strength_engine import build_custom_strength_cycle_weeks
+from backend.plans.weekly_plan_materializer import build_load_ref, materialize_canonical_exercise
 
 
 def _build_definition() -> dict:
@@ -151,33 +149,37 @@ def test_build_custom_strength_cycle_weeks_materializes_canonical_fields_for_mai
     assert variation["instance"]["kg"] is None
 
 
-def test_build_custom_strength_cycle_weeks_reuses_cycle_engine_load_ref_builder_for_one_rm_fallback() -> None:
+def test_shared_weekly_plan_materializer_builds_one_rm_fallback_load_ref_contract() -> None:
+    load_ref = build_load_ref({"squat": {"oneRm": 200}}, "squat")
+
+    assert load_ref == {"lift": "squat", "value": 200.0, "source": "oneRm"}
+
+
+def test_build_custom_strength_cycle_weeks_uses_shared_materializer_contract_for_main_exercise() -> None:
     definition = normalize_custom_strength_definition(_build_definition())
     definition["mainLifts"]["squat"] = {"oneRm": 200}
-
-    original_builder = cycle_engine._build_load_ref
-    calls: list[tuple[dict, str]] = []
-
-    def spy_builder(base_lifts: dict, ref_1rm: str) -> dict | None:
-        calls.append((deepcopy(base_lifts), ref_1rm))
-        return original_builder(base_lifts, ref_1rm)
-
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(cycle_engine, "_build_load_ref", spy_builder)
-    try:
-        weekly_plan = build_custom_strength_cycle_weeks(definition)
-    finally:
-        monkeypatch.undo()
+    weekly_plan = build_custom_strength_cycle_weeks(definition)
 
     main_exercise = weekly_plan[0]["Monday"]["exercises"][0]
+    expected = materialize_canonical_exercise(
+        exercise_source={
+            "id": "w1d1-squat",
+            "name": "Back Squat",
+            "tier": "main",
+            "loadMode": "percentage",
+            "ref1RM": "squat",
+            "pct": 0.75,
+            "sets": 5,
+            "reps": 5,
+            "kg": None,
+            "note": "主项周一",
+            "loadRef": {"lift": "squat", "value": 200.0, "source": "oneRm"},
+        },
+        fallback_id="w1d1-squat",
+    )
 
-    assert calls
-    assert all(call == (definition["mainLifts"], "squat") for call in calls)
     assert main_exercise["loadRef"] == {"lift": "squat", "value": 200.0, "source": "oneRm"}
-    assert main_exercise["template"]["setType"] == "straight"
-    assert main_exercise["template"]["repsText"] == "5"
-    assert main_exercise["tier"] == "main"
-    assert main_exercise["instance"]["note"] == "主项周一"
+    assert main_exercise == expected
 
 
 def test_build_custom_strength_cycle_weeks_rejects_invalid_day_and_exercise_payloads() -> None:

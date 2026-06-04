@@ -4,8 +4,15 @@ from copy import deepcopy
 from typing import Any
 
 from backend.plans.preset_library import get_cycle_preset
-
-DEFAULT_SET_TYPE = "straight"
+from backend.plans.weekly_plan_materializer import (
+    build_load_ref,
+    coerce_int,
+    has_consistent_load_ref,
+    infer_load_mode,
+    materialize_canonical_exercise,
+    read_number,
+    rebuild_load_ref_from_generated_week,
+)
 WEEKDAY_ORDER = (
     "Monday",
     "Tuesday",
@@ -312,12 +319,12 @@ def _normalize_override_exercise(
         merged_source.pop("instance", None)
     next_ref_1rm = merged_source.get("ref1RM") if isinstance(merged_source.get("ref1RM"), str) else None
     previous_ref_1rm = generated_exercise.get("ref1RM") if isinstance(generated_exercise, dict) and isinstance(generated_exercise.get("ref1RM"), str) else None
-    if next_ref_1rm != previous_ref_1rm and not _has_consistent_load_ref(merged_source.get("loadRef"), next_ref_1rm):
-        merged_source["loadRef"] = _rebuild_load_ref_from_generated_week(
+    if next_ref_1rm != previous_ref_1rm and not has_consistent_load_ref(merged_source.get("loadRef"), next_ref_1rm):
+        merged_source["loadRef"] = rebuild_load_ref_from_generated_week(
             generated_week=generated_week,
             ref_1rm=next_ref_1rm,
         )
-    return _materialize_canonical_exercise(
+    return materialize_canonical_exercise(
         exercise_source=merged_source,
         fallback_id=(
             generated_exercise.get("id")
@@ -336,7 +343,7 @@ def _materialize_exercise(
     exercise_template: dict[str, Any],
     base_lifts: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    load_mode = exercise_template.get("loadMode") or _infer_load_mode(exercise_template)
+    load_mode = exercise_template.get("loadMode") or infer_load_mode(exercise_template)
     exercise_source = {
         "id": f"{preset_key}-w{week_index}-{day_key.lower()}-{exercise_index}",
         "name": exercise_template["name"],
@@ -348,139 +355,7 @@ def _materialize_exercise(
         "reps": int(exercise_template["reps"]),
         "kg": None,
         "note": exercise_template.get("note") or "",
-        "loadRef": _build_load_ref(base_lifts, exercise_template.get("ref1RM")) if load_mode == "percentage" else None,
+        "loadRef": build_load_ref(base_lifts, exercise_template.get("ref1RM")) if load_mode == "percentage" else None,
     }
-    return _materialize_canonical_exercise(exercise_source=exercise_source, fallback_id=exercise_source["id"])
+    return materialize_canonical_exercise(exercise_source=exercise_source, fallback_id=exercise_source["id"])
 
-
-def _materialize_canonical_exercise(
-    *,
-    exercise_source: dict[str, Any],
-    fallback_id: str,
-) -> dict[str, Any]:
-    load_mode = exercise_source.get("loadMode") or _infer_load_mode(exercise_source)
-    ref_1rm = exercise_source.get("ref1RM") if load_mode == "percentage" else None
-    pct = _read_number(exercise_source.get("pct")) if load_mode == "percentage" else None
-    sets = _coerce_int(exercise_source.get("sets"), 0)
-    reps = _coerce_int(exercise_source.get("reps"), 0)
-    note = exercise_source.get("note") if isinstance(exercise_source.get("note"), str) else ""
-    kg = _read_number(exercise_source.get("kg")) if load_mode == "fixed" else None
-    tier = exercise_source.get("tier") if isinstance(exercise_source.get("tier"), str) and exercise_source.get("tier") else (
-        "main" if load_mode == "percentage" else "accessory"
-    )
-    load_ref = _normalize_load_ref(exercise_source.get("loadRef"), ref_1rm, load_mode)
-    return {
-        "id": exercise_source.get("id") if isinstance(exercise_source.get("id"), str) and exercise_source.get("id") else fallback_id,
-        "name": exercise_source.get("name") if isinstance(exercise_source.get("name"), str) else "",
-        "tier": tier,
-        "template": {
-            "loadMode": load_mode,
-            "ref1RM": ref_1rm,
-            "setType": DEFAULT_SET_TYPE,
-            "sets": sets,
-            "repsText": str(reps),
-        },
-        "instance": {
-            "pct": pct if load_mode == "percentage" else None,
-            "kg": kg if load_mode == "fixed" else None,
-            "note": note,
-        },
-        "ref1RM": ref_1rm,
-        "pct": pct if load_mode == "percentage" else None,
-        "sets": sets,
-        "reps": reps,
-        "kg": kg if load_mode == "fixed" else None,
-        "note": note,
-        "loadRef": load_ref,
-    }
-
-
-def _infer_load_mode(exercise_source: dict[str, Any]) -> str:
-    ref_1rm = exercise_source.get("ref1RM")
-    pct = exercise_source.get("pct")
-    if isinstance(ref_1rm, str) and ref_1rm:
-        return "percentage"
-    if _read_number(pct) is not None:
-        return "percentage"
-    return "fixed"
-
-
-def _resolve_source_max(base_lifts: dict[str, dict[str, Any]], ref_1rm: str) -> float | None:
-    lift_payload = base_lifts.get(ref_1rm)
-    if not isinstance(lift_payload, dict):
-        return None
-    tm_value = _read_number(lift_payload.get("tm"))
-    if tm_value is not None:
-        return tm_value
-    return _read_number(lift_payload.get("oneRm"))
-
-
-def _build_load_ref(base_lifts: dict[str, dict[str, Any]], ref_1rm: Any) -> dict[str, Any] | None:
-    if not isinstance(ref_1rm, str) or not ref_1rm:
-        return None
-    lift_payload = base_lifts.get(ref_1rm)
-    if not isinstance(lift_payload, dict):
-        return {"lift": ref_1rm, "value": None, "source": None}
-    tm_value = _read_number(lift_payload.get("tm"))
-    if tm_value is not None:
-        return {"lift": ref_1rm, "value": tm_value, "source": "tm"}
-    one_rm_value = _read_number(lift_payload.get("oneRm"))
-    return {"lift": ref_1rm, "value": one_rm_value, "source": "oneRm" if one_rm_value is not None else None}
-
-
-def _normalize_load_ref(raw_load_ref: Any, ref_1rm: str | None, load_mode: str) -> dict[str, Any] | None:
-    if load_mode != "percentage":
-        return None
-    if not isinstance(raw_load_ref, dict):
-        return {"lift": ref_1rm, "value": None, "source": None} if ref_1rm else None
-    lift = raw_load_ref.get("lift") if isinstance(raw_load_ref.get("lift"), str) and raw_load_ref.get("lift") else ref_1rm
-    value = _read_number(raw_load_ref.get("value"))
-    source = raw_load_ref.get("source") if raw_load_ref.get("source") in {"tm", "oneRm"} else None
-    if lift is None:
-        return None
-    return {"lift": lift, "value": value, "source": source}
-
-
-def _has_consistent_load_ref(raw_load_ref: Any, ref_1rm: str | None) -> bool:
-    if ref_1rm is None:
-        return not isinstance(raw_load_ref, dict)
-    return isinstance(raw_load_ref, dict) and raw_load_ref.get("lift") == ref_1rm
-
-
-def _rebuild_load_ref_from_generated_week(
-    *,
-    generated_week: dict[str, dict[str, Any]] | None,
-    ref_1rm: str | None,
-) -> dict[str, Any] | None:
-    if ref_1rm is None:
-        return None
-    if not isinstance(generated_week, dict):
-        return {"lift": ref_1rm, "value": None, "source": None}
-    for day_plan in generated_week.values():
-        if not isinstance(day_plan, dict):
-            continue
-        exercises = day_plan.get("exercises")
-        if not isinstance(exercises, list):
-            continue
-        for exercise in exercises:
-            if not isinstance(exercise, dict):
-                continue
-            load_ref = exercise.get("loadRef")
-            if isinstance(load_ref, dict) and load_ref.get("lift") == ref_1rm:
-                return deepcopy(load_ref)
-    return {"lift": ref_1rm, "value": None, "source": None}
-
-
-def _coerce_int(value: Any, default: int) -> int:
-    number = _read_number(value)
-    if number is None:
-        return default
-    return int(number)
-
-
-def _read_number(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    return None

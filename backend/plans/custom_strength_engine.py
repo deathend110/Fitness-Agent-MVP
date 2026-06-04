@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.plans import cycle_engine
-from backend.plans.cycle_engine import _materialize_canonical_exercise
+from backend.plans.weekly_plan_materializer import build_load_ref, materialize_canonical_exercise
 
 WEEKDAY_ORDER = (
     "Monday",
@@ -101,8 +100,8 @@ def _materialize_exercise(
     load_mode = "percentage" if category == "main" else "fixed"
     ref_1rm = _resolve_ref_1rm(exercise, category)
     pct = _resolve_pct(exercise, category)
-    # 复用周期引擎已有 loadRef 语义，避免 TM / oneRm 优先级与 source 字段漂移。
-    load_ref = cycle_engine._build_load_ref(main_lifts, ref_1rm) if category == "main" else None
+    # 复用共享 helper 的 loadRef 语义，避免不同引擎之间的 TM / oneRm 优先级漂移。
+    load_ref = build_load_ref(main_lifts, ref_1rm) if category == "main" else None
     exercise_id = _build_exercise_id(
         raw_id=exercise.get("id"),
         week_index=week_index,
@@ -110,7 +109,7 @@ def _materialize_exercise(
         exercise_index=exercise_index,
     )
     tier = "main" if category == "main" else ("variation" if category == "variation" else "accessory")
-    return _materialize_canonical_exercise(
+    return materialize_canonical_exercise(
         exercise_source={
             "id": exercise.get("id"),
             "name": exercise.get("name"),
