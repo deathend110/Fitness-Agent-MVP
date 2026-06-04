@@ -133,15 +133,32 @@ test('PlanDayCardHeader 会为休息日头部保留日期与休息 badge，但�
   assert.match(headerSource, /if \(isCompactRestDay\) \{[\s\S]*return \(/)
 })
 
+test('PlanDayCardHeader 会把训练日动作统计收进标题行，避免底部重复显示两套动作数', () => {
+  const headerSource = readWorkspaceFile('src/components/PlanDayCardHeader.jsx')
+
+  assert.match(headerSource, /<div className="flex items-center gap-2">\s*<h3/)
+  assert.match(headerSource, /preview\.meta/)
+  assert.doesNotMatch(headerSource, /preview\.eyebrow/)
+  assert.doesNotMatch(headerSource, /{isTrainingDay \? \(\s*<span className="rounded-full border border-fitloop-line\/70 bg-black\/10 px-2\.5 py-1 text-xs text-slate-400">/)
+})
+
 test('PlanDayTypeSection 提供紧凑模式，供空休息日保留轻量训练类型切换能力', () => {
   const typeSectionSource = readWorkspaceFile('src/components/PlanDayTypeSection.jsx')
 
   assert.match(typeSectionSource, /compact = false/)
   assert.match(typeSectionSource, /<select/)
+  assert.match(typeSectionSource, /aria-label="训练类型"/)
   assert.match(typeSectionSource, /<option value="training">训练日<\/option>/)
   assert.match(typeSectionSource, /<option value="rest">休息日<\/option>/)
+  assert.doesNotMatch(typeSectionSource, /<span className="text-sm text-slate-300">训练类型<\/span>/)
   assert.doesNotMatch(typeSectionSource, /dayTypeOptions\.filter\(/)
   assert.doesNotMatch(typeSectionSource, /PlanDayCardButton/)
+})
+
+test('PlanDayCard 会收紧头部下方留白，让计划卡片整体上移', () => {
+  const cardSource = readWorkspaceFile('src/components/PlanDayCard.jsx')
+
+  assert.match(cardSource, /<div className=\{`mt-3 flex flex-1 flex-col/)
 })
 
 test('PlanRestDayPanel 去掉旧版厚卡片边框，改为轻量图标和两行恢复文案', () => {

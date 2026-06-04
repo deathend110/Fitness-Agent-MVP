@@ -21,8 +21,7 @@ function PlanDayTypeSection({
 
   return (
     <div className={compact ? 'mt-3 border-t border-fitloop-line/60 pt-3' : 'space-y-2'}>
-      <label className="block space-y-2">
-        <span className="text-sm text-slate-300">训练类型</span>
+      <label className="block">
         <div className="relative">
           <select
             aria-label="训练类型"

@@ -43,12 +43,18 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
         }`}
       >
         <div className={`min-w-0 ${isTrainingDay ? '' : 'flex-1'}`}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {preview.eyebrow}
-          </p>
-          <h3 className={`truncate font-semibold text-slate-100 ${isCompactRestDay ? 'mt-1 text-base' : 'mt-2 text-lg'}`}>
-            {header.title}
-          </h3>
+          {isTrainingDay ? (
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-lg font-semibold text-slate-100">{header.title}</h3>
+              <span className="shrink-0 rounded-full border border-fitloop-line/70 bg-black/10 px-2.5 py-1 text-[11px] text-slate-400">
+                {preview.meta}
+              </span>
+            </div>
+          ) : (
+            <h3 className={`truncate font-semibold text-slate-100 ${isCompactRestDay ? 'mt-1 text-base' : 'mt-2 text-lg'}`}>
+              {header.title}
+            </h3>
+          )}
           {header.dateLabel ? (
             <p className="mt-1 text-xs leading-5 text-slate-400">{header.dateLabel}</p>
           ) : null}
@@ -70,14 +76,8 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
           </span>
         ) : null}
 
-        {isTrainingDay ? (
-          <span className="rounded-full border border-fitloop-line/70 bg-black/10 px-2.5 py-1 text-xs text-slate-400">
-            {exerciseCount} 个动作
-          </span>
-        ) : null}
-
         <p className={`text-slate-400 ${isCompactRestDay ? 'text-[11px] leading-4' : 'text-xs leading-5'}`}>
-          {isTrainingDay ? preview.meta : `${preview.title} · ${preview.meta}`}
+          {isTrainingDay ? preview.title : `${preview.title} · ${preview.meta}`}
         </p>
       </div>
     </div>

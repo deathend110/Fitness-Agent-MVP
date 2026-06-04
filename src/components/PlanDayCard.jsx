@@ -55,7 +55,7 @@ function PlanDayCard({
         planType={plan.type}
       />
 
-      <div className={`mt-4 flex flex-1 flex-col ${isCompactRestDay ? 'min-h-[9.5rem]' : ''}`}>
+      <div className={`mt-3 flex flex-1 flex-col ${isCompactRestDay ? 'min-h-[9.5rem]' : ''}`}>
         {showDayTypeSection ? (
           <PlanDayTypeSection
             compact={dayTypeSectionVariant === 'compact'}

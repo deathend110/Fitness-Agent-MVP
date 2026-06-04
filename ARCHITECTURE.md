@@ -63,6 +63,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
   - 管理按日训练类型、动作增删改和动作表单状态
+  - 日期列头部直接整合星期、日期与动作统计，减少重复标签带来的竖向占用
 
 - [src/tabs/TodayTab.jsx](src/tabs/TodayTab.jsx)
   - 编辑今日日志
