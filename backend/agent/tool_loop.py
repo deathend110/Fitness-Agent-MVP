@@ -46,13 +46,23 @@ class ToolLoopOrchestrator:
         messages: list[dict[str, Any]],
         model: str,
         session_id: int | None = None,
+        stop_after_tool_names: set[str] | None = None,
         **kwargs: Any,
     ) -> ToolLoopResult:
         active_messages = list(messages)
         proposals: list[dict[str, Any]] = []
         tool_schema = provider.build_tool_schema(self.registry.describe_tools())
+        should_stop_after_tools = False
 
         for round_index in range(self.max_rounds + 1):
+            if should_stop_after_tools:
+                return ToolLoopResult(
+                    content="",
+                    messages=active_messages,
+                    tool_rounds=round_index - 1,
+                    proposals=proposals,
+                )
+
             response = await provider.generate_chat(
                 messages=active_messages,
                 model=model,
@@ -115,6 +125,11 @@ class ToolLoopOrchestrator:
                     # 完整工具结果，避免 proposal 等结构化 payload 被截断后下一轮退化。
                     followup_result,
                 )
+                if (
+                    stop_after_tool_names is not None
+                    and tool_call["toolName"] in stop_after_tool_names
+                ):
+                    should_stop_after_tools = True
 
             if session_id is not None:
                 await session.commit()

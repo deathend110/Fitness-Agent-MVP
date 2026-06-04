@@ -20,6 +20,7 @@ from backend.agent.session_title import update_session_title_from_user_prompt
 from backend.agent.tool_calling import build_default_tool_registry
 from backend.agent.tool_choice import (
     has_explicit_plan_proposal_intent,
+    requires_structured_plan_proposal,
     resolve_tool_choice_for_request,
 )
 from backend.config import get_settings
@@ -163,6 +164,11 @@ class BackgroundWorker:
                 raise DeepSeekClientError(
                     "DeepSeek 非流式响应格式异常，请稍后重试。",
                     code="invalid_response",
+                )
+            if proposal is None and requires_structured_plan_proposal(user_content):
+                raise DeepSeekClientError(
+                    "本轮请求明确要求生成待确认计划卡，但模型没有通过工具返回结构化 proposal，请稍后重试或切换模型。",
+                    code="missing_plan_proposal",
                 )
             if not content.strip():
                 raise DeepSeekClientError(

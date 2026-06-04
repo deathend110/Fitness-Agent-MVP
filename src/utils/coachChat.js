@@ -5,6 +5,103 @@ import {
   submitBackendCoachBackgroundTask,
 } from '../api/coachBackend.js'
 
+const STREAM_TOOL_STATUS_LABELS = {
+  get_chat_session_context: '整理对话上下文',
+  get_daily_log: '读取今日日志',
+  get_profile: '读取用户档案',
+  get_recent_chat_history: '整理最近对话',
+  get_weekly_plan: '读取训练计划',
+}
+
+function hasCoachSuggestionValue(value) {
+  if (value === null || value === undefined) {
+    return false
+  }
+
+  if (typeof value === 'string') {
+    return Boolean(value.trim())
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0
+  }
+
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0
+  }
+
+  return true
+}
+
+function getCoachSuggestionCompletenessScore(suggestion) {
+  if (!suggestion || typeof suggestion !== 'object') {
+    return -1
+  }
+
+  let score = 0
+
+  if (typeof suggestion.summary === 'string' && suggestion.summary.trim()) {
+    score += 2
+  }
+
+  if (typeof suggestion.day === 'string' && suggestion.day.trim()) {
+    score += 1
+  }
+
+  if (suggestion.proposalId) {
+    score += 1
+  }
+
+  if (suggestion.suggest_plan_update === true) {
+    score += 1
+  }
+
+  if (Array.isArray(suggestion.changes) && suggestion.changes.length) {
+    score += 5
+  }
+
+  if (suggestion.kind === 'day_plan_replace' && suggestion.dayPlan && typeof suggestion.dayPlan === 'object') {
+    score += 5
+  }
+
+  return score
+}
+
+export function mergeCoachReplySuggestion(...suggestions) {
+  const validSuggestions = suggestions.filter(
+    (suggestion) => suggestion && typeof suggestion === 'object',
+  )
+
+  if (!validSuggestions.length) {
+    return null
+  }
+
+  const richestSuggestion = validSuggestions.reduce((bestSuggestion, currentSuggestion) => {
+    if (!bestSuggestion) {
+      return currentSuggestion
+    }
+
+    return getCoachSuggestionCompletenessScore(currentSuggestion) >
+      getCoachSuggestionCompletenessScore(bestSuggestion)
+      ? currentSuggestion
+      : bestSuggestion
+  }, null)
+
+  return validSuggestions.reduce((mergedSuggestion, currentSuggestion) => {
+    Object.entries(currentSuggestion).forEach(([key, value]) => {
+      if (!hasCoachSuggestionValue(value)) {
+        return
+      }
+
+      if (!hasCoachSuggestionValue(mergedSuggestion[key])) {
+        mergedSuggestion[key] = value
+      }
+    })
+
+    return mergedSuggestion
+  }, { ...richestSuggestion })
+}
+
 function buildAgentPayload({
   files = [],
   fileIds,
@@ -42,26 +139,93 @@ export async function requestCoachReply(
   { requestImpl = requestBackendCoachReply, signal } = {},
 ) {
   const payload = buildAgentPayload({ files, model, sessionId, thinking, userInput })
-  return requestImpl(payload, { sessionId, signal })
+  return requestImpl(payload, { sessionId, signal }).then((reply) => ({
+    ...reply,
+    proposal: reply?.proposal ?? null,
+    suggestion: mergeCoachReplySuggestion(reply?.proposal, reply?.suggestion),
+  }))
 }
 
 // Phase 3 起后端负责 prompt 与上下文拼装；前端只传当前用户输入和会话配置。
 export async function requestCoachReplyStream(
   { files = [], model, sessionId = null, thinking, userInput = '' },
   {
+    onProposal,
+    onStatusLabel,
+    onSuggestion,
     onText,
     signal,
     streamImpl = streamBackendCoachReply,
   } = {},
 ) {
   const payload = buildAgentPayload({ files, model, sessionId, thinking, userInput })
+  const streamState = {
+    proposal: null,
+    suggestion: null,
+  }
+
   return streamImpl(payload, {
     sessionId,
     signal,
     onDelta: (_delta, fullText) => {
       onText?.(fullText)
     },
-  })
+    onProposal: (proposal) => {
+      streamState.proposal = mergeCoachReplySuggestion(streamState.proposal, proposal)
+      onProposal?.(proposal)
+    },
+    onSuggestion: (suggestion) => {
+      streamState.suggestion = mergeCoachReplySuggestion(streamState.suggestion, suggestion)
+      onSuggestion?.(suggestion)
+    },
+    onToolStatus: (toolStatus) => {
+      onStatusLabel?.(resolveCoachStreamStatusLabel(toolStatus))
+    },
+  }).then((reply) => ({
+    ...reply,
+    proposal: mergeCoachReplySuggestion(streamState.proposal, reply?.proposal),
+    suggestion: mergeCoachReplySuggestion(
+      streamState.proposal,
+      streamState.suggestion,
+      reply?.proposal,
+      reply?.suggestion,
+    ),
+  }))
+}
+
+export function resolveCoachStreamStatusLabel(toolStatus) {
+  if (!toolStatus || typeof toolStatus !== 'object') {
+    return ''
+  }
+
+  const message =
+    typeof toolStatus.message === 'string'
+      ? toolStatus.message.trim()
+      : typeof toolStatus.label === 'string'
+        ? toolStatus.label.trim()
+        : ''
+
+  if (message) {
+    return message
+  }
+
+  const tool = typeof toolStatus.tool === 'string' ? toolStatus.tool.trim() : ''
+  const status = typeof toolStatus.status === 'string' ? toolStatus.status.trim() : ''
+  const toolLabel = STREAM_TOOL_STATUS_LABELS[tool] || ''
+
+  if (status === 'succeeded' || status === 'completed') {
+    return ''
+  }
+
+  if (toolLabel) {
+    return `正在${toolLabel}`
+  }
+
+  if (status === 'pending' || status === 'running') {
+    return '正在整理上下文'
+  }
+
+  return ''
 }
 
 export async function startBackgroundCoachReply(
@@ -124,7 +288,7 @@ export function shouldShowBackgroundCoachPendingIndicator({
 
 export function mergeBackgroundCoachReply({ currentHistory = [], reply, storedTask } = {}) {
   const assistantText = typeof reply?.text === 'string' ? reply.text.trim() : ''
-  const suggestion = reply?.proposal ?? reply?.suggestion ?? null
+  const suggestion = mergeCoachReplySuggestion(reply?.proposal, reply?.suggestion)
 
   if (!assistantText) {
     return {

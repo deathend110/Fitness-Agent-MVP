@@ -1,10 +1,10 @@
 import json
-from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
 
+from coach_e2e_helpers import APP_URL, ensure_vite_dev_server, get_message_texts, install_coach_backend_fetch_mock
 
-APP_URL = "http://127.0.0.1:5173"
+
 MODEL_REF = "provider_deepseek_main::deepseek-v4-flash"
 USER_MESSAGE = "请在流式失败后继续给我一个普通回复"
 REPLY_TEXT = "回退成功：今天把硬拉训练量减少一组。"
@@ -24,10 +24,7 @@ LOCAL_PROFILE = {
     "notes": "用于流式回退浏览器验证。",
 }
 
-BACKEND_PROFILE = {
-    **LOCAL_PROFILE,
-    "oneRm": LOCAL_PROFILE["oneRM"],
-}
+BACKEND_PROFILE = {**LOCAL_PROFILE, "oneRm": LOCAL_PROFILE["oneRM"]}
 
 WEEKLY_PLAN = {
     day: {"type": "rest", "exercises": []}
@@ -35,129 +32,83 @@ WEEKLY_PLAN = {
 }
 
 
-def json_response(route, payload, status=200):
-    route.fulfill(
-        status=status,
-        content_type="application/json",
-        body=json.dumps(payload, ensure_ascii=False),
-    )
-
-
-def read_request_json(request):
-    payload = request.post_data_json
-    return payload() if callable(payload) else payload
-
-
-def install_backend_mock(page, stream_calls, reply_calls):
-    def handle_api(route):
-        request = route.request
-        path = urlparse(request.url).path.replace("/api", "", 1)
-        method = request.method.upper()
-
-        if method == "GET" and path == "/profile":
-            return json_response(route, BACKEND_PROFILE)
-
-        if method == "GET" and path == "/weekly-plan":
-            return json_response(route, WEEKLY_PLAN)
-
-        if method == "GET" and path == "/daily-log":
-            return json_response(route, {})
-
-        if method == "GET" and path == "/models":
-            return json_response(
-                route,
-                {
-                    "defaultModel": MODEL_REF,
-                    "defaultModelRef": MODEL_REF,
-                    "models": [
-                        {
-                            "id": MODEL_REF,
-                            "providerId": "provider_deepseek_main",
-                            "providerType": "openai_compatible",
-                            "providerLabel": "DeepSeek 主账号",
-                            "remoteModelId": "deepseek-v4-flash",
-                            "label": "DeepSeek 主账号 / DeepSeek V4 Flash",
-                            "supportsThinking": True,
-                            "thinking": {
-                                "supported": True,
-                                "canDisable": True,
-                                "defaultEnabled": False,
-                                "intensityOptions": [{"id": "standard", "label": "标准"}],
-                                "defaultIntensity": "standard",
-                            },
-                        }
-                    ],
-                    "thinking": {
-                        "enabled": False,
-                        "budget": "standard",
-                        "options": ["off", "standard"],
-                    },
-                },
-            )
-
-        if method == "GET" and path == "/chat/sessions":
-            return json_response(
-                route,
-                [
-                    {
-                        "id": 1,
-                        "title": "默认对话",
-                        "createdAt": "2026-06-01T00:00:00Z",
-                        "updatedAt": "2026-06-01T00:10:00Z",
-                    }
-                ],
-            )
-
-        if method == "GET" and path == "/chat/sessions/default":
-            return json_response(
-                route,
-                {
-                    "id": 1,
-                    "title": "默认对话",
-                    "createdAt": "2026-06-01T00:00:00Z",
-                    "updatedAt": "2026-06-01T00:10:00Z",
-                },
-            )
-
-        if method == "GET" and path == "/chat/sessions/1/messages":
-            return json_response(route, [])
-
-        if path == "/chat/sessions/1/draft":
-            if method == "GET":
-                return json_response(
-                    route,
-                    {
-                        "content": "",
-                        "model": MODEL_REF,
-                        "thinking": {"enabled": False, "budget": "standard"},
-                        "attachedFileIds": [],
-                    },
-                )
-            if method == "PUT":
-                return json_response(route, {"ok": True})
-
-        if method == "POST" and path == "/chat/stream":
-            stream_calls.append(read_request_json(request))
-            return json_response(route, {"message": "stream down"}, status=503)
-
-        if method == "POST" and path == "/chat/reply":
-            reply_calls.append(read_request_json(request))
-            return json_response(route, {"text": REPLY_TEXT, "suggestion": None})
-
-        return json_response(route, {"ok": True})
-
-    page.route("http://127.0.0.1:8000/api/**", handle_api)
-
-
 def seed_local_storage(context):
-    seed_payload = json.dumps(LOCAL_PROFILE, ensure_ascii=False)
     context.add_init_script(
-        f"""
-        const profile = {seed_payload};
-        window.localStorage.setItem('fitloop_profile', JSON.stringify(profile));
+        """
+        window.localStorage.setItem('fitloop_profile', JSON.stringify(%s));
+        window.localStorage.setItem('fitloop_weeklyPlan', JSON.stringify(%s));
+        window.localStorage.setItem('fitloop_dailyLog', JSON.stringify({}));
+        window.localStorage.setItem('fitloop_chatHistory', JSON.stringify([]));
+        window.localStorage.setItem('fitloop:coach-active-session-id', '1');
         window.localStorage.setItem('fitloop_storageVersion', JSON.stringify('v2-empty-defaults'));
         """
+        % (
+            json.dumps(LOCAL_PROFILE, ensure_ascii=False),
+            json.dumps(WEEKLY_PLAN, ensure_ascii=False),
+        )
     )
+
+
+def build_mock_config():
+    return {
+        "profile": BACKEND_PROFILE,
+        "weeklyPlan": WEEKLY_PLAN,
+        "dailyLog": {},
+        "models": {
+            "defaultModel": MODEL_REF,
+            "defaultModelRef": MODEL_REF,
+            "models": [
+                {
+                    "id": MODEL_REF,
+                    "providerId": "provider_deepseek_main",
+                    "providerType": "openai_compatible",
+                    "providerLabel": "DeepSeek 主账号",
+                    "remoteModelId": "deepseek-v4-flash",
+                    "label": "DeepSeek 主账号 / DeepSeek V4 Flash",
+                    "supportsThinking": True,
+                    "thinking": {
+                        "supported": True,
+                        "canDisable": True,
+                        "defaultEnabled": False,
+                        "intensityOptions": [{"id": "standard", "label": "标准"}],
+                        "defaultIntensity": "standard",
+                    },
+                }
+            ],
+            "thinking": {"enabled": False, "budget": "standard", "options": ["off", "standard"]},
+        },
+        "defaultSession": {
+            "id": 1,
+            "title": "默认对话",
+            "createdAt": "2026-06-01T00:00:00Z",
+            "updatedAt": "2026-06-01T00:10:00Z",
+        },
+        "sessions": [
+            {
+                "id": 1,
+                "title": "默认对话",
+                "createdAt": "2026-06-01T00:00:00Z",
+                "updatedAt": "2026-06-01T00:10:00Z",
+            }
+        ],
+        "messagesBySession": {"1": []},
+        "draftsBySession": {
+            "1": {
+                "content": "",
+                "model": MODEL_REF,
+                "thinking": {"enabled": False, "budget": "standard"},
+                "attachedFileIds": [],
+            }
+        },
+        "streamScenarios": [
+            {
+                "type": "http_error",
+                "status": 503,
+                "message": "stream down",
+            }
+        ],
+        "replyScenarios": [{"text": REPLY_TEXT, "suggestion": None, "proposal": None}],
+    }
 
 
 def wait_until_composer_ready(page):
@@ -169,36 +120,39 @@ def wait_until_composer_ready(page):
 
 
 def main():
-    stream_calls = []
-    reply_calls = []
+    with ensure_vite_dev_server(APP_URL) as app_url:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            seed_local_storage(context)
+            install_coach_backend_fetch_mock(context, build_mock_config())
+            page = context.new_page()
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 1440, "height": 900})
-        seed_local_storage(context)
-        page = context.new_page()
-        install_backend_mock(page, stream_calls, reply_calls)
+            page.goto(app_url)
+            page.get_by_role("button", name="AI 教练").click()
 
-        page.goto(APP_URL)
-        page.get_by_role("button", name="AI 教练").click()
+            wait_until_composer_ready(page)
+            page.locator("textarea").fill(USER_MESSAGE)
+            page.get_by_role("button", name="发送消息").click()
 
-        wait_until_composer_ready(page)
-        page.locator("textarea").fill(USER_MESSAGE)
-        page.get_by_role("button", name="发送消息").click()
+            expect(page.get_by_text(REPLY_TEXT, exact=True)).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("思考中")).not_to_be_visible(timeout=10_000)
 
-        expect(page.get_by_text(REPLY_TEXT, exact=True)).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("思考中")).not_to_be_visible(timeout=10_000)
+            message_texts = get_message_texts(page)
+            assert len(message_texts) == 2, message_texts
+            assert USER_MESSAGE in message_texts[0], message_texts
+            assert REPLY_TEXT in message_texts[1], message_texts
 
-        assert len(stream_calls) == 1, stream_calls
-        assert len(reply_calls) == 1, reply_calls
-        assert stream_calls[0]["model"] == MODEL_REF, stream_calls
-        assert stream_calls[0]["userInput"] == USER_MESSAGE, stream_calls
-        assert reply_calls[0]["model"] == MODEL_REF, reply_calls
-        assert reply_calls[0]["userInput"] == USER_MESSAGE, reply_calls
-        assert page.get_by_text(REPLY_TEXT, exact=True).count() == 1
-        assert page.locator("article").count() == 2
+            mock_state = page.evaluate("() => window.__coachMockState")
+            assert len(mock_state["streamCalls"]) == 1, mock_state
+            assert len(mock_state["replyCalls"]) == 1, mock_state
+            assert mock_state["streamCalls"][0]["model"] == MODEL_REF, mock_state
+            assert mock_state["streamCalls"][0]["userInput"] == USER_MESSAGE, mock_state
+            assert mock_state["replyCalls"][0]["model"] == MODEL_REF, mock_state
+            assert mock_state["replyCalls"][0]["userInput"] == USER_MESSAGE, mock_state
+            assert mock_state["messagesBySession"]["1"][-1]["content"] == REPLY_TEXT, mock_state["messagesBySession"]
 
-        browser.close()
+            browser.close()
 
 
 if __name__ == "__main__":

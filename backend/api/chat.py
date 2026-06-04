@@ -103,6 +103,15 @@ class NormalizedChatRequest:
     messages: list[dict[str, Any]] | None = None
 
 
+@dataclass(frozen=True)
+class PreparedAgentReply:
+    final_messages: list[dict[str, Any]]
+    assistant_text: str
+    suggestion: dict[str, Any] | None
+    proposal: dict[str, Any] | None
+    supports_live_stream: bool
+
+
 background_worker: BackgroundWorker | None = None
 
 
@@ -457,17 +466,7 @@ def build_plan_proposal_retry_messages(messages: list[dict[str, Any]]) -> list[d
     ]
 
 
-async def request_agent_tool_reply(
-    *,
-    deepseek_client: DeepSeekClient,
-    messages: list[dict[str, Any]],
-    model: str,
-    session: AsyncSession,
-    session_id: int,
-    user_content: str,
-    thinking: dict[str, str] | None = None,
-    reasoning_effort: str | None = None,
-) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+def build_agent_tool_registry(user_content: str):
     allow_proposal_tools = has_explicit_plan_proposal_intent(user_content)
     registry = build_default_tool_registry()
     if not allow_proposal_tools:
@@ -482,7 +481,23 @@ async def request_agent_tool_reply(
                 "read_uploaded_file_summary",
             }
         )
+    return registry
 
+
+async def prepare_agent_reply(
+    *,
+    deepseek_client: DeepSeekClient,
+    messages: list[dict[str, Any]],
+    model: str,
+    session: AsyncSession,
+    session_id: int,
+    user_content: str,
+    thinking: dict[str, str] | None = None,
+    reasoning_effort: str | None = None,
+    defer_final_assistant_response: bool = False,
+) -> PreparedAgentReply:
+    allow_proposal_tools = has_explicit_plan_proposal_intent(user_content)
+    registry = build_agent_tool_registry(user_content)
     if not provider_client_supports_tool_loop(deepseek_client):
         content, _usage = await request_deepseek_reply_with_usage(
             deepseek_client=deepseek_client,
@@ -492,12 +507,23 @@ async def request_agent_tool_reply(
             reasoning_effort=reasoning_effort,
         )
         parsed_reply = parse_ai_response(content)
-        return parsed_reply["text"], parsed_reply["suggestion"], None
+        return PreparedAgentReply(
+            final_messages=messages,
+            assistant_text=parsed_reply["text"],
+            suggestion=parsed_reply["suggestion"],
+            proposal=None,
+            supports_live_stream=False,
+        )
 
     tool_choice = resolve_tool_choice_for_request(
         user_content=user_content,
         provider_client=deepseek_client,
         thinking=thinking,
+    )
+    stop_after_tool_names = (
+        {"propose_plan_change", "propose_day_plan_replace"}
+        if allow_proposal_tools and defer_final_assistant_response
+        else None
     )
     tool_result = await run_tool_calling_chat(
         session=session,
@@ -509,6 +535,7 @@ async def request_agent_tool_reply(
         tool_choice=tool_choice,
         thinking=thinking,
         reasoning_effort=reasoning_effort,
+        stop_after_tool_names=stop_after_tool_names,
     )
     parsed_reply = parse_ai_response(tool_result.content)
     proposal = tool_result.proposals[-1] if tool_result.proposals else None
@@ -528,12 +555,26 @@ async def request_agent_tool_reply(
             tool_choice=retry_tool_choice,
             thinking=thinking,
             reasoning_effort=reasoning_effort,
+            stop_after_tool_names={"propose_plan_change", "propose_day_plan_replace"},
         )
         retry_parsed_reply = parse_ai_response(retry_result.content)
         retry_proposal = retry_result.proposals[-1] if retry_result.proposals else None
         if retry_proposal is not None:
-            return retry_parsed_reply["text"], retry_parsed_reply["suggestion"], retry_proposal
-    return parsed_reply["text"], parsed_reply["suggestion"], proposal
+            return PreparedAgentReply(
+                final_messages=retry_result.messages,
+                assistant_text=retry_parsed_reply["text"],
+                suggestion=retry_parsed_reply["suggestion"],
+                proposal=retry_proposal,
+                supports_live_stream=True,
+            )
+
+    return PreparedAgentReply(
+        final_messages=tool_result.messages,
+        assistant_text=parsed_reply["text"],
+        suggestion=parsed_reply["suggestion"],
+        proposal=proposal,
+        supports_live_stream=proposal is not None,
+    )
 
 
 def assert_required_plan_proposal(
@@ -779,20 +820,63 @@ async def stream_chat_reply(
 
         try:
             if normalized_request.source == "agent":
-                assistant_text, suggestion, proposal = await request_agent_tool_reply(
-                    deepseek_client=provider_client,
-                    messages=request_messages,
-                    model=remote_model_id,
-                    session=session,
-                    session_id=chat_session.id,
-                    user_content=user_content,
-                    thinking=thinking_payload,
-                    reasoning_effort=reasoning_effort,
-                )
-                assert_required_plan_proposal(user_content=user_content, proposal=proposal)
-                assistant_text = finalize_assistant_text(assistant_text, proposal)
-                if assistant_text:
-                    yield build_sse_frame("delta", {"text": assistant_text})
+                if has_explicit_plan_proposal_intent(user_content):
+                    prepared_reply = await prepare_agent_reply(
+                        deepseek_client=provider_client,
+                        messages=request_messages,
+                        model=remote_model_id,
+                        session=session,
+                        session_id=chat_session.id,
+                        user_content=user_content,
+                        thinking=thinking_payload,
+                        reasoning_effort=reasoning_effort,
+                        defer_final_assistant_response=True,
+                    )
+                    assert_required_plan_proposal(
+                        user_content=user_content,
+                        proposal=prepared_reply.proposal,
+                    )
+                    async for chunk, event_usage in stream_deepseek_reply_with_usage(
+                        deepseek_client=provider_client,
+                        messages=prepared_reply.final_messages,
+                        model=remote_model_id,
+                        thinking=thinking_payload,
+                        reasoning_effort=reasoning_effort,
+                    ):
+                        if event_usage is not None:
+                            usage = event_usage
+                            continue
+                        if chunk is None:
+                            continue
+                        chunks.append(chunk)
+                        yield build_sse_frame("delta", {"text": chunk})
+                    parsed_reply = parse_ai_response("".join(chunks))
+                    assistant_text = finalize_assistant_text(
+                        parsed_reply["text"],
+                        prepared_reply.proposal,
+                    )
+                    suggestion = parsed_reply["suggestion"] or prepared_reply.suggestion
+                    proposal = prepared_reply.proposal
+                else:
+                    proposal = None
+                    async for chunk, event_usage in stream_deepseek_reply_with_usage(
+                        deepseek_client=provider_client,
+                        messages=request_messages,
+                        model=remote_model_id,
+                        thinking=thinking_payload,
+                        reasoning_effort=reasoning_effort,
+                    ):
+                        if event_usage is not None:
+                            usage = event_usage
+                            continue
+                        if chunk is None:
+                            continue
+                        chunks.append(chunk)
+                        yield build_sse_frame("delta", {"text": chunk})
+                    parsed_reply = parse_ai_response("".join(chunks))
+                    assistant_text = parsed_reply["text"]
+                    suggestion = parsed_reply["suggestion"]
+
                 await persist_successful_chat_turn(
                     chat_session=chat_session,
                     session=session,
@@ -801,7 +885,7 @@ async def stream_chat_reply(
                     assistant_text=assistant_text,
                     suggestion=proposal or suggestion,
                     model=selected_model_ref,
-                    usage=None,
+                    usage=usage,
                 )
                 if proposal is not None:
                     yield build_sse_frame("proposal", {"proposal": proposal})
@@ -889,7 +973,7 @@ async def request_chat_reply(
         proposal = None
         usage = None
         if normalized_request.source == "agent":
-            assistant_text, suggestion, proposal = await request_agent_tool_reply(
+            prepared_reply = await prepare_agent_reply(
                 deepseek_client=provider_client,
                 messages=request_messages,
                 model=remote_model_id,
@@ -898,9 +982,12 @@ async def request_chat_reply(
                 user_content=user_content,
                 thinking=thinking_payload,
                 reasoning_effort=reasoning_effort,
+                defer_final_assistant_response=False,
             )
+            proposal = prepared_reply.proposal
+            suggestion = prepared_reply.suggestion
             assert_required_plan_proposal(user_content=user_content, proposal=proposal)
-            assistant_text = finalize_assistant_text(assistant_text, proposal)
+            assistant_text = finalize_assistant_text(prepared_reply.assistant_text, proposal)
         else:
             content, usage = await request_deepseek_reply_with_usage(
                 deepseek_client=provider_client,

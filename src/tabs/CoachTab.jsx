@@ -17,6 +17,7 @@ import { mergeCommittedWeeklyPlan } from '../utils/weeklyPlanCommit.js'
 import { getCoachBlockReason } from '../utils/coachGuard.js'
 import {
   buildBackgroundCoachTaskRecord,
+  mergeCoachReplySuggestion,
   requestCoachReply,
   requestCoachReplyStream,
   shouldFallbackCoachStream,
@@ -248,6 +249,8 @@ function CoachTab({
     enabled: FALLBACK_MODEL_CONFIG.thinking.enabled,
     budget: FALLBACK_MODEL_CONFIG.thinking.budget,
   })
+  const [streamStatusLabel, setStreamStatusLabel] = useState('')
+  const [streamingSuggestion, setStreamingSuggestion] = useState(null)
   const [streamingText, setStreamingText] = useState('')
   const activeRequestAbortRef = useRef(null)
   const backgroundFallbackTriggeredRef = useRef(false)
@@ -666,14 +669,38 @@ function CoachTab({
 
     try {
       return await requestCoachReplyStream(payload, {
+        onProposal: (proposal) => {
+          setStreamingSuggestion((currentSuggestion) =>
+            mergeCoachReplySuggestion(currentSuggestion, proposal),
+          )
+        },
+        onStatusLabel: (statusLabel) => {
+          if (hasReceivedStreamText) {
+            return
+          }
+
+          setStreamStatusLabel(statusLabel || '')
+        },
+        onSuggestion: (suggestion) => {
+          setStreamingSuggestion((currentSuggestion) =>
+            mergeCoachReplySuggestion(currentSuggestion, suggestion),
+          )
+        },
         onText: (fullText) => {
+          const visibleText = getVisibleStreamText(fullText)
+
           hasReceivedStreamText = true
-          setStreamingText(getVisibleStreamText(fullText))
+          setStreamingText(visibleText)
+          if (visibleText.trim()) {
+            setStreamStatusLabel('')
+          }
         },
         signal,
       })
     } catch (error) {
       setStreamingText('')
+      setStreamingSuggestion(null)
+      setStreamStatusLabel('')
       if (
         !shouldFallbackCoachStream({
           hasReceivedText: hasReceivedStreamText,
@@ -695,6 +722,8 @@ function CoachTab({
     setAttachedFiles([])
     setDraft('')
     setMessageMeta([])
+    setStreamStatusLabel('')
+    setStreamingSuggestion(null)
     setStreamingText('')
     chatHistoryRef.current = []
     onChatHistoryChange([])
@@ -772,6 +801,8 @@ function CoachTab({
     }
 
     setErrorMessage('')
+    setStreamStatusLabel('')
+    setStreamingSuggestion(null)
     setStreamingText('')
     setIsBackgroundThinking(false)
     setActiveSessionId(sessionId)
@@ -799,6 +830,8 @@ function CoachTab({
         setDraft('')
         setAttachedFiles([])
         setMessageMeta([])
+        setStreamStatusLabel('')
+        setStreamingSuggestion(null)
         setStreamingText('')
         chatHistoryRef.current = []
         onChatHistoryChange([])
@@ -962,6 +995,8 @@ function CoachTab({
     backgroundFallbackTriggeredRef.current = false
     backgroundTaskStartedRef.current = false
     pendingRequestRef.current = requestPayload
+    setStreamStatusLabel('')
+    setStreamingSuggestion(null)
     setStreamingText('')
     setMessageMeta((currentMeta) =>
       mergeMessageMeta(nextHistory, currentMeta, {
@@ -974,7 +1009,7 @@ function CoachTab({
       const reply = await requestReplyWithFallback(requestPayload, {
         signal: activeRequestAbortRef.current?.signal,
       })
-      const assistantSuggestion = reply.proposal || reply.suggestion || null
+      const assistantSuggestion = reply.suggestion || reply.proposal || null
       const assistantMessage = {
         content: reply.text,
         role: 'assistant',
@@ -1022,6 +1057,8 @@ function CoachTab({
       activeRequestAbortRef.current = null
       backgroundSubmitPromiseRef.current = null
       pendingRequestRef.current = null
+      setStreamStatusLabel('')
+      setStreamingSuggestion(null)
       setStreamingText('')
     }
   }
@@ -1084,6 +1121,8 @@ function CoachTab({
           onDismissSuggestion={handleDismissSuggestion}
           onSuggestionClick={handleSuggestionQuestion}
           autoScrollKey={`${messageList.length}:${isCoachThinking ? 'sending' : 'idle'}`}
+          streamStatusLabel={streamStatusLabel}
+          streamingSuggestion={streamingSuggestion}
           streamingText={streamingText}
         />
       }

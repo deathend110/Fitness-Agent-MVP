@@ -17,6 +17,8 @@ function MessageList({
   onDismissSuggestion,
   onSuggestionClick,
   autoScrollKey = '',
+  streamStatusLabel = '',
+  streamingSuggestion = null,
   streamingText = '',
 }) {
   const bottomRef = useRef(null)
@@ -72,8 +74,10 @@ function MessageList({
             isStreaming
             message={{
               role: 'assistant',
-              content: streamingText || '思考中',
+              content: streamingText || streamStatusLabel || '思考中',
             }}
+            onAdopt={onAdopt}
+            onDismissSuggestion={onDismissSuggestion}
           />
         ) : null}
         <div aria-hidden="true" ref={bottomRef} />
