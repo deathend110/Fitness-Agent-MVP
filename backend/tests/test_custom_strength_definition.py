@@ -143,3 +143,43 @@ def test_normalize_custom_strength_definition_raises_stable_value_error_for_inva
 
     with pytest.raises(ValueError, match=field):
         normalize_custom_strength_definition(payload)
+
+
+@pytest.mark.parametrize(
+    ("mutator", "expected_message", "raw_error_fragment"),
+    [
+        (
+            lambda payload: payload.__setitem__("totalWeeks", "abc"),
+            "totalWeeks 必须为合法正整数。",
+            "invalid literal for int()",
+        ),
+        (
+            lambda payload: payload.__setitem__("mainLifts", {"squat": 180}),
+            "mainLifts.squat 必须为对象。",
+            "has no attribute 'get'",
+        ),
+        (
+            lambda payload: payload.__setitem__("weeks", [1, 2, 3, 4]),
+            "weeks 的每一项都必须为对象。",
+            "has no attribute 'get'",
+        ),
+        (
+            lambda payload: payload["weeks"][0].__setitem__("days", [1]),
+            "第 1 周的 days 每一项都必须为对象。",
+            "has no attribute 'get'",
+        ),
+    ],
+)
+def test_normalize_custom_strength_definition_rejects_invalid_structural_input_with_stable_value_error(
+    mutator,
+    expected_message: str,
+    raw_error_fragment: str,
+) -> None:
+    payload = build_valid_definition()
+    mutator(payload)
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == expected_message
+    assert raw_error_fragment not in str(exc_info.value)
