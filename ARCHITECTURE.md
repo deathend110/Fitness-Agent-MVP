@@ -116,116 +116,116 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 ### API 层
 
-- `backend/api/profile.py`
+- [backend/api/profile.py](backend/api/profile.py)
   - `GET /api/profile`
   - `PUT /api/profile`
 
-- `backend/api/weekly_plan.py`
+- [backend/api/weekly_plan.py](backend/api/weekly_plan.py)
   - `GET /api/weekly-plan`
   - `PUT /api/weekly-plan`
   - `POST /api/weekly-plan/adopt` 兼容旧采纳协议
 
-- `backend/api/daily_log.py`
+- [backend/api/daily_log.py](backend/api/daily_log.py)
   - `GET /api/daily-log`
   - `PUT /api/daily-log/{date}`
 
-- `backend/api/chat.py`
+- [backend/api/chat.py](backend/api/chat.py)
   - 聊天主入口
   - 负责请求归一、会话解析、聊天流式/非流式返回、后台任务提交、消息落库、usage 记录和上下文调试
 
-- `backend/api/drafts.py`
+- [backend/api/drafts.py](backend/api/drafts.py)
   - 管理会话级草稿、模型、thinking 和附件 id
 
-- `backend/api/files.py`
+- [backend/api/files.py](backend/api/files.py)
   - 负责上传文件保存、去重、摘要解析、文件列表查询和删除
 
-- `backend/api/memory.py`
+- [backend/api/memory.py](backend/api/memory.py)
   - 提供 memory item 检索和候选确认/忽略接口
 
-- `backend/api/models.py`
+- [backend/api/models.py](backend/api/models.py)
   - 返回当前启用模型列表和旧 UI 兼容的顶层 thinking 信息
 
-- `backend/api/model_config.py`
+- [backend/api/model_config.py](backend/api/model_config.py)
   - 读取、保存、测试和发现 provider 配置
 
-- `backend/api/metrics.py`
+- [backend/api/metrics.py](backend/api/metrics.py)
   - 返回每日指标摘要
 
-- `backend/api/tools.py`
+- [backend/api/tools.py](backend/api/tools.py)
   - 负责 proposal 生成、commit 和 ignore
 
-- `backend/api/migrate.py`
+- [backend/api/migrate.py](backend/api/migrate.py)
   - 负责把浏览器 localStorage 快照导入后端
 
 ### Agent 层
 
-- `backend/agent/context_manager.py`
+- [backend/agent/context_manager.py](backend/agent/context_manager.py)
   - 定义 token 预算
   - 负责 prompt 拼装
   - 负责会话摘要压缩与消息预算裁剪
 
-- `backend/agent/chat_session.py`
+- [backend/agent/chat_session.py](backend/agent/chat_session.py)
   - AI 教练主编排层
   - 负责从数据库读取 profile、weekly plan、daily logs、summary、memory、knowledge、recent messages、file summary
   - 负责构建 Agent request
   - 负责 provider 绑定、运行时协议转换、OpenAI-compatible / Gemini / fallback 客户端接线
   - 负责统一工具回环入口
 
-- `backend/agent/tool_calling.py`
+- [backend/agent/tool_calling.py](backend/agent/tool_calling.py)
   - 定义工具注册表、工具参数模型和工具处理函数
 
-- `backend/agent/tool_loop.py`
+- [backend/agent/tool_loop.py](backend/agent/tool_loop.py)
   - 负责多轮工具回环执行
   - 记录工具调用日志
   - 控制 proposal 工具停止点
 
-- `backend/agent/adopt_plan.py`
+- [backend/agent/adopt_plan.py](backend/agent/adopt_plan.py)
   - 负责构建 proposal、commit proposal、ignore proposal
 
-- `backend/agent/response_parser.py`
+- [backend/agent/response_parser.py](backend/agent/response_parser.py)
   - 负责从模型回复中解析纯文本与 suggestion
 
-- `backend/agent/memory.py`
+- [backend/agent/memory.py](backend/agent/memory.py)
   - 负责 memory 检索逻辑
 
-- `backend/agent/usage_ledger.py`
+- [backend/agent/usage_ledger.py](backend/agent/usage_ledger.py)
   - 负责 usage 记录标准化与汇总
 
-- `backend/agent/background_worker.py`
+- [backend/agent/background_worker.py](backend/agent/background_worker.py)
   - 负责离页后台思考任务
 
 ### Provider 运行时
 
-- `backend/model_config/*`
+- [backend/model_config/](backend/model_config/)
   - 管理 provider 配置文件、运行时缓存和 `provider::remoteModel` 解析
 
-- `backend/providers/openai_compatible.py`
+- [backend/providers/openai_compatible.py](backend/providers/openai_compatible.py)
   - OpenAI-compatible 协议适配层
 
-- `backend/providers/openai_compatible_client.py`
+- [backend/providers/openai_compatible_client.py](backend/providers/openai_compatible_client.py)
   - OpenAI-compatible HTTP 细节封装
 
-- `backend/providers/gemini_native.py`
+- [backend/providers/gemini_native.py](backend/providers/gemini_native.py)
   - Gemini-native 协议适配层
 
-- `backend/providers/gemini_client.py`
+- [backend/providers/gemini_client.py](backend/providers/gemini_client.py)
   - Gemini-native HTTP 客户端
 
 ### 存储与文件层
 
-- `backend/db/models.py`
+- [backend/db/models.py](backend/db/models.py)
   - 定义所有 SQLite 表结构
 
-- `backend/db/database.py`
+- [backend/db/database.py](backend/db/database.py)
   - 管理数据库连接、session 和建表
 
-- `backend/db/seed.py`
+- [backend/db/seed.py](backend/db/seed.py)
   - 初始化空白档案与默认周计划
 
-- `backend/files/uploader.py`
+- [backend/files/uploader.py](backend/files/uploader.py)
   - 上传文件的命名、路径和哈希处理
 
-- `backend/files/parsers/*`
+- [backend/files/parsers/](backend/files/parsers/)
   - 负责 Markdown、DOCX、Excel、图片摘要解析
 
 ## 数据流
@@ -233,17 +233,17 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 ### 档案、周计划、今日日志
 
 1. 前端页面编辑结构化数据
-2. `src/api/appData.js` 做字段映射
-3. `src/api/backendClient.js` 调用后端 CRUD 接口
+2. [src/api/appData.js](src/api/appData.js) 做字段映射
+3. [src/api/backendClient.js](src/api/backendClient.js) 调用后端 CRUD 接口
 4. 后端写入 SQLite
 5. 前端同时保留 localStorage 缓存
 
 ### AI 教练对话
 
-1. `CoachTab` 收集 `userInput / model / thinking / fileIds / sessionId`
-2. `src/api/coachBackend.js` 发起 `/api/chat/stream` 或 `/api/chat/reply`
-3. `backend/api/chat.py` 归一新旧请求体
-4. `backend/agent/chat_session.py` 读取当前会话相关数据
+1. [src/tabs/CoachTab.jsx](src/tabs/CoachTab.jsx) 收集 `userInput / model / thinking / fileIds / sessionId`
+2. [src/api/coachBackend.js](src/api/coachBackend.js) 发起 `/api/chat/stream` 或 `/api/chat/reply`
+3. [backend/api/chat.py](backend/api/chat.py) 归一新旧请求体
+4. [backend/agent/chat_session.py](backend/agent/chat_session.py) 读取当前会话相关数据
 5. `PromptAssembler` 拼装消息列表
 6. 运行时根据 `modelRef` 绑定具体 provider client
 7. 如果模型请求工具，`ToolLoopOrchestrator` 执行工具回环
@@ -256,7 +256,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 1. 模型返回待确认 proposal 卡
 2. 前端点击采纳
-3. `backendClient.commitPlanChange()` 调用 `POST /api/tools/plan/commit`
+3. [src/api/backendClient.js](src/api/backendClient.js) 中的 `commitPlanChange()` 调用 `POST /api/tools/plan/commit`
 4. 后端校验 proposal 并写回 `weekly_plan_day`
 5. 同步把相关 assistant 消息中的 suggestion 状态更新为 `committed`
 
@@ -388,7 +388,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 以下内容属于当前代码的一部分，但它们的角色是兼容壳或兜底，不是新的主设计：
 
-- `src/api/deepseek.js`
+- [src/api/deepseek.js](src/api/deepseek.js)
   - 前端旧聊天适配壳
 
 - `POST /api/weekly-plan/adopt`
@@ -399,7 +399,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 当前主契约是 `userInput + sessionId + model + thinking + fileIds`
   - 旧 `messages` 结构仍被后端接受，用于兼容测试或旧调用点
 
-- `backend/agent/deepseek_client.py`
+- [backend/agent/deepseek_client.py](backend/agent/deepseek_client.py)
   - 当前仍保留为 fallback 客户端
   - 正常情况下，主链路优先走 provider runtime
 
