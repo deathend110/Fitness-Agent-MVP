@@ -121,6 +121,52 @@ class CyclePresetSchema(BaseModel):
     repeatMode: Literal["fixed_length", "repeating"] = "fixed_length"
 
 
+class CustomStrengthMainLiftSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    tm: float = Field(..., gt=0)
+
+
+class CustomStrengthExerciseSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    category: Literal["main", "variation", "accessory"]
+    progression: dict[str, Any] = Field(default_factory=dict)
+    prescription: dict[str, Any] = Field(default_factory=dict)
+    referenceLift: str | None = None
+    loadText: str = ""
+    notes: str = ""
+
+
+class CustomStrengthDaySchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    dayIndex: int = Field(..., ge=1, le=7)
+    label: str
+    type: str
+    exercises: list[CustomStrengthExerciseSchema] = Field(default_factory=list)
+
+
+class CustomStrengthWeekSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    weekIndex: int = Field(..., ge=1)
+    days: list[CustomStrengthDaySchema] = Field(default_factory=list)
+
+
+class CustomStrengthDefinitionSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    planType: Literal["custom_strength"]
+    name: str
+    startDate: str
+    totalWeeks: int = Field(..., ge=1)
+    mainLifts: dict[str, CustomStrengthMainLiftSchema] = Field(default_factory=dict)
+    weeks: list[CustomStrengthWeekSchema] = Field(default_factory=list)
+
+
 class ActiveCyclePlanSchema(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
