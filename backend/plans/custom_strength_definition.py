@@ -37,7 +37,10 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
 
     for week in weeks:
         for day in week.get("days", []):
-            for exercise in day.get("exercises", []):
+            exercises = day.get("exercises")
+            if not isinstance(exercises, list):
+                raise ValueError("exercises 必须为列表。")
+            for exercise in exercises:
                 _validate_custom_strength_exercise(exercise, normalized_main_lifts)
 
     definition["mainLifts"] = normalized_main_lifts
@@ -62,6 +65,7 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
         for day in days:
             if not isinstance(day, dict):
                 raise ValueError(f"第 {week.get('weekIndex')} 周的 days 每一项都必须为对象。")
+            _parse_positive_int(day.get("dayIndex"), "dayIndex")
         day_indexes = [day.get("dayIndex") for day in days]
         if len(day_indexes) != len(set(day_indexes)):
             raise ValueError(f"第 {week.get('weekIndex')} 周的 dayIndex 必须唯一。")
@@ -107,5 +111,5 @@ def _validate_custom_strength_exercise(
             raise ValueError("主项动作的 percentTm 必须大于 0。")
         return
 
-    if progression_mode == "percent_tm":
-        raise ValueError(f"{category} 动作第一版不能使用 percent_tm。")
+    if progression_mode != "static":
+        raise ValueError(f"{category} 动作第一版必须使用 static。")

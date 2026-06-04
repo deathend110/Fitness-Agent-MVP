@@ -80,7 +80,7 @@ def test_normalize_custom_strength_definition_rejects_percent_tm_on_variation() 
     payload = build_valid_definition()
     payload["weeks"][0]["days"][0]["exercises"][0]["category"] = "variation"
 
-    with pytest.raises(ValueError, match="variation.*percent_tm"):
+    with pytest.raises(ValueError, match="variation.*static"):
         normalize_custom_strength_definition(payload)
 
 
@@ -120,6 +120,41 @@ def test_normalize_custom_strength_definition_rejects_duplicate_day_index_in_sam
     )
 
     with pytest.raises(ValueError, match="dayIndex"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_missing_plan_type() -> None:
+    payload = build_valid_definition()
+    payload.pop("planType")
+
+    with pytest.raises(ValueError, match="planType"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_non_list_exercises() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"] = 123
+
+    with pytest.raises(ValueError, match="exercises.*列表"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_unstable_day_index_type() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["dayIndex"] = {"bad": 1}
+
+    with pytest.raises(ValueError, match="dayIndex"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_non_static_mode_on_variation() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"][0]["category"] = "variation"
+    payload["weeks"][0]["days"][0]["exercises"][0]["progression"] = {
+        "mode": "weird_mode",
+    }
+
+    with pytest.raises(ValueError, match="variation.*static"):
         normalize_custom_strength_definition(payload)
 
 
