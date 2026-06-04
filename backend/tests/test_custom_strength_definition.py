@@ -1,37 +1,37 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from backend.plans.custom_strength_definition import normalize_custom_strength_definition
 
 
 def build_valid_definition() -> dict:
-    week_template = [
-        {
-            "weekIndex": 1,
-            "days": [
-                {
-                    "dayIndex": 1,
-                    "label": "周一",
-                    "type": "lower_strength",
-                    "exercises": [
-                        {
-                            "id": "w1d1-squat",
-                            "name": "Back Squat",
-                            "category": "main",
-                            "progression": {
-                                "mode": "percent_tm",
-                                "liftKey": "squat",
-                                "percentTm": 0.75,
-                            },
-                            "prescription": {"sets": 5, "reps": 5},
-                            "notes": "",
-                        }
-                    ],
-                }
-            ],
-        }
-    ]
+    week_template = {
+        "weekIndex": 1,
+        "days": [
+            {
+                "dayIndex": 1,
+                "label": "周一",
+                "type": "lower_strength",
+                "exercises": [
+                    {
+                        "id": "w1d1-squat",
+                        "name": "Back Squat",
+                        "category": "main",
+                        "progression": {
+                            "mode": "percent_tm",
+                            "liftKey": "squat",
+                            "percentTm": 0.75,
+                        },
+                        "prescription": {"sets": 5, "reps": 5},
+                        "notes": "",
+                    }
+                ],
+            }
+        ],
+    }
 
     return {
         "planType": "custom_strength",
@@ -43,10 +43,10 @@ def build_valid_definition() -> dict:
             "bench": {"tm": 125},
         },
         "weeks": [
-            {**week_template[0], "weekIndex": 1},
-            {**week_template[0], "weekIndex": 2},
-            {**week_template[0], "weekIndex": 3},
-            {**week_template[0], "weekIndex": 4},
+            {**deepcopy(week_template), "weekIndex": 1},
+            {**deepcopy(week_template), "weekIndex": 2},
+            {**deepcopy(week_template), "weekIndex": 3},
+            {**deepcopy(week_template), "weekIndex": 4},
         ],
     }
 
@@ -89,4 +89,57 @@ def test_normalize_custom_strength_definition_rejects_total_weeks_mismatch() -> 
     payload["totalWeeks"] = 6
 
     with pytest.raises(ValueError, match="totalWeeks"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_non_consecutive_week_index() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][1]["weekIndex"] = 3
+
+    with pytest.raises(ValueError, match="weekIndex"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_duplicate_week_index() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][1]["weekIndex"] = 1
+
+    with pytest.raises(ValueError, match="weekIndex"):
+        normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_duplicate_day_index_in_same_week() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"].append(
+        {
+            "dayIndex": 1,
+            "label": "周三",
+            "type": "upper_strength",
+            "exercises": [],
+        }
+    )
+
+    with pytest.raises(ValueError, match="dayIndex"):
+        normalize_custom_strength_definition(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("tm", "abc"),
+        ("percentTm", "abc"),
+    ],
+)
+def test_normalize_custom_strength_definition_raises_stable_value_error_for_invalid_number(
+    field: str,
+    invalid_value: str,
+) -> None:
+    payload = build_valid_definition()
+
+    if field == "tm":
+        payload["mainLifts"]["squat"]["tm"] = invalid_value
+    else:
+        payload["weeks"][0]["days"][0]["exercises"][0]["progression"]["percentTm"] = invalid_value
+
+    with pytest.raises(ValueError, match=field):
         normalize_custom_strength_definition(payload)
