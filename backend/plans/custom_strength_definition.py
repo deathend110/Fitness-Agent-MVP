@@ -111,11 +111,13 @@ def _parse_day_index(raw_value: Any) -> int:
     return day_index
 
 
-def _validate_prescription(prescription: Any) -> None:
+def _validate_prescription(prescription: Any) -> dict[str, int]:
     if not isinstance(prescription, dict):
         raise ValueError("prescription 必须为对象。")
-    _parse_positive_int(prescription.get("sets"), "prescription.sets")
-    _parse_positive_int(prescription.get("reps"), "prescription.reps")
+    sets = _parse_positive_int(prescription.get("sets"), "prescription.sets")
+    reps = _parse_positive_int(prescription.get("reps"), "prescription.reps")
+    # 处方只保留稳定必要字段，避免调用方透传脏字段进入持久化结果。
+    return {"sets": sets, "reps": reps}
 
 
 def _validate_custom_strength_exercise(
@@ -128,7 +130,7 @@ def _validate_custom_strength_exercise(
     category = exercise.get("category")
     if category not in VALID_CATEGORIES:
         raise ValueError("动作 category 非法。")
-    _validate_prescription(exercise.get("prescription"))
+    exercise["prescription"] = _validate_prescription(exercise.get("prescription"))
 
     progression = exercise.get("progression")
     if not isinstance(progression, dict):
@@ -139,13 +141,19 @@ def _validate_custom_strength_exercise(
         if progression_mode != "percent_tm":
             raise ValueError("主项动作必须使用 percent_tm。")
         lift_key = progression.get("liftKey")
+        if not isinstance(lift_key, str) or not lift_key:
+            raise ValueError("progression.liftKey 必填。")
         if lift_key not in main_lifts:
             raise ValueError(f"{lift_key} 缺少对应 TM。")
         percent_tm = _parse_positive_float(progression.get("percentTm"), "percentTm")
         if percent_tm <= 0:
             raise ValueError("主项动作的 percentTm 必须大于 0。")
-        # 在进入 schema 前就把百分比归一化为稳定 float，避免保留原始字符串。
-        progression["percentTm"] = percent_tm
+        # 主项 progression 在进入 schema 前裁剪为稳定字段集合，避免保留透传脏数据。
+        exercise["progression"] = {
+            "mode": "percent_tm",
+            "liftKey": lift_key,
+            "percentTm": percent_tm,
+        }
         return
 
     if progression_mode != "static":

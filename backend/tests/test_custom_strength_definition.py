@@ -196,6 +196,33 @@ def test_normalize_custom_strength_definition_normalizes_percent_tm_string_to_fl
     assert isinstance(percent_tm, float)
 
 
+def test_normalize_custom_strength_definition_cleans_unexpected_fields_from_main_progression_and_prescription() -> None:
+    payload = build_valid_definition()
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["progression"]["unexpected"] = "dirty"
+    exercise["prescription"]["unexpected"] = "dirty"
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    normalized_exercise = normalized["weeks"][0]["days"][0]["exercises"][0]
+    assert normalized_exercise["progression"] == {
+        "mode": "percent_tm",
+        "liftKey": "squat",
+        "percentTm": 0.75,
+    }
+    assert normalized_exercise["prescription"] == {"sets": 5, "reps": 5}
+
+
+def test_normalize_custom_strength_definition_rejects_missing_lift_key_with_stable_field_error() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["exercises"][0]["progression"].pop("liftKey")
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert "liftKey" in str(exc_info.value)
+
+
 @pytest.mark.parametrize(
     ("mutator", "expected_fragment"),
     [
