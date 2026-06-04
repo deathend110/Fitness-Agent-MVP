@@ -58,12 +58,33 @@ class ProposePlanChangeToolArgs(BaseModel):
     changes: list[PlanChangeItemArgs]
 
 
+class DayPlanExerciseArgs(BaseModel):
+    # extra="allow" 保留旧版自由 dict 携带 kg/pct/time/unit 等额外字段的能力，下游 normalizer 仍按 .get() 容错读取。
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    tier: str = "accessory"
+    sets: float | None = None
+    reps: float | None = None
+    rpe: float | None = None
+    note: str = ""
+
+
+class DayPlanArgs(BaseModel):
+    # 给 Gemini/DeepSeek 提供 dayPlan 结构指引，避免空属性 object 被 Gemini 拒绝。
+    # exercises 不给默认值，使其进入 nested required，满足 Gemini 对 array 字段应被标记 required 的偏好（rest 日传 [] 即可）。
+    model_config = ConfigDict(extra="allow")
+
+    type: str = "rest"
+    exercises: list[DayPlanExerciseArgs]
+
+
 class ProposeDayPlanReplaceToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     day: str
     summary: str = ""
-    dayPlan: dict[str, Any]
+    dayPlan: DayPlanArgs
 
 
 @dataclass(frozen=True)
@@ -307,7 +328,7 @@ async def _propose_day_plan_replace(
         session_id=None,
         day=args.day,
         summary=args.summary,
-        day_plan=args.dayPlan,
+        day_plan=args.dayPlan.model_dump(),
     )
     return {
         "proposal": proposal.card,

@@ -401,6 +401,8 @@ docs/
   - 负责 Gemini 原生 `/models` 发现、`functionDeclarations` schema 生成、函数调用归一化以及 tool result 回灌消息格式转换
   - 与 OpenAI-compatible provider 共用同一套本地工具描述，但保留 Gemini 原生消息结构
   - 会把 Pydantic/OpenAI 风格 schema 清洗为 Gemini 可接受的参数结构，移除 `$defs / $ref / additionalProperties` 等 Gemini REST 会拒绝的字段
+  - Gemini `functionDeclarations` 校验比 OpenAI/DeepSeek 严格：拒绝无 `type` 的属性 schema。sanitizer 对净化后为空的叶子 schema 兜底为 `{"type":"string"}`（例如 `propose_plan_change.changes[].newValue` 这类 `Any` 字段），下游 `_coerce_number` 仍会把数值字符串解析回数字；但 `properties` 是“属性名 -> 子 schema”的映射而非 schema 本身，会被特判保留空映射 `{}`，避免无参工具的 `properties:{}` 被误判成非法的 `properties:{"type":"string"}`
+  - `propose_day_plan_replace.dayPlan` 在 `backend/agent/tool_calling.py` 已建模为结构化的 `DayPlanArgs`（含 `type` 与 `exercises`，`exercises` 进入 nested required），避免空属性 object 被 Gemini 拒绝；`DayPlanArgs/DayPlanExerciseArgs` 用 `extra="allow"` 保留旧版自由 dict 的额外字段，工具回环调用时以 `model_dump()` 还原为 dict 交给单日计划 normalizer
 
 - `backend/providers/gemini_client.py`
   - 负责把 Gemini `generateContent` 包装成当前聊天主链路可复用的最小客户端

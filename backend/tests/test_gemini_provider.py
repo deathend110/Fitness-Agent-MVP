@@ -86,6 +86,32 @@ def test_build_tool_schema_strips_openai_only_schema_fields_for_nested_tools() -
     assert "$ref" not in dumped
     assert "additionalProperties" not in dumped
     assert nested_parameters["properties"]["changes"]["items"]["properties"]["exerciseName"]["type"] == "string"
+    # newValue 是 Any，Pydantic 产出空 schema；修复后必须兜底为 "string" 而不是空 dict，否则 Gemini 会拒绝整个工具声明。
+    new_value_schema = nested_parameters["properties"]["changes"]["items"]["properties"]["newValue"]
+    assert new_value_schema == {"type": "string"}
+
+
+def test_build_tool_schema_gives_day_plan_replace_non_empty_object_properties() -> None:
+    provider = GeminiNativeProvider()
+    registry = build_default_tool_registry()
+
+    schema = provider.build_tool_schema(registry.describe_tools())
+    day_plan_parameters = next(
+        declaration["parameters"]
+        for declaration in schema["functionDeclarations"]
+        if declaration["name"] == "propose_day_plan_replace"
+    )
+
+    day_plan_schema = day_plan_parameters["properties"]["dayPlan"]
+    # dayPlan 过去是 dict[str, Any] -> {"type": "object", "properties": {}}，会被 Gemini 拒绝。
+    # 修复后必须是带非空 properties 的 object，且同时暴露 type 与 exercises 两个字段指引。
+    assert day_plan_schema["type"] == "object"
+    assert day_plan_schema["properties"]
+    assert "type" in day_plan_schema["properties"]
+    assert "exercises" in day_plan_schema["properties"]
+    # 嵌套动作里的 name 必须是带 type 的字符串属性，确保整条 functionDeclarations 不含无 type 的属性。
+    exercise_name_schema = day_plan_schema["properties"]["exercises"]["items"]["properties"]["name"]
+    assert exercise_name_schema["type"] == "string"
 
 
 @pytest.mark.asyncio

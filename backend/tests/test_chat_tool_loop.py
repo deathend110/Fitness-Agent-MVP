@@ -540,3 +540,97 @@ async def test_gemini_tool_loop_returns_function_response_in_followup_history(
     assert second_payload["contents"][2]["role"] == "user"
     assert second_payload["contents"][2]["parts"][0]["functionResponse"]["name"] == "get_weekly_plan"
     assert second_payload["contents"][2]["parts"][0]["functionResponse"]["id"] == "call_weekly"
+
+
+@pytest.mark.asyncio
+async def test_gemini_tool_loop_generates_day_plan_replace_proposal(
+    db_session: AsyncSession,
+) -> None:
+    # 锁定 Gemini 通过 functionCall 触发 propose_day_plan_replace 时，dayPlan 经 DayPlanArgs
+    # 解析 + model_dump() 回到普通 dict 后仍能正确生成待确认 proposal 卡。
+    chat_session = ChatSession(title="gemini-day-plan-proposal", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.flush()
+    db_session.add(WeeklyPlanDay(day_key="Monday", type="strength", exercises=[{"name": "深蹲", "pct": 0.75}]))
+    await db_session.commit()
+
+    request_log: list[dict[str, Any]] = []
+    queued_responses = [
+        FakeGeminiResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "id": "call_day_plan",
+                                        "name": "propose_day_plan_replace",
+                                        # Gemini 直接把结构化参数放在 args（非 JSON 字符串），
+                                        # dayPlan 携带 type + exercises，验证新 DayPlanArgs 模型可被工具回环消费。
+                                        "args": {
+                                            "day": "Monday",
+                                            "summary": "把周一改成恢复型腿日",
+                                            "dayPlan": {
+                                                "type": "腿日",
+                                                "exercises": [
+                                                    {
+                                                        "name": "深蹲",
+                                                        "tier": "main",
+                                                        "sets": 3,
+                                                        "reps": 5,
+                                                        "rpe": 7,
+                                                        "note": "恢复周主项",
+                                                    }
+                                                ],
+                                            },
+                                        },
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ),
+        FakeGeminiResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "已整理成可确认的周一替换 proposal。"}],
+                        }
+                    }
+                ]
+            }
+        ),
+    ]
+    client = GeminiNativeClient(
+        api_key="AIza-test",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        client_factory=lambda **kwargs: FakeGeminiHttpClient(
+            responses=queued_responses,
+            request_log=request_log,
+            **kwargs,
+        ),
+    )
+
+    result = await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "把周一改成恢复型腿日"}],
+        model="gemini-2.5-flash",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+    )
+
+    assert result.content == "已整理成可确认的周一替换 proposal。"
+    assert result.proposals
+    latest_proposal = result.proposals[-1]
+    assert latest_proposal["kind"] == "day_plan_replace"
+    assert latest_proposal["status"] == "pending"
+    assert latest_proposal["proposalId"]
+    assert latest_proposal["dayPlan"]["type"] == "腿日"
+    assert latest_proposal["dayPlan"]["exercises"][0]["name"] == "深蹲"

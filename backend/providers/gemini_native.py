@@ -267,10 +267,21 @@ class GeminiNativeProvider(ProviderAdapter):
         for key, value in node.items():
             if key in {"$defs", "additionalProperties", "title", "default"}:
                 continue
+            if key == "properties" and isinstance(value, dict):
+                # properties 是“属性名 -> 子 schema”的映射，本身不是 schema：逐个净化子 schema，
+                # 但保留映射容器（空映射保持 {}），避免被下面的叶子兜底误判成 {"type": "string"}，
+                # 否则无参工具的 properties:{} 会被破坏成非法的 properties:{"type":"string"}。
+                sanitized[key] = {
+                    prop_name: self._sanitize_schema_node(prop_schema, defs)
+                    for prop_name, prop_schema in value.items()
+                }
+                continue
             sanitized[key] = self._sanitize_schema_node(value, defs)
 
         if not sanitized:
-            return {}
+            # Gemini functionDeclarations 拒绝无 type 的属性 schema；Any 字段（如 newValue）兜底为 string，
+            # 与上面 anyOf 分支的默认 {"type": "string"} 一致。下游 _coerce_number 仍能把 "0.7" 这类数值字符串解析回数字。
+            return {"type": "string"}
 
         if sanitized.get("type") == "object":
             sanitized.setdefault("properties", {})
