@@ -25,7 +25,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 ### 应用入口
 
-- [src/App.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/App.jsx)
+- [src/App.jsx](src/App.jsx)
   - 管理四个主页面：`Profile`、`Plan`、`Today`、`Coach`
   - 应用启动时调用 `loadAppData()` 从后端读取 `profile / weeklyPlan / dailyLog`
   - 同时保留 `localStorage` 缓存，后端不可用时页面仍能展示本地数据
@@ -34,41 +34,41 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 ### 前端 API 层
 
-- [src/api/backendClient.js](/g:/VSCODE-G/Fitness Agent MVP/src/api/backendClient.js)
+- [src/api/backendClient.js](src/api/backendClient.js)
   - 普通 REST 接口客户端
   - 负责档案、周计划、今日日志、会话、消息、草稿、文件、模型配置、指标和计划卡提交
   - 是前端非聊天场景的统一后端访问层
 
-- [src/api/coachBackend.js](/g:/VSCODE-G/Fitness Agent MVP/src/api/coachBackend.js)
+- [src/api/coachBackend.js](src/api/coachBackend.js)
   - AI 教练聊天专用访问层
   - 负责 `/api/chat/stream` 的 SSE 解析
   - 负责 `/api/chat/reply` 的非流式调用
   - 负责读取 `delta / proposal / suggestion / done / error` 事件并交给页面状态机
 
-- [src/api/appData.js](/g:/VSCODE-G/Fitness Agent MVP/src/api/appData.js)
+- [src/api/appData.js](src/api/appData.js)
   - 把前端数据结构映射到后端字段结构
   - 负责 `oneRM <-> oneRm`、`tdee <-> tdeeManual` 等字段转换
 
-- [src/api/deepseek.js](/g:/VSCODE-G/Fitness Agent MVP/src/api/deepseek.js)
+- [src/api/deepseek.js](src/api/deepseek.js)
   - 历史兼容壳
   - 当前仍存在，但主聊天入口已经不直接依赖它组织业务逻辑
 
 ### 主页面职责
 
-- [src/tabs/ProfileTab.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/tabs/ProfileTab.jsx)
+- [src/tabs/ProfileTab.jsx](src/tabs/ProfileTab.jsx)
   - 负责“我的档案”页的结构化摘要卡、分组表单和折叠式数据管理区
   - 编辑基础档案、训练目标、目标体重和三大项 1RM
   - 通过页面层局部 UI 状态控制数据导入导出面板的展开与收起
 
-- [src/tabs/PlanTab.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/tabs/PlanTab.jsx)
+- [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
   - 管理按日训练类型、动作增删改和动作表单状态
 
-- [src/tabs/TodayTab.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/tabs/TodayTab.jsx)
+- [src/tabs/TodayTab.jsx](src/tabs/TodayTab.jsx)
   - 编辑今日日志
   - 展示每日摘要、今日计划和体重趋势图
 
-- [src/tabs/CoachTab.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/tabs/CoachTab.jsx)
+- [src/tabs/CoachTab.jsx](src/tabs/CoachTab.jsx)
   - AI 教练页的页面编排中心
   - 管理会话列表、当前会话、消息列表、流式状态、后台思考状态、草稿、附件和模型选择
   - 通过 `requestCoachReply / requestCoachReplyStream / startBackgroundCoachReply` 驱动聊天链路
@@ -97,7 +97,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 ### 应用入口
 
-- [backend/main.py](/g:/VSCODE-G/Fitness Agent MVP/backend/main.py)
+- [backend/main.py](backend/main.py)
   - 创建 FastAPI 应用
   - 启动时建表、播种默认数据、加载 provider runtime、初始化后台任务 worker
   - 注册以下路由模块：
