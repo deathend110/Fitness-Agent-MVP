@@ -74,6 +74,7 @@ def merge_cycle_week_override(
                 day_key=day_key,
                 generated_day=merged.get(day_key),
                 override_day=override_day,
+                generated_week=generated if isinstance(generated, dict) else None,
             )
     return merged
 
@@ -272,6 +273,7 @@ def _normalize_override_day_plan(
     day_key: str,
     generated_day: dict[str, Any] | None,
     override_day: dict[str, Any],
+    generated_week: dict[str, dict[str, Any]] | None,
 ) -> dict[str, Any]:
     generated_exercises = generated_day.get("exercises") if isinstance(generated_day, dict) else []
     override_exercises = override_day.get("exercises") if isinstance(override_day.get("exercises"), list) else []
@@ -281,6 +283,7 @@ def _normalize_override_day_plan(
             exercise_index=index,
             generated_exercise=generated_exercises[index] if index < len(generated_exercises) else None,
             override_exercise=exercise,
+            generated_week=generated_week,
         )
         for index, exercise in enumerate(override_exercises)
         if isinstance(exercise, dict)
@@ -299,6 +302,7 @@ def _normalize_override_exercise(
     exercise_index: int,
     generated_exercise: dict[str, Any] | None,
     override_exercise: dict[str, Any],
+    generated_week: dict[str, dict[str, Any]] | None,
 ) -> dict[str, Any]:
     merged_source = deepcopy(generated_exercise) if isinstance(generated_exercise, dict) else {}
     merged_source.update(deepcopy(override_exercise))
@@ -306,6 +310,13 @@ def _normalize_override_exercise(
         merged_source.pop("template", None)
     if "instance" in merged_source and not isinstance(merged_source.get("instance"), dict):
         merged_source.pop("instance", None)
+    next_ref_1rm = merged_source.get("ref1RM") if isinstance(merged_source.get("ref1RM"), str) else None
+    previous_ref_1rm = generated_exercise.get("ref1RM") if isinstance(generated_exercise, dict) and isinstance(generated_exercise.get("ref1RM"), str) else None
+    if next_ref_1rm != previous_ref_1rm and not _has_consistent_load_ref(merged_source.get("loadRef"), next_ref_1rm):
+        merged_source["loadRef"] = _rebuild_load_ref_from_generated_week(
+            generated_week=generated_week,
+            ref_1rm=next_ref_1rm,
+        )
     return _materialize_canonical_exercise(
         exercise_source=merged_source,
         fallback_id=(
@@ -428,6 +439,36 @@ def _normalize_load_ref(raw_load_ref: Any, ref_1rm: str | None, load_mode: str) 
     if lift is None:
         return None
     return {"lift": lift, "value": value, "source": source}
+
+
+def _has_consistent_load_ref(raw_load_ref: Any, ref_1rm: str | None) -> bool:
+    if ref_1rm is None:
+        return not isinstance(raw_load_ref, dict)
+    return isinstance(raw_load_ref, dict) and raw_load_ref.get("lift") == ref_1rm
+
+
+def _rebuild_load_ref_from_generated_week(
+    *,
+    generated_week: dict[str, dict[str, Any]] | None,
+    ref_1rm: str | None,
+) -> dict[str, Any] | None:
+    if ref_1rm is None:
+        return None
+    if not isinstance(generated_week, dict):
+        return {"lift": ref_1rm, "value": None, "source": None}
+    for day_plan in generated_week.values():
+        if not isinstance(day_plan, dict):
+            continue
+        exercises = day_plan.get("exercises")
+        if not isinstance(exercises, list):
+            continue
+        for exercise in exercises:
+            if not isinstance(exercise, dict):
+                continue
+            load_ref = exercise.get("loadRef")
+            if isinstance(load_ref, dict) and load_ref.get("lift") == ref_1rm:
+                return deepcopy(load_ref)
+    return {"lift": ref_1rm, "value": None, "source": None}
 
 
 def _coerce_int(value: Any, default: int) -> int:

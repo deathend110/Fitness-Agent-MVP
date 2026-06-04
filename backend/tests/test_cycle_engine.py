@@ -239,6 +239,66 @@ def test_merge_cycle_week_override_normalizes_partial_override_to_canonical_shap
     assert exercise["instance"] == {"pct": 0.72, "kg": None, "note": ""}
 
 
+def test_merge_cycle_week_override_rebuilds_load_ref_when_ref_1rm_changes() -> None:
+    generated = build_cycle_week_plan(
+        preset_key="candito_6week",
+        week_index=1,
+        base_lifts=_build_base_lifts(),
+    )
+
+    merged = merge_cycle_week_override(
+        generated,
+        {
+            "Wednesday": {
+                "type": "upper_test",
+                "exercises": [
+                    {
+                        "name": "Bench Press",
+                        "ref1RM": "squat",
+                        "pct": 0.72,
+                        "sets": 4,
+                        "reps": 6,
+                    }
+                ],
+            }
+        },
+    )
+
+    exercise = merged["Wednesday"]["exercises"][0]
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["loadRef"] == {"lift": "squat", "value": 180.0, "source": "oneRm"}
+
+
+def test_merge_cycle_week_override_keeps_load_ref_consistent_when_new_lift_has_no_reference() -> None:
+    generated = build_cycle_week_plan(
+        preset_key="candito_6week",
+        week_index=1,
+        base_lifts=_build_base_lifts(),
+    )
+
+    merged = merge_cycle_week_override(
+        generated,
+        {
+            "Wednesday": {
+                "type": "upper_test",
+                "exercises": [
+                    {
+                        "name": "Bench Press",
+                        "ref1RM": "press",
+                        "pct": 0.72,
+                        "sets": 4,
+                        "reps": 6,
+                    }
+                ],
+            }
+        },
+    )
+
+    exercise = merged["Wednesday"]["exercises"][0]
+    assert exercise["ref1RM"] == "press"
+    assert exercise["loadRef"] == {"lift": "press", "value": None, "source": None}
+
+
 def test_merge_cycle_week_override_returns_generated_when_override_is_missing() -> None:
     generated = build_cycle_week_plan(
         preset_key=get_cycle_preset("texas_method").key,
