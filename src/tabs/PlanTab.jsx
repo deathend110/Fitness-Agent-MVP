@@ -10,6 +10,10 @@ import {
   createCyclePlanDraft,
 } from '../utils/cyclePlanForm.js'
 import {
+  buildCreateCustomStrengthCyclePayload,
+  createCustomStrengthDraft,
+} from '../utils/customStrengthPlanForm.js'
+import {
   buildCycleSettingsStatus,
   resolvePlanSettingsMode,
 } from '../utils/cyclePlanView.js'
@@ -56,6 +60,9 @@ function PlanTab({
   const [isPlanSettingsOpen, setIsPlanSettingsOpen] = useState(false)
   const [cycleDraft, setCycleDraft] = useState(() =>
     createCyclePlanDraft(profile, activeCyclePlan),
+  )
+  const [customStrengthDraft, setCustomStrengthDraft] = useState(() =>
+    createCustomStrengthDraft(),
   )
   const [planSettingsMode, setPlanSettingsMode] = useState(() =>
     resolvePlanSettingsMode(planSource, activeCyclePlan),
@@ -228,6 +235,10 @@ function PlanTab({
     setCycleDraft(nextDraft)
   }
 
+  function updateCustomStrengthDraft(nextDraft) {
+    setCustomStrengthDraft(nextDraft)
+  }
+
   function handleSelectPlanSettingsMode(nextMode) {
     setPlanSettingsMode(resolvePlanSettingsMode(planSource, activeCyclePlan, nextMode))
   }
@@ -310,6 +321,31 @@ function PlanTab({
       }
       setPlanSettingsMode('cycle')
       setCycleActionMessage('周期计划已创建。')
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    } finally {
+      setIsCycleSubmitting(false)
+    }
+  }
+
+  async function handleCreateCustomStrengthCyclePlan() {
+    setIsCycleSubmitting(true)
+    setCycleActionMessage('')
+
+    try {
+      const response = await backendClient.createCyclePlan(
+        buildCreateCustomStrengthCyclePayload(customStrengthDraft),
+      )
+      const nextActiveCyclePlan = buildNextActiveCyclePayload(response)
+      const nextEffectivePlan = readNextEffectivePlan(response)
+
+      onPlanSourceChange?.({ activeSource: 'cycle' })
+      onActiveCyclePlanChange?.(nextActiveCyclePlan)
+      if (nextEffectivePlan) {
+        onEffectiveWeeklyPlanChange?.(nextEffectivePlan)
+      }
+      setPlanSettingsMode('cycle')
+      setCycleActionMessage('自定义力量周期计划已创建。')
     } catch (error) {
       setCycleActionMessage(error.message)
     } finally {
@@ -404,15 +440,18 @@ function PlanTab({
           cycleActionMessage={cycleActionMessage}
           cycleDraft={cycleDraft}
           cyclePresets={cyclePresets}
+          customStrengthDraft={customStrengthDraft}
           isCyclePresetsLoading={isCyclePresetsLoading}
           isCycleSubmitting={isCycleSubmitting}
           onConfirmNextWeek={handleConfirmNextWeek}
           onCreateCyclePlan={handleCreateCyclePlan}
+          onCreateCustomStrengthCyclePlan={handleCreateCustomStrengthCyclePlan}
           onGenerateNextWeek={handleGenerateNextWeek}
           onSelectSettingsMode={handleSelectPlanSettingsMode}
           onStopCyclePlan={handleStopCyclePlan}
           onSwitchToCycleSource={handleSwitchToCycleSource}
           onSwitchToManualSource={handleSwitchToManualSource}
+          onUpdateCustomStrengthDraft={updateCustomStrengthDraft}
           onUpdateCycleDraft={updateCycleDraft}
           planSettingsMode={planSettingsMode}
           settingsStatus={cycleSettingsStatus}

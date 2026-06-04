@@ -1,4 +1,5 @@
 import { cyclePlanWeekdayOptions, toggleTrainingDay } from '../../utils/cyclePlanForm.js'
+import CustomStrengthPlanEditor from './CustomStrengthPlanEditor.jsx'
 
 function liftLabelMap(liftKey) {
   if (liftKey === 'squat') {
@@ -31,15 +32,18 @@ function PlanSettingsPanel({
   cycleActionMessage,
   cycleDraft,
   cyclePresets,
+  customStrengthDraft,
   isCyclePresetsLoading,
   isCycleSubmitting,
   onConfirmNextWeek,
   onCreateCyclePlan,
+  onCreateCustomStrengthCyclePlan,
   onGenerateNextWeek,
   onSelectSettingsMode,
   onStopCyclePlan,
   onSwitchToCycleSource,
   onSwitchToManualSource,
+  onUpdateCustomStrengthDraft,
   onUpdateCycleDraft,
   planSettingsMode,
   settingsStatus,
@@ -287,6 +291,21 @@ function PlanSettingsPanel({
               停止周期
             </button>
           </div>
+
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-slate-800">自定义力量周期计划</p>
+            <p className="text-sm text-slate-500">
+              这里仅负责挂载自定义力量编辑器，具体草稿状态与创建动作仍由 PlanTab 编排。
+            </p>
+            <p className="text-xs text-slate-500">提交动作：创建自定义力量周期计划</p>
+          </div>
+
+          <CustomStrengthPlanEditor
+            draft={customStrengthDraft}
+            isSubmitting={isCycleSubmitting}
+            onChange={onUpdateCustomStrengthDraft}
+            onSubmit={onCreateCustomStrengthCyclePlan}
+          />
 
           {cycleActionMessage ? <p className="text-sm text-slate-500">{cycleActionMessage}</p> : null}
         </div>

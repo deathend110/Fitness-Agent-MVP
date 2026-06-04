@@ -88,6 +88,8 @@ test('PlanTab 源码包含手动周期设置流程的关键入口', () => {
   assert.match(source, /非周期计划/)
   assert.match(source, /周期计划/)
   assert.match(source, /getCyclePresets|createCyclePlan/)
+  assert.match(source, /customStrengthDraft/)
+  assert.match(source, /handleCreateCustomStrengthCyclePlan/)
   assert.match(source, /生成下一周|确认进入下一周|停止周期/)
 })
 
