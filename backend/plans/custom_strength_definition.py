@@ -4,6 +4,8 @@ from copy import deepcopy
 from math import isfinite
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.schemas import CustomStrengthDefinitionSchema
 
 
@@ -21,6 +23,9 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
     if total_weeks <= 0 or len(weeks) != total_weeks:
         raise ValueError("totalWeeks 与 weeks 定义数量必须一致。")
     _validate_weeks(weeks, total_weeks)
+    # normalize 的边界需要对合法输入产出稳定结构，因此按 weekIndex 排序后再继续下游校验与序列化。
+    definition["weeks"] = sorted(weeks, key=lambda week: week["weekIndex"])
+    weeks = definition["weeks"]
 
     main_lifts = definition.get("mainLifts")
     if not isinstance(main_lifts, dict):
@@ -45,7 +50,10 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
                 _validate_custom_strength_exercise(exercise, normalized_main_lifts)
 
     definition["mainLifts"] = normalized_main_lifts
-    normalized_definition = CustomStrengthDefinitionSchema.model_validate(definition).model_dump()
+    try:
+        normalized_definition = CustomStrengthDefinitionSchema.model_validate(definition).model_dump()
+    except ValidationError as exc:
+        raise ValueError(_format_schema_validation_error(exc)) from None
     return normalized_definition
 
 
@@ -140,3 +148,15 @@ def _validate_custom_strength_exercise(
 
     if progression_mode != "static":
         raise ValueError(f"{category} 动作第一版必须使用 static。")
+
+
+def _format_schema_validation_error(exc: ValidationError) -> str:
+    first_error = exc.errors()[0] if exc.errors() else None
+    if not first_error:
+        return "自定义力量计划定义校验失败。"
+
+    location = ".".join(str(part) for part in first_error.get("loc", ()))
+    message = first_error.get("msg", "字段校验失败。")
+    if location:
+        return f"{location}: {message}"
+    return f"自定义力量计划定义校验失败：{message}"

@@ -197,6 +197,48 @@ def test_normalize_custom_strength_definition_normalizes_percent_tm_string_to_fl
 
 
 @pytest.mark.parametrize(
+    ("mutator", "expected_fragment"),
+    [
+        (
+            lambda payload: payload["weeks"][0]["days"][0].pop("label"),
+            "label",
+        ),
+        (
+            lambda payload: payload["weeks"][0]["days"][0]["exercises"][0].pop("id"),
+            "id",
+        ),
+    ],
+)
+def test_normalize_custom_strength_definition_wraps_schema_validation_error_as_stable_value_error(
+    mutator,
+    expected_fragment: str,
+) -> None:
+    payload = build_valid_definition()
+    mutator(payload)
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert isinstance(exc_info.value, ValueError)
+    assert expected_fragment in str(exc_info.value)
+    assert "ValidationError" not in str(exc_info.value)
+
+
+def test_normalize_custom_strength_definition_normalizes_unordered_weeks_to_stable_order() -> None:
+    payload = build_valid_definition()
+    payload["weeks"] = [
+        deepcopy(payload["weeks"][1]),
+        deepcopy(payload["weeks"][0]),
+        deepcopy(payload["weeks"][2]),
+        deepcopy(payload["weeks"][3]),
+    ]
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    assert [week["weekIndex"] for week in normalized["weeks"]] == [1, 2, 3, 4]
+
+
+@pytest.mark.parametrize(
     ("field", "invalid_value"),
     [
         ("tm", "abc"),
