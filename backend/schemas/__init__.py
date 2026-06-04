@@ -118,6 +118,7 @@ class CyclePresetSchema(BaseModel):
     summary: str = ""
     supportedWeeks: list[int] = Field(default_factory=list)
     supportsTm: bool = False
+    repeatMode: Literal["fixed_length", "repeating"] = "fixed_length"
 
 
 class ActiveCyclePlanSchema(BaseModel):

@@ -12,20 +12,23 @@ _PRESET_REGISTRY: dict[str, CyclePresetSchema] = {
         summary="6 周力量导向模板，按周切换容量、强度与峰值训练重心。",
         supportedWeeks=[1, 2, 3, 4, 5, 6],
         supportsTm=True,
+        repeatMode="fixed_length",
     ),
     "madcow_5x5": CyclePresetSchema(
         key="madcow_5x5",
         label="Madcow 5x5",
         summary="经典 5x5 线性推进模板，强调周内爬坡和周末顶组表现。",
-        supportedWeeks=[1, 2, 3, 4, 5],
+        supportedWeeks=list(range(1, 13)),
         supportsTm=True,
+        repeatMode="repeating",
     ),
     "texas_method": CyclePresetSchema(
         key="texas_method",
         label="Texas Method",
         summary="固定周结构的 HLM 模板，区分容量日、恢复日和强度日。",
-        supportedWeeks=[1],
+        supportedWeeks=list(range(1, 13)),
         supportsTm=True,
+        repeatMode="repeating",
     ),
 }
 

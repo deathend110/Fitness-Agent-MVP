@@ -22,6 +22,7 @@ def build_cycle_week_plan(
     preset_key: str,
     week_index: int,
     base_lifts: dict[str, dict[str, Any]] | None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     preset = get_cycle_preset(preset_key)
     if week_index not in preset.supportedWeeks:
@@ -38,8 +39,9 @@ def build_cycle_week_plan(
         raise KeyError(f"未注册的周期模板：{preset_key}")
 
     weekly_plan = _build_empty_weekly_plan()
+    resolved_day_templates = _resolve_training_day_templates(day_templates, config)
     for day_key in WEEKDAY_ORDER:
-        template_day = day_templates.get(day_key) or {"type": "rest", "exercises": []}
+        template_day = resolved_day_templates.get(day_key) or {"type": "rest", "exercises": []}
         weekly_plan[day_key] = {
             "type": template_day["type"],
             "exercises": [
@@ -68,7 +70,11 @@ def merge_cycle_week_override(
     for day_key in WEEKDAY_ORDER:
         override_day = override.get(day_key)
         if isinstance(override_day, dict):
-            merged[day_key] = deepcopy(override_day)
+            merged[day_key] = _normalize_override_day_plan(
+                day_key=day_key,
+                generated_day=merged.get(day_key),
+                override_day=override_day,
+            )
     return merged
 
 
@@ -77,6 +83,32 @@ def _build_empty_weekly_plan() -> dict[str, dict[str, Any]]:
         day_key: {"type": "rest", "exercises": []}
         for day_key in WEEKDAY_ORDER
     }
+
+
+def _resolve_training_day_templates(
+    day_templates: dict[str, dict[str, Any]],
+    config: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    training_days = config.get("trainingDays") if isinstance(config, dict) else None
+    if not _is_valid_training_days(training_days, len(day_templates)):
+        return deepcopy(day_templates)
+
+    ordered_template_days = [
+        day_key
+        for day_key in WEEKDAY_ORDER
+        if isinstance(day_templates.get(day_key), dict) and day_templates[day_key].get("exercises")
+    ]
+    remapped_templates: dict[str, dict[str, Any]] = {}
+    for source_day, target_day in zip(ordered_template_days, training_days, strict=False):
+        remapped_templates[target_day] = deepcopy(day_templates[source_day])
+    return remapped_templates
+
+
+def _is_valid_training_days(training_days: Any, expected_count: int) -> bool:
+    if not isinstance(training_days, list) or len(training_days) != expected_count:
+        return False
+    normalized_days = [day for day in training_days if isinstance(day, str) and day in WEEKDAY_ORDER]
+    return len(normalized_days) == expected_count and len(set(normalized_days)) == expected_count
 
 
 def _build_candito_week_templates(week_index: int) -> dict[str, dict[str, Any]]:
@@ -228,6 +260,55 @@ def _fixed_exercise(name: str, sets: int, reps: int, *, note: str = "") -> dict[
     }
 
 
+def _normalize_override_day_plan(
+    *,
+    day_key: str,
+    generated_day: dict[str, Any] | None,
+    override_day: dict[str, Any],
+) -> dict[str, Any]:
+    generated_exercises = generated_day.get("exercises") if isinstance(generated_day, dict) else []
+    override_exercises = override_day.get("exercises") if isinstance(override_day.get("exercises"), list) else []
+    normalized_exercises = [
+        _normalize_override_exercise(
+            day_key=day_key,
+            exercise_index=index,
+            generated_exercise=generated_exercises[index] if index < len(generated_exercises) else None,
+            override_exercise=exercise,
+        )
+        for index, exercise in enumerate(override_exercises)
+        if isinstance(exercise, dict)
+    ]
+    return {
+        "type": override_day.get("type") if isinstance(override_day.get("type"), str) and override_day.get("type") else (
+            generated_day.get("type") if isinstance(generated_day, dict) and isinstance(generated_day.get("type"), str) else "rest"
+        ),
+        "exercises": normalized_exercises,
+    }
+
+
+def _normalize_override_exercise(
+    *,
+    day_key: str,
+    exercise_index: int,
+    generated_exercise: dict[str, Any] | None,
+    override_exercise: dict[str, Any],
+) -> dict[str, Any]:
+    merged_source = deepcopy(generated_exercise) if isinstance(generated_exercise, dict) else {}
+    merged_source.update(deepcopy(override_exercise))
+    if "template" in merged_source and not isinstance(merged_source.get("template"), dict):
+        merged_source.pop("template", None)
+    if "instance" in merged_source and not isinstance(merged_source.get("instance"), dict):
+        merged_source.pop("instance", None)
+    return _materialize_canonical_exercise(
+        exercise_source=merged_source,
+        fallback_id=(
+            generated_exercise.get("id")
+            if isinstance(generated_exercise, dict) and isinstance(generated_exercise.get("id"), str)
+            else f"override-{day_key.lower()}-{exercise_index}"
+        ),
+    )
+
+
 def _materialize_exercise(
     *,
     preset_key: str,
@@ -237,41 +318,70 @@ def _materialize_exercise(
     exercise_template: dict[str, Any],
     base_lifts: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    load_mode = exercise_template.get("loadMode") or "fixed"
-    ref_1rm = exercise_template.get("ref1RM")
-    pct = exercise_template.get("pct")
-    sets = int(exercise_template["sets"])
-    reps = int(exercise_template["reps"])
-    note = exercise_template.get("note") or ""
-    instance: dict[str, Any] = {
-        "pct": pct if load_mode == "percentage" else None,
-        "kg": None,
-        "note": note,
-    }
-    if load_mode == "percentage" and isinstance(ref_1rm, str):
-        source_max = _resolve_source_max(base_lifts, ref_1rm)
-        instance["sourceMax"] = source_max
-        instance["targetWeight"] = round(source_max * float(pct), 1) if source_max is not None and pct is not None else None
-
-    return {
+    load_mode = exercise_template.get("loadMode") or _infer_load_mode(exercise_template)
+    exercise_source = {
         "id": f"{preset_key}-w{week_index}-{day_key.lower()}-{exercise_index}",
         "name": exercise_template["name"],
         "tier": "main" if load_mode == "percentage" else "accessory",
+        "loadMode": load_mode,
+        "ref1RM": exercise_template.get("ref1RM"),
+        "pct": exercise_template.get("pct"),
+        "sets": int(exercise_template["sets"]),
+        "reps": int(exercise_template["reps"]),
+        "kg": None,
+        "note": exercise_template.get("note") or "",
+    }
+    return _materialize_canonical_exercise(exercise_source=exercise_source, fallback_id=exercise_source["id"])
+
+
+def _materialize_canonical_exercise(
+    *,
+    exercise_source: dict[str, Any],
+    fallback_id: str,
+) -> dict[str, Any]:
+    load_mode = exercise_source.get("loadMode") or _infer_load_mode(exercise_source)
+    ref_1rm = exercise_source.get("ref1RM") if load_mode == "percentage" else None
+    pct = _read_number(exercise_source.get("pct")) if load_mode == "percentage" else None
+    sets = _coerce_int(exercise_source.get("sets"), 0)
+    reps = _coerce_int(exercise_source.get("reps"), 0)
+    note = exercise_source.get("note") if isinstance(exercise_source.get("note"), str) else ""
+    kg = _read_number(exercise_source.get("kg")) if load_mode == "fixed" else None
+    tier = exercise_source.get("tier") if isinstance(exercise_source.get("tier"), str) and exercise_source.get("tier") else (
+        "main" if load_mode == "percentage" else "accessory"
+    )
+    return {
+        "id": exercise_source.get("id") if isinstance(exercise_source.get("id"), str) and exercise_source.get("id") else fallback_id,
+        "name": exercise_source.get("name") if isinstance(exercise_source.get("name"), str) else "",
+        "tier": tier,
         "template": {
             "loadMode": load_mode,
-            "ref1RM": ref_1rm if load_mode == "percentage" else None,
+            "ref1RM": ref_1rm,
             "setType": DEFAULT_SET_TYPE,
             "sets": sets,
             "repsText": str(reps),
         },
-        "instance": instance,
-        "ref1RM": ref_1rm if load_mode == "percentage" else None,
+        "instance": {
+            "pct": pct if load_mode == "percentage" else None,
+            "kg": kg if load_mode == "fixed" else None,
+            "note": note,
+        },
+        "ref1RM": ref_1rm,
         "pct": pct if load_mode == "percentage" else None,
         "sets": sets,
         "reps": reps,
-        "kg": None,
+        "kg": kg if load_mode == "fixed" else None,
         "note": note,
     }
+
+
+def _infer_load_mode(exercise_source: dict[str, Any]) -> str:
+    ref_1rm = exercise_source.get("ref1RM")
+    pct = exercise_source.get("pct")
+    if isinstance(ref_1rm, str) and ref_1rm:
+        return "percentage"
+    if _read_number(pct) is not None:
+        return "percentage"
+    return "fixed"
 
 
 def _resolve_source_max(base_lifts: dict[str, dict[str, Any]], ref_1rm: str) -> float | None:
@@ -282,6 +392,13 @@ def _resolve_source_max(base_lifts: dict[str, dict[str, Any]], ref_1rm: str) -> 
     if tm_value is not None:
         return tm_value
     return _read_number(lift_payload.get("oneRm"))
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    number = _read_number(value)
+    if number is None:
+        return default
+    return int(number)
 
 
 def _read_number(value: Any) -> float | None:
