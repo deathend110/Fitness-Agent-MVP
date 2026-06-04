@@ -169,5 +169,4 @@ uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" -
 
 ## 相关文档
 
-- [ARCHITECTURE.md](/g:/VSCODE-G/Fitness Agent MVP/ARCHITECTURE.md)
-- [backend/README.md](/g:/VSCODE-G/Fitness Agent MVP/backend/README.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
