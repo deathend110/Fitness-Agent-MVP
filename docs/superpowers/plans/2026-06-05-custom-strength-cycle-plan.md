@@ -894,14 +894,14 @@ git commit -m "增加自定义力量计划创建编辑器"
 - Modify: `README.md`
 - Modify: `ARCHITECTURE.md`
 
-- [ ] **Step 1: Update README cycle plan capability text**
+- [x] **Step 1: Update README cycle plan capability text**
 
 ```md
 - 周期计划模式支持预制模板与第一版自定义力量周期计划
 - 自定义力量周期计划支持主项 TM 快照、按周手填 `%TM / sets / reps` 和静态辅助动作
 ```
 
-- [ ] **Step 2: Update architecture module and data-flow notes**
+- [x] **Step 2: Update architecture module and data-flow notes**
 
 ```md
 - `backend/plans/custom_strength_definition.py`：自定义力量周期计划定义层
@@ -909,7 +909,7 @@ git commit -m "增加自定义力量计划创建编辑器"
 - `src/components/plan-settings/CustomStrengthPlanEditor.jsx`：自定义力量周期计划创建编辑器
 ```
 
-- [ ] **Step 3: Run focused verification suite**
+- [x] **Step 3: Run focused verification suite**
 
 Run: `node --test tests/customStrengthPlanForm.test.js tests/customStrengthPlanEditor.test.js tests/backendClient.test.js tests/profileTab.test.js`  
 Expected: PASS.
@@ -917,18 +917,25 @@ Expected: PASS.
 Run: `uv run pytest backend/tests/test_custom_strength_definition.py backend/tests/test_custom_strength_engine.py backend/tests/test_cycle_api.py -q`  
 Expected: PASS.
 
-- [ ] **Step 4: Run build and browser verification**
+- [x] **Step 4: Run build and browser verification**
 
 Run: `npm run build`  
 Expected: PASS.
 
-Run: `uv run python tests/e2e/cycle_plan_mode_switch_preview.py`  
+Run: `uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\cycle_plan_mode_switch_preview.py`  
 Expected: PASS without regression in manual / cycle source switching.
 
-- [ ] **Step 5: Commit**
+Verification record:
+
+- `node --test tests/customStrengthPlanForm.test.js tests/customStrengthPlanEditor.test.js tests/backendClient.test.js tests/profileTab.test.js` - PASS
+- `uv run pytest backend/tests/test_custom_strength_definition.py backend/tests/test_custom_strength_engine.py backend/tests/test_cycle_api.py -q` - PASS
+- `npm run build` - PASS
+- `uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\cycle_plan_mode_switch_preview.py` - PASS
+
+- [x] **Step 5: Commit**
 
 ```bash
-git add README.md ARCHITECTURE.md
+git add README.md ARCHITECTURE.md docs/superpowers/plans/2026-06-05-custom-strength-cycle-plan.md tests/e2e/cycle_plan_mode_switch_preview.py
 git commit -m "同步自定义力量周期计划文档与验证"
 ```
 

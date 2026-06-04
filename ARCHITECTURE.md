@@ -69,9 +69,28 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
   - 通过“计划设置”分开管理“设置页当前选择模式”和“真实生效的计划来源”
+  - 管理预制周期草稿 `cycleDraft` 与自定义力量草稿 `customStrengthDraft`
   - 管理周期模板选择、开始日期、目标、`1RM / TM`、训练日、启用当前周期、生成下一周、确认推进和停止周期
+  - 管理自定义力量周期计划的创建提交，并通过独立 payload builder 调用后端 `/api/cycles`
   - 管理按日训练类型、动作增删改和动作表单状态
   - 周期模式激活时展示的是 `effectiveWeeklyPlan` 对应的当前周投影
+
+- [src/utils/cyclePlanForm.js](src/utils/cyclePlanForm.js)
+  - 预制周期计划草稿与 payload 映射工具
+
+- [src/utils/customStrengthPlanForm.js](src/utils/customStrengthPlanForm.js)
+  - 自定义力量周期计划草稿与 payload 映射工具
+  - 负责默认 4 周草稿、主项 TM 紧凑化、`baseLifts / config.mainLifts` 同构约束，以及 `totalWeeks / weeks.length` 一致性
+
+- [src/components/plan-settings/CustomStrengthPlanEditor.jsx](src/components/plan-settings/CustomStrengthPlanEditor.jsx)
+  - 自定义力量周期计划的最小可提交流程编辑器
+  - 当前支持名称、开始日期、周数、主项 TM 和周列表基础 day type 维护
+
+- [src/components/plan-settings/CustomStrengthMainLiftEditor.jsx](src/components/plan-settings/CustomStrengthMainLiftEditor.jsx)
+  - 负责主项 TM 输入
+
+- [src/components/plan-settings/CustomStrengthWeekEditor.jsx](src/components/plan-settings/CustomStrengthWeekEditor.jsx)
+  - 负责按周展示 day type 与动作数量预览
 
 - [src/tabs/TodayTab.jsx](src/tabs/TodayTab.jsx)
   - 编辑今日日志
@@ -203,6 +222,18 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 把周期计划当前周快照和覆盖层合并成 `effectiveWeeklyPlan`
   - 给 metrics、AI、工具链提供统一计划入口
 
+- [backend/plans/custom_strength_definition.py](backend/plans/custom_strength_definition.py)
+  - 自定义力量周期计划定义层
+  - 负责 normalize / validate、自定义动作分类约束、主项 TM 校验和 definition 稳定化
+
+- [backend/plans/custom_strength_engine.py](backend/plans/custom_strength_engine.py)
+  - 自定义力量周期计划周编译层
+  - 负责把 definition 物化成多周 `weeklyPlan` 快照
+
+- [backend/plans/weekly_plan_materializer.py](backend/plans/weekly_plan_materializer.py)
+  - 预制周期引擎与自定义力量引擎共享的周计划物化 helper
+  - 负责 canonical exercise 结构、`loadRef` 构建和 override 辅助逻辑
+
 - [backend/agent/tool_calling.py](backend/agent/tool_calling.py)
   - 定义工具注册表、工具参数模型和工具处理函数
 
@@ -275,6 +306,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 1. 前端通过“计划设置”选择当前设置模式，并在用户确认后再切换 `manual` 或 `cycle`
 2. `manual` 来源直接读取和写回 [backend/api/weekly_plan.py](backend/api/weekly_plan.py)
 3. `cycle` 来源通过 [backend/api/cycle_plans.py](backend/api/cycle_plans.py) 创建或推进活动周期
+   - 预制模板走 [backend/plans/cycle_engine.py](backend/plans/cycle_engine.py)
+   - 自定义力量周期走 [backend/plans/custom_strength_definition.py](backend/plans/custom_strength_definition.py) 和 [backend/plans/custom_strength_engine.py](backend/plans/custom_strength_engine.py)
 4. [backend/agent/active_plan.py](backend/agent/active_plan.py) 根据 `plan_source_state` 决定返回：
    - 手动周计划
    - 周期当前周 `generated_plan + override_plan` 合并后的有效周计划
@@ -319,6 +352,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - `active_cycle_plan`
   - 当前活动周期的模板、目标、周次、`1RM / TM` 基线和轻量配置
+  - 自定义力量周期计划也复用这张表，其中 `preset_key = "custom_strength"`，`config` 保存归一化后的 definition
 
 - `cycle_week_snapshot`
   - 周期某一周的生成结果、覆盖层、确认状态和周起止日期

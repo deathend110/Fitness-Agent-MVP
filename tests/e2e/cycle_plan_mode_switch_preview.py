@@ -238,6 +238,12 @@ def open_plan_settings(page) -> None:
     expect(panel).to_be_visible(timeout=10_000)
 
 
+def get_preset_cycle_plan_section(page):
+    return page.locator("label").filter(has=page.get_by_text("周期模板")).locator(
+        "xpath=ancestor::div[contains(@class,'grid')][1]"
+    )
+
+
 def main() -> None:
     with ensure_vite_dev_server(APP_URL) as app_url:
         with sync_playwright() as playwright:
@@ -254,7 +260,8 @@ def main() -> None:
 
             open_plan_settings(page)
             page.get_by_role("button", name="周期计划", exact=True).click()
-            page.locator("input[type='date']").first.fill("2026-06-01")
+            preset_cycle_plan_section = get_preset_cycle_plan_section(page)
+            preset_cycle_plan_section.get_by_label("开始日期").fill("2026-06-01")
             page.get_by_role("button", name="Monday").click()
             page.get_by_role("button", name="Wednesday").click()
             page.get_by_role("button", name="Friday").click()
