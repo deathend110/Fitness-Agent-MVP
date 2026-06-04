@@ -67,8 +67,11 @@ function PlanTab({
   const backendClient = useMemo(() => createBackendClient(), [])
   const oneRmOptions = getOneRmOptions(profile)
   const todayStr = getTodayStr()
+  const hasActiveCycle = Number.isInteger(activeCyclePlan?.cycle?.id)
   const displayedWeeklyPlan =
-    planSource.activeSource === 'cycle' && effectiveWeeklyPlan ? effectiveWeeklyPlan : weeklyPlan
+    planSource.activeSource === 'cycle' && hasActiveCycle && effectiveWeeklyPlan
+      ? effectiveWeeklyPlan
+      : weeklyPlan
   const layoutModel = useMemo(
     () =>
       buildWeeklyPlanLayoutModel(displayedWeeklyPlan, {
@@ -123,7 +126,7 @@ function PlanTab({
   }
 
   function handleWeekNumberChange(nextWeekNumber) {
-    if (planSource.activeSource === 'cycle') {
+    if (isCycleOverrideMode()) {
       return
     }
 
@@ -280,8 +283,8 @@ function PlanTab({
     setIsCycleSubmitting(true)
     setCycleActionMessage('')
     try {
-      const response = await backendClient.generateNextCycleWeek(activeCyclePlan.cycle.id)
-      const nextActiveCyclePlan = buildNextActiveCyclePayload(response)
+      await backendClient.generateNextCycleWeek(activeCyclePlan.cycle.id)
+      const nextActiveCyclePlan = await backendClient.getActiveCyclePlan()
 
       if (nextActiveCyclePlan) {
         onActiveCyclePlanChange?.(nextActiveCyclePlan)

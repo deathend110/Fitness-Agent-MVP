@@ -105,6 +105,23 @@ test('PlanTab 源码在手动来源下仍保留 onWeeklyPlanChange 更新链路'
 
   assert.match(source, /if \(!isCycleOverrideMode\(\)\) \{/)
   assert.match(source, /onWeeklyPlanChange\(planUpdater\)/)
-  assert.match(source, /if \(planSource\.activeSource === 'cycle'\) \{\s*return/)
+  assert.match(source, /if \(isCycleOverrideMode\(\)\) \{\s*return/)
   assert.match(source, /weekMeta/)
+})
+
+test('PlanTab 生成下一周后会重新读取 active cycle detail，而不是把 snapshot 直接写进 activeCyclePlan', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /await backendClient\.generateNextCycleWeek\(activeCyclePlan\.cycle\.id\)/)
+  assert.match(source, /const nextActiveCyclePlan = await backendClient\.getActiveCyclePlan\(\)/)
+})
+
+test('PlanTab 在尚未创建活动周期时会回退显示手动周计划', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /const hasActiveCycle = Number\.isInteger\(activeCyclePlan\?\.cycle\?\.id\)/)
+  assert.match(
+    source,
+    /planSource\.activeSource === 'cycle' && hasActiveCycle && effectiveWeeklyPlan/,
+  )
 })

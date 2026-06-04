@@ -75,7 +75,8 @@ function App() {
           : nextWeeklyPlanOrUpdater,
       )
 
-      if (planSource.activeSource === 'manual') {
+      // 只有真正进入活动周期后，effectiveWeeklyPlan 才应脱离 manual weeklyPlan。
+      if (planSource.activeSource === 'manual' || !Number.isInteger(activeCyclePlan?.cycle?.id)) {
         setEffectiveWeeklyPlan(nextWeeklyPlan)
       }
 

@@ -68,7 +68,10 @@ test('App 源码会在 manual 来源下同步 weeklyPlan 与 effectiveWeeklyPlan
   assert.match(source, /const nextWeeklyPlan = normalizeWeeklyPlan\(/)
   assert.match(source, /nextWeeklyPlanOrUpdater === 'function'/)
   assert.match(source, /nextWeeklyPlanOrUpdater\(currentWeeklyPlan\)/)
-  assert.match(source, /if \(planSource\.activeSource === 'manual'\) \{/)
+  assert.match(
+    source,
+    /if \(planSource\.activeSource === 'manual' \|\| !Number\.isInteger\(activeCyclePlan\?\.cycle\?\.id\)\) \{/,
+  )
   assert.match(source, /setEffectiveWeeklyPlan\(nextWeeklyPlan\)/)
 })
 
