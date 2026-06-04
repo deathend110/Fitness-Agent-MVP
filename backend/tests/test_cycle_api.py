@@ -150,6 +150,29 @@ async def test_create_cycle_creates_active_cycle_first_snapshot_and_switches_sou
 
 
 @pytest.mark.asyncio
+async def test_create_cycle_rejects_when_an_open_cycle_already_exists(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    first_response = await client.post("/api/cycles", json=_build_create_cycle_payload())
+    assert first_response.status_code == 200
+
+    second_response = await client.post("/api/cycles", json=_build_create_cycle_payload())
+
+    assert second_response.status_code == 400
+    assert second_response.json()["detail"] == "当前存在未结束的活动周期，请先结束后再创建新周期。"
+
+    async with session_factory() as session:
+        open_cycles = (
+            await session.execute(select(ActiveCyclePlan).where(ActiveCyclePlan.status.in_(("draft", "active"))))
+        ).scalars().all()
+
+    assert len(open_cycles) == 1
+
+
+@pytest.mark.asyncio
 async def test_get_active_cycle_returns_current_week_effective_plan(api_client: tuple[AsyncClient, Any]) -> None:
     client, session_factory = api_client
     await _seed_manual_state(session_factory)

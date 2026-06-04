@@ -50,6 +50,10 @@ async def create_active_cycle(
     session: AsyncSession,
     payload: CycleCreateRequestSchema,
 ) -> ActiveCycleDetailSchema:
+    existing_cycle = await _get_open_cycle(session)
+    if existing_cycle is not None:
+        raise ValueError("当前存在未结束的活动周期，请先结束后再创建新周期。")
+
     cycle = ActiveCyclePlan(
         preset_key=payload.presetKey,
         status="active",
