@@ -270,7 +270,7 @@ class FakeDayPlanProposalClient:
                                     "day": "Monday",
                                     "summary": "把周一改成恢复型腿日。",
                                     "dayPlan": {
-                                        "type": "腿日",
+                                        "type": "active_recovery",
                                         "exercises": [
                                             {
                                                 "name": "深蹲",
@@ -596,12 +596,12 @@ async def test_background_task_generates_committable_day_plan_replace_proposal(
     suggestion = result["result"]["suggestion"]
     assert suggestion["proposalId"]
     assert suggestion["kind"] == "day_plan_replace"
-    assert suggestion["dayPlan"]["type"] == "腿日"
+    assert suggestion["dayPlan"]["type"] == "active_recovery"
 
     committed = await client.post("/api/tools/plan/commit", json={"proposalId": suggestion["proposalId"]})
     assert committed.status_code == 200
     assert committed.json()["ok"] is True
-    assert committed.json()["plan"]["Monday"]["type"] == "腿日"
+    assert committed.json()["plan"]["Monday"]["type"] == "active_recovery"
     assert committed.json()["plan"]["Monday"]["exercises"][0]["name"] == "深蹲"
 
 

@@ -70,8 +70,9 @@ def test_dynamic_state_is_after_stable_prefix_and_before_recent_history() -> Non
 def test_token_budget_reserves_reply_space_and_trims_low_priority_history() -> None:
     assembler = PromptAssembler(
         budget=TokenBudgetConfig(
-            max_context_tokens=180,
-            reserved_response_tokens=60,
+            # 系统提示扩充（含工具调用规范段）后占约 150 token，调大预算以仍能触发历史裁剪。
+            max_context_tokens=400,
+            reserved_response_tokens=100,
         )
     )
     recent_messages = [
@@ -86,8 +87,8 @@ def test_token_budget_reserves_reply_space_and_trims_low_priority_history() -> N
         recent_messages=recent_messages,
     )
 
-    assert context.debug["token_budget"]["available_for_prompt"] == 120
-    assert context.debug["estimated_prompt_tokens"] <= 120
+    assert context.debug["token_budget"]["available_for_prompt"] == 300
+    assert context.debug["estimated_prompt_tokens"] <= 300
     assert context.debug["trimmed_items"]
     assert context.messages[-1]["content"] == "现在请给我明天计划"
     assert any("卧推" in message["content"] for message in context.messages)

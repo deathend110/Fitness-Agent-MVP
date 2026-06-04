@@ -413,7 +413,7 @@ class FakeDayPlanProposalClient:
                                     "day": "Monday",
                                     "summary": "把周一改成恢复型腿日。",
                                     "dayPlan": {
-                                        "type": "腿日",
+                                        "type": "active_recovery",
                                         "exercises": [
                                             {
                                                 "name": "深蹲",
@@ -1194,7 +1194,7 @@ async def test_agent_stream_emits_day_plan_replace_proposal(
         "done",
     ]
     assert events[2]["data"]["proposal"]["kind"] == "day_plan_replace"
-    assert events[2]["data"]["proposal"]["dayPlan"]["type"] == "腿日"
+    assert events[2]["data"]["proposal"]["dayPlan"]["type"] == "active_recovery"
     assert events[2]["data"]["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
 
 

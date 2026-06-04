@@ -90,6 +90,13 @@ def test_build_tool_schema_strips_openai_only_schema_fields_for_nested_tools() -
     new_value_schema = nested_parameters["properties"]["changes"]["items"]["properties"]["newValue"]
     assert new_value_schema == {"type": "string"}
 
+    # 验证 Literal 枚举数组在 Gemini sanitizer 后仍存活——枚举约束能实际传给模型。
+    items = nested_parameters["properties"]["changes"]["items"]["properties"]
+    assert "Monday" in nested_parameters["properties"]["day"]["enum"]
+    # 单值 Literal["update"] 在 Pydantic V2 生成 const（非 enum），Gemini sanitizer 不剥离 const。
+    assert items["action"]["const"] == "update"
+    assert "pct" in items["field"]["enum"]
+
 
 def test_build_tool_schema_gives_day_plan_replace_non_empty_object_properties() -> None:
     provider = GeminiNativeProvider()

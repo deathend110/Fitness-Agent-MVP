@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.tool_calling import (
     DailyLogToolArgs,
+    ProposePlanChangeToolArgs,
     ToolRegistry,
     ToolResultSlimmer,
     build_default_tool_registry,
@@ -106,7 +107,7 @@ async def test_plan_replace_tool_generates_proposal_card(db_session: AsyncSessio
             "day": "Monday",
             "summary": "改成恢复型腿日",
             "dayPlan": {
-                "type": "腿日",
+                "type": "active_recovery",
                 "exercises": [
                     {
                         "name": "深蹲",
@@ -123,7 +124,7 @@ async def test_plan_replace_tool_generates_proposal_card(db_session: AsyncSessio
     )
 
     assert result["proposal"]["kind"] == "day_plan_replace"
-    assert result["proposal"]["dayPlan"]["type"] == "腿日"
+    assert result["proposal"]["dayPlan"]["type"] == "active_recovery"
     assert result["proposal"]["dayPlan"]["exercises"][0]["name"] == "深蹲"
 
 
@@ -132,3 +133,39 @@ def test_unknown_tool_is_rejected() -> None:
 
     with pytest.raises(KeyError):
         registry.get("missing_tool")
+
+
+class TestLiteralEnumConstraints:
+    """验证弱模型稳定性加固：关键字符串参数的 Literal 枚举约束正确拒绝非法值。"""
+
+    def test_literal_day_rejects_chinese(self) -> None:
+        with pytest.raises(ValidationError):
+            ProposePlanChangeToolArgs.model_validate(
+                {"day": "周一", "changes": [{"action": "update", "exerciseName": "深蹲", "field": "pct", "newValue": 0.75}]}
+            )
+
+    def test_literal_day_rejects_abbrev(self) -> None:
+        with pytest.raises(ValidationError):
+            ProposePlanChangeToolArgs.model_validate(
+                {"day": "Mon", "changes": [{"action": "update", "exerciseName": "深蹲", "field": "pct", "newValue": 0.75}]}
+            )
+
+    def test_literal_action_rejects_modify(self) -> None:
+        with pytest.raises(ValidationError):
+            ProposePlanChangeToolArgs.model_validate(
+                {"day": "Monday", "changes": [{"action": "modify", "exerciseName": "深蹲", "field": "pct", "newValue": 0.75}]}
+            )
+
+    def test_literal_field_rejects_percentage(self) -> None:
+        with pytest.raises(ValidationError):
+            ProposePlanChangeToolArgs.model_validate(
+                {"day": "Monday", "changes": [{"action": "update", "exerciseName": "深蹲", "field": "percentage", "newValue": 0.75}]}
+            )
+
+    def test_literal_accepts_valid_values(self) -> None:
+        m = ProposePlanChangeToolArgs.model_validate(
+            {"day": "Monday", "changes": [{"action": "update", "exerciseName": "深蹲", "field": "pct", "newValue": 0.75}]}
+        )
+        assert m.day == "Monday"
+        assert m.changes[0].action == "update"
+        assert m.changes[0].field == "pct"

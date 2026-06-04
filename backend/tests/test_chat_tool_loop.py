@@ -573,7 +573,7 @@ async def test_gemini_tool_loop_generates_day_plan_replace_proposal(
                                             "day": "Monday",
                                             "summary": "把周一改成恢复型腿日",
                                             "dayPlan": {
-                                                "type": "腿日",
+                                                "type": "active_recovery",
                                                 "exercises": [
                                                     {
                                                         "name": "深蹲",
@@ -632,5 +632,135 @@ async def test_gemini_tool_loop_generates_day_plan_replace_proposal(
     assert latest_proposal["kind"] == "day_plan_replace"
     assert latest_proposal["status"] == "pending"
     assert latest_proposal["proposalId"]
-    assert latest_proposal["dayPlan"]["type"] == "腿日"
+    assert latest_proposal["dayPlan"]["type"] == "active_recovery"
     assert latest_proposal["dayPlan"]["exercises"][0]["name"] == "深蹲"
+
+
+class HallucinatedToolClient:
+    """模拟弱模型幻觉：返回不存在的工具名 propose_plan。"""
+
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, tool_choice, stream
+        self.calls.append(messages)
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_fake",
+                        "type": "function",
+                        "function": {"name": "propose_plan", "arguments": "{}"},
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="工具名有误，已收到纠偏提示。")
+
+
+class InvalidDayToolClient:
+    """模拟弱模型输出中文星期名到 day 字段，触发 Pydantic ValidationError。"""
+
+    def __init__(self) -> None:
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def request_chat_with_usage(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | dict[str, Any] | None = None,
+        stream: bool = False,
+        **_: Any,
+    ) -> DeepSeekChatResult:
+        del model, tools, tool_choice, stream
+        self.calls.append(messages)
+        if len(self.calls) == 1:
+            return DeepSeekChatResult(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call_invalid_day",
+                        "type": "function",
+                        "function": {
+                            "name": "propose_plan_change",
+                            "arguments": json.dumps(
+                                {
+                                    "day": "周一",
+                                    "changes": [
+                                        {
+                                            "action": "update",
+                                            "exerciseName": "深蹲",
+                                            "field": "pct",
+                                            "newValue": 0.7,
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                ],
+            )
+        return DeepSeekChatResult(content="day 参数有误，已收到纠偏提示。")
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_error_hint_for_hallucinated_tool(db_session: AsyncSession) -> None:
+    # 验证工具循环在工具名不存在时，将可用工具名列表作为 hint 注入 followup message，引导弱模型自我纠偏。
+    chat_session = ChatSession(title="hint-hallucinated", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.commit()
+
+    client = HallucinatedToolClient()
+    await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "修改一下计划"}],
+        model="deepseek-chat",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+    )
+
+    followup_messages = client.calls[1]
+    tool_messages = [m for m in followup_messages if m.get("role") == "tool"]
+    assert tool_messages, "未找到 tool 角色 followup message"
+    error_payload = json.loads(tool_messages[0]["content"])
+    assert "hint" in error_payload
+    assert "propose_plan_change" in error_payload["hint"]
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_error_hint_for_invalid_day(db_session: AsyncSession) -> None:
+    # 验证工具循环在 day 字段校验失败（弱模型输出中文星期名）时，hint 回传有效英文星期名列表。
+    chat_session = ChatSession(title="hint-invalid-day", created_at=utc_now(), updated_at=utc_now())
+    db_session.add(chat_session)
+    await db_session.commit()
+
+    client = InvalidDayToolClient()
+    await run_tool_calling_chat(
+        session=db_session,
+        session_id=chat_session.id,
+        messages=[{"role": "user", "content": "把周一改一下"}],
+        model="deepseek-chat",
+        deepseek_client=client,
+        registry=build_default_tool_registry(),
+    )
+
+    followup_messages = client.calls[1]
+    tool_messages = [m for m in followup_messages if m.get("role") == "tool"]
+    assert tool_messages, "未找到 tool 角色 followup message"
+    error_payload = json.loads(tool_messages[0]["content"])
+    assert "hint" in error_payload
+    assert "Monday" in error_payload["hint"]

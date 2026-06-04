@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -43,9 +43,10 @@ class ReadFileSummaryToolArgs(BaseModel):
 class PlanChangeItemArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: str
+    # action/field 从自由 str 改为 Literal，让弱模型从 schema enum 看到合法值列表
+    action: Literal["update"]
     exerciseName: str
-    field: str
+    field: Literal["pct", "kg", "sets", "reps", "rpe", "note"]
     newValue: Any
     oldValue: Any | None = None
 
@@ -53,7 +54,8 @@ class PlanChangeItemArgs(BaseModel):
 class ProposePlanChangeToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    day: str
+    # day 从自由 str 改为 Literal，防止弱模型输出中文或缩写星期名
+    day: Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     summary: str = ""
     changes: list[PlanChangeItemArgs]
 
@@ -63,7 +65,8 @@ class DayPlanExerciseArgs(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     name: str
-    tier: str = "accessory"
+    # tier 加枚举，弱模型不会随意造值
+    tier: Literal["main", "accessory", "warmup"] = "accessory"
     sets: float | None = None
     reps: float | None = None
     rpe: float | None = None
@@ -75,14 +78,15 @@ class DayPlanArgs(BaseModel):
     # exercises 不给默认值，使其进入 nested required，满足 Gemini 对 array 字段应被标记 required 的偏好（rest 日传 [] 即可）。
     model_config = ConfigDict(extra="allow")
 
-    type: str = "rest"
+    # type 加枚举，给弱模型提供明确的选项集合
+    type: Literal["strength", "cardio", "rest", "active_recovery", "deload"] = "rest"
     exercises: list[DayPlanExerciseArgs]
 
 
 class ProposeDayPlanReplaceToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    day: str
+    day: Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     summary: str = ""
     dayPlan: DayPlanArgs
 
@@ -204,7 +208,13 @@ def build_default_tool_registry() -> ToolRegistry:
     registry.register(
         RegisteredTool(
             "propose_plan_change",
-            "生成训练计划修改建议卡；只生成 proposal，不直接写入计划。",
+            (
+                "生成训练计划修改建议卡；只生成 proposal，不直接写入计划。"
+                "day 必须是英文星期名（Monday/Tuesday/Wednesday/Thursday/Friday/Saturday/Sunday）；"
+                "action 只允许 'update'；"
+                "field 只允许 'pct'（负荷比例）/'kg'（绝对重量）/'sets'/'reps'/'rpe'/'note'；"
+                "newValue 填对应数值（如 pct=0.75，kg=100，sets=4）。"
+            ),
             ProposePlanChangeToolArgs,
             _propose_plan_change,
         )
@@ -212,7 +222,12 @@ def build_default_tool_registry() -> ToolRegistry:
     registry.register(
         RegisteredTool(
             "propose_day_plan_replace",
-            "生成单日训练计划替换建议卡；只生成 proposal，不直接写入计划。",
+            (
+                "生成单日训练计划替换建议卡；只生成 proposal，不直接写入计划。"
+                "day 必须是英文星期名；"
+                "dayPlan.type 填 'strength'/'cardio'/'rest'/'active_recovery'/'deload'；"
+                "exercises 传动作数组，休息日传 []。"
+            ),
             ProposeDayPlanReplaceToolArgs,
             _propose_day_plan_replace,
         )

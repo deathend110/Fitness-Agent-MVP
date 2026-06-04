@@ -15,6 +15,30 @@ class ToolLoopResult:
     proposals: list[dict[str, Any]]
 
 
+def _build_tool_error_hint(tool_name: str, exc: Exception, registry: ToolRegistry) -> str | None:
+    # 给弱模型提供纠偏提示，减少盲目重试：根据异常类型和工具名返回可读的修正方向。
+    if isinstance(exc, KeyError):
+        available = "、".join(registry._tools.keys())
+        return f"工具名不存在，可用工具名：{available}"
+    exc_str = str(exc)
+    try:
+        from pydantic import ValidationError as PydanticValidationError
+        if isinstance(exc, PydanticValidationError):
+            # 用换行符定界匹配字段名，避免 "dayPlan.type" 误触发 "day" 规则。
+            # Pydantic V2 错误字符串格式：每个字段路径独占一行（"\n字段路径\n  错误描述"）。
+            if "\nday\n" in exc_str:
+                return "day 字段只允许：Monday/Tuesday/Wednesday/Thursday/Friday/Saturday/Sunday"
+            if "field" in exc_str:
+                return "field 字段只允许：pct/kg/sets/reps/rpe/note"
+            if "action" in exc_str:
+                return "action 字段只允许：update"
+            if "date" in exc_str or "pattern" in exc_str:
+                return "date 字段格式必须为 YYYY-MM-DD"
+    except ImportError:
+        pass
+    return None
+
+
 class ToolLoopOrchestrator:
     def __init__(
         self,
@@ -98,7 +122,8 @@ class ToolLoopOrchestrator:
                     error_message = None
                     followup_result = tool_result
                 except Exception as exc:
-                    error_result = {"error": str(exc)}
+                    hint = _build_tool_error_hint(tool_call["toolName"], exc, self.registry)
+                    error_result = {"error": str(exc), **({"hint": hint} if hint else {})}
                     result_summary = self.slimmer.slim(tool_call["toolName"], error_result)
                     status = "failed"
                     error_message = str(exc)
