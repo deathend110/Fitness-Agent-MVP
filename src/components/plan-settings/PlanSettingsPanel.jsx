@@ -301,6 +301,7 @@ function PlanSettingsPanel({
           </div>
 
           <CustomStrengthPlanEditor
+            canCreate={settingsStatus.canCreateCycle}
             draft={customStrengthDraft}
             isSubmitting={isCycleSubmitting}
             onChange={onUpdateCustomStrengthDraft}

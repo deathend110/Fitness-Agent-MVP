@@ -78,7 +78,7 @@ function updateWeekDayType(draft, targetWeekIndex, targetDayIndex, nextType) {
   }
 }
 
-function CustomStrengthPlanEditor({ draft, isSubmitting, onChange, onSubmit }) {
+function CustomStrengthPlanEditor({ canCreate, draft, isSubmitting, onChange, onSubmit }) {
   return (
     <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
       <div className="space-y-1">
@@ -148,7 +148,7 @@ function CustomStrengthPlanEditor({ draft, isSubmitting, onChange, onSubmit }) {
       <div className="flex flex-wrap gap-2">
         <button
           className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-emerald-300"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canCreate}
           onClick={onSubmit}
           type="button"
         >
