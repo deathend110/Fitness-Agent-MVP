@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.plans.cycle_engine import _materialize_canonical_exercise
 
-DEFAULT_SET_TYPE = "straight"
 WEEKDAY_ORDER = (
     "Monday",
     "Tuesday",
@@ -16,13 +16,16 @@ WEEKDAY_ORDER = (
 
 
 def build_custom_strength_cycle_weeks(definition: dict[str, Any]) -> list[dict[str, dict[str, Any]]]:
-    normalized_definition = definition if isinstance(definition, dict) else {}
+    if not isinstance(definition, dict):
+        raise ValueError("custom strength definition 必须是 dict。")
+    normalized_definition = definition
     main_lifts = normalized_definition.get("mainLifts") if isinstance(normalized_definition.get("mainLifts"), dict) else {}
-    weeks = normalized_definition.get("weeks") if isinstance(normalized_definition.get("weeks"), list) else []
+    weeks = normalized_definition.get("weeks")
+    if not isinstance(weeks, list):
+        raise ValueError("custom strength definition.weeks 必须是 list。")
     return [
         _build_week_plan(week=week, main_lifts=main_lifts)
         for week in weeks
-        if isinstance(week, dict)
     ]
 
 
@@ -32,15 +35,21 @@ def _build_week_plan(
     main_lifts: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     # 自定义周期需要产出完整 7 天结构，未定义日统一补 rest，便于沿用现有周计划读写链路。
+    if not isinstance(week, dict):
+        raise ValueError("custom strength week 必须是 dict。")
     weekly_plan = _build_empty_weekly_plan()
-    days = week.get("days") if isinstance(week.get("days"), list) else []
+    days = week.get("days")
+    if not isinstance(days, list):
+        raise ValueError("custom strength week.days 必须是 list。")
     for day in days:
         if not isinstance(day, dict):
-            continue
+            raise ValueError("custom strength day 必须是 dict。")
         day_key = _day_key_from_index(day.get("dayIndex"))
         if day_key is None:
-            continue
-        exercises = day.get("exercises") if isinstance(day.get("exercises"), list) else []
+            raise ValueError("custom strength day.dayIndex 必须是 1-7 的整数。")
+        exercises = day.get("exercises")
+        if not isinstance(exercises, list):
+            raise ValueError("custom strength day.exercises 必须是 list。")
         weekly_plan[day_key] = {
             "type": day.get("type") if isinstance(day.get("type"), str) and day.get("type") else "rest",
             "exercises": [
@@ -52,7 +61,6 @@ def _build_week_plan(
                     main_lifts=main_lifts,
                 )
                 for index, exercise in enumerate(exercises)
-                if isinstance(exercise, dict)
             ],
         }
     return weekly_plan
@@ -81,6 +89,8 @@ def _materialize_exercise(
     exercise: dict[str, Any],
     main_lifts: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
+    if not isinstance(exercise, dict):
+        raise ValueError("custom strength exercise 必须是 dict。")
     category = exercise.get("category") if isinstance(exercise.get("category"), str) else "accessory"
     prescription = exercise.get("prescription") if isinstance(exercise.get("prescription"), dict) else {}
     sets = _coerce_int(prescription.get("sets"))
@@ -98,31 +108,22 @@ def _materialize_exercise(
         exercise_index=exercise_index,
     )
     tier = "main" if category == "main" else ("variation" if category == "variation" else "accessory")
-
-    return {
-        "id": exercise_id,
-        "name": exercise.get("name") if isinstance(exercise.get("name"), str) else "",
-        "tier": tier,
-        "template": {
+    return _materialize_canonical_exercise(
+        exercise_source={
+            "id": exercise.get("id"),
+            "name": exercise.get("name"),
+            "tier": tier,
             "loadMode": load_mode,
             "ref1RM": ref_1rm,
-            "setType": DEFAULT_SET_TYPE,
-            "sets": sets,
-            "repsText": str(reps),
-        },
-        "instance": {
             "pct": pct if load_mode == "percentage" else None,
+            "sets": sets,
+            "reps": reps,
             "kg": None,
             "note": note,
+            "loadRef": load_ref,
         },
-        "ref1RM": ref_1rm,
-        "pct": pct if load_mode == "percentage" else None,
-        "sets": sets,
-        "reps": reps,
-        "kg": None,
-        "note": note,
-        "loadRef": load_ref,
-    }
+        fallback_id=exercise_id,
+    )
 
 
 def _resolve_note(exercise: dict[str, Any]) -> str:

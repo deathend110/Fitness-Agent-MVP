@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
 from backend.plans.custom_strength_definition import normalize_custom_strength_definition
 from backend.plans.custom_strength_engine import build_custom_strength_cycle_weeks
 
@@ -116,3 +118,59 @@ def test_build_custom_strength_cycle_weeks_keeps_static_accessory_without_percen
     assert accessory["instance"]["pct"] is None
     assert accessory["instance"]["kg"] is None
 
+
+def test_build_custom_strength_cycle_weeks_materializes_canonical_fields_for_main_and_variation() -> None:
+    definition = normalize_custom_strength_definition(_build_definition())
+    definition["weeks"][0]["days"][0]["exercises"].append(
+        {
+            "name": "Paused Bench Press",
+            "category": "variation",
+            "progression": {"mode": "static"},
+            "prescription": {"sets": 4, "reps": 6},
+            "notes": "底部停顿 2 秒",
+        }
+    )
+
+    weekly_plan = build_custom_strength_cycle_weeks(definition)
+    main_exercise = weekly_plan[0]["Monday"]["exercises"][0]
+    variation = weekly_plan[0]["Monday"]["exercises"][2]
+
+    assert main_exercise["template"]["setType"] == "straight"
+    assert main_exercise["template"]["repsText"] == "5"
+    assert main_exercise["instance"]["note"] == "主项周一"
+
+    assert variation["id"] == "custom-w1-d1-2"
+    assert variation["tier"] == "variation"
+    assert variation["template"]["loadMode"] == "fixed"
+    assert variation["template"]["setType"] == "straight"
+    assert variation["template"]["repsText"] == "6"
+    assert variation["instance"]["note"] == "底部停顿 2 秒"
+    assert variation["instance"]["pct"] is None
+    assert variation["instance"]["kg"] is None
+
+
+def test_build_custom_strength_cycle_weeks_rejects_invalid_day_and_exercise_payloads() -> None:
+    definition = normalize_custom_strength_definition(_build_definition())
+    definition["weeks"][0]["days"] = [
+        {
+            "dayIndex": 1,
+            "type": "lower_strength",
+            "exercises": [
+                {
+                    "name": "Back Squat",
+                    "category": "main",
+                    "progression": {
+                        "mode": "percent_tm",
+                        "liftKey": "squat",
+                        "percentTm": 0.75,
+                    },
+                    "prescription": {"sets": 5, "reps": 5},
+                },
+                "bad-exercise",
+            ],
+        },
+        "bad-day",
+    ]
+
+    with pytest.raises(ValueError, match="custom strength"):
+        build_custom_strength_cycle_weeks(definition)
