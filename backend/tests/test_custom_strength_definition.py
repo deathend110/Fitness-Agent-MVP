@@ -100,6 +100,16 @@ def test_normalize_custom_strength_definition_rejects_non_consecutive_week_index
         normalize_custom_strength_definition(payload)
 
 
+def test_normalize_custom_strength_definition_rejects_string_week_index_with_stable_value_error() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][1]["weekIndex"] = "2"
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "weekIndex 必须为合法正整数。"
+
+
 def test_normalize_custom_strength_definition_rejects_duplicate_week_index() -> None:
     payload = build_valid_definition()
     payload["weeks"][1]["weekIndex"] = 1
@@ -228,6 +238,59 @@ def test_normalize_custom_strength_definition_rejects_non_positive_day_index(
 
     with pytest.raises(ValueError, match="dayIndex"):
         normalize_custom_strength_definition(payload)
+
+
+def test_normalize_custom_strength_definition_rejects_day_index_above_week_range() -> None:
+    payload = build_valid_definition()
+    payload["weeks"][0]["days"][0]["dayIndex"] = 8
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "dayIndex 必须为 1..7 的合法正整数。"
+
+
+@pytest.mark.parametrize(("field", "invalid_value"), [("tm", True), ("percentTm", True)])
+def test_normalize_custom_strength_definition_rejects_boolean_number_fields(
+    field: str,
+    invalid_value: bool,
+) -> None:
+    payload = build_valid_definition()
+
+    if field == "tm":
+        payload["mainLifts"]["squat"]["tm"] = invalid_value
+    else:
+        payload["weeks"][0]["days"][0]["exercises"][0]["progression"]["percentTm"] = invalid_value
+
+    with pytest.raises(ValueError, match=field):
+        normalize_custom_strength_definition(payload)
+
+
+@pytest.mark.parametrize("category", ["main", "variation", "accessory"])
+@pytest.mark.parametrize(
+    ("prescription_value", "expected_message"),
+    [
+        ({}, "prescription.sets 必须为合法正整数。"),
+        ({"sets": "abc", "reps": 5}, "prescription.sets 必须为合法正整数。"),
+        ({"sets": 3, "reps": 0}, "prescription.reps 必须为合法正整数。"),
+    ],
+)
+def test_normalize_custom_strength_definition_rejects_invalid_prescription_fields(
+    category: str,
+    prescription_value: dict,
+    expected_message: str,
+) -> None:
+    payload = build_valid_definition()
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = category
+    exercise["prescription"] = prescription_value
+    if category != "main":
+        exercise["progression"] = {"mode": "static"}
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == expected_message
 
 
 @pytest.mark.parametrize(

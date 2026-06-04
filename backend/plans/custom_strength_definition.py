@@ -54,22 +54,24 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
         if not isinstance(week, dict):
             raise ValueError("weeks 的每一项都必须为对象。")
 
-    week_indexes = [week.get("weekIndex") for week in weeks]
+    week_indexes = []
+    for week in weeks:
+        week_indexes.append(_parse_positive_int(week.get("weekIndex"), "weekIndex"))
     expected_week_indexes = list(range(1, total_weeks + 1))
     if sorted(week_indexes) != expected_week_indexes:
         raise ValueError("weeks.weekIndex 必须从 1 开始连续且唯一。")
 
-    for week in weeks:
+    for week, week_index in zip(weeks, week_indexes):
         days = week.get("days")
         if not isinstance(days, list):
-            raise ValueError(f"第 {week.get('weekIndex')} 周的 days 必须为列表。")
+            raise ValueError(f"第 {week_index} 周的 days 必须为列表。")
+        normalized_day_indexes: list[int] = []
         for day in days:
             if not isinstance(day, dict):
-                raise ValueError(f"第 {week.get('weekIndex')} 周的 days 每一项都必须为对象。")
-            _parse_positive_int(day.get("dayIndex"), "dayIndex")
-        day_indexes = [day.get("dayIndex") for day in days]
-        if len(day_indexes) != len(set(day_indexes)):
-            raise ValueError(f"第 {week.get('weekIndex')} 周的 dayIndex 必须唯一。")
+                raise ValueError(f"第 {week_index} 周的 days 每一项都必须为对象。")
+            normalized_day_indexes.append(_parse_day_index(day.get("dayIndex")))
+        if len(normalized_day_indexes) != len(set(normalized_day_indexes)):
+            raise ValueError(f"第 {week_index} 周的 dayIndex 必须唯一。")
 
 
 def _parse_positive_int(raw_value: Any, field_name: str) -> int:
@@ -81,6 +83,8 @@ def _parse_positive_int(raw_value: Any, field_name: str) -> int:
 
 
 def _parse_positive_float(raw_value: Any, field_name: str) -> float:
+    if isinstance(raw_value, bool):
+        raise ValueError(f"{field_name} 必须为合法数字。")
     try:
         parsed_value = float(raw_value)
     except (TypeError, ValueError) as exc:
@@ -88,6 +92,20 @@ def _parse_positive_float(raw_value: Any, field_name: str) -> float:
     if not isfinite(parsed_value):
         raise ValueError(f"{field_name} 必须为有限数字。")
     return parsed_value
+
+
+def _parse_day_index(raw_value: Any) -> int:
+    day_index = _parse_positive_int(raw_value, "dayIndex")
+    if day_index > 7:
+        raise ValueError("dayIndex 必须为 1..7 的合法正整数。")
+    return day_index
+
+
+def _validate_prescription(prescription: Any) -> None:
+    if not isinstance(prescription, dict):
+        raise ValueError("prescription 必须为对象。")
+    _parse_positive_int(prescription.get("sets"), "prescription.sets")
+    _parse_positive_int(prescription.get("reps"), "prescription.reps")
 
 
 def _validate_custom_strength_exercise(
@@ -100,6 +118,7 @@ def _validate_custom_strength_exercise(
     category = exercise.get("category")
     if category not in VALID_CATEGORIES:
         raise ValueError("动作 category 非法。")
+    _validate_prescription(exercise.get("prescription"))
 
     progression = exercise.get("progression")
     if not isinstance(progression, dict):
