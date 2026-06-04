@@ -21,7 +21,9 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
         raise ValueError("totalWeeks 与 weeks 定义数量必须一致。")
     _validate_weeks(weeks, total_weeks)
 
-    main_lifts = definition.get("mainLifts") if isinstance(definition.get("mainLifts"), dict) else {}
+    main_lifts = definition.get("mainLifts")
+    if not isinstance(main_lifts, dict):
+        raise ValueError("mainLifts 必须为对象。")
     normalized_main_lifts: dict[str, dict[str, float]] = {}
     for lift_key, lift_value in main_lifts.items():
         if lift_key not in VALID_MAIN_LIFTS:
@@ -54,7 +56,9 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
         raise ValueError("weeks.weekIndex 必须从 1 开始连续且唯一。")
 
     for week in weeks:
-        days = week.get("days") if isinstance(week.get("days"), list) else []
+        days = week.get("days")
+        if not isinstance(days, list):
+            raise ValueError(f"第 {week.get('weekIndex')} 周的 days 必须为列表。")
         for day in days:
             if not isinstance(day, dict):
                 raise ValueError(f"第 {week.get('weekIndex')} 周的 days 每一项都必须为对象。")
@@ -64,10 +68,9 @@ def _validate_weeks(weeks: list[dict[str, Any]], total_weeks: int) -> None:
 
 
 def _parse_positive_int(raw_value: Any, field_name: str) -> int:
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{field_name} 必须为合法正整数。") from exc
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+        raise ValueError(f"{field_name} 必须为合法正整数。")
+    return raw_value
 
 
 def _parse_positive_float(raw_value: Any, field_name: str) -> float:
@@ -81,11 +84,16 @@ def _validate_custom_strength_exercise(
     exercise: dict[str, Any],
     main_lifts: dict[str, dict[str, float]],
 ) -> None:
+    if not isinstance(exercise, dict):
+        raise ValueError("exercises 的每一项都必须为对象。")
+
     category = exercise.get("category")
     if category not in VALID_CATEGORIES:
         raise ValueError("动作 category 非法。")
 
-    progression = exercise.get("progression") if isinstance(exercise.get("progression"), dict) else {}
+    progression = exercise.get("progression")
+    if not isinstance(progression, dict):
+        raise ValueError("progression 必须为对象。")
     progression_mode = progression.get("mode")
 
     if category == "main":

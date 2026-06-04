@@ -154,6 +154,21 @@ def test_normalize_custom_strength_definition_raises_stable_value_error_for_inva
             "invalid literal for int()",
         ),
         (
+            lambda payload: payload.__setitem__("totalWeeks", 4.8),
+            "totalWeeks 必须为合法正整数。",
+            "",
+        ),
+        (
+            lambda payload: payload.__setitem__("totalWeeks", True),
+            "totalWeeks 必须为合法正整数。",
+            "",
+        ),
+        (
+            lambda payload: payload.__setitem__("mainLifts", []),
+            "mainLifts 必须为对象。",
+            "",
+        ),
+        (
             lambda payload: payload.__setitem__("mainLifts", {"squat": 180}),
             "mainLifts.squat 必须为对象。",
             "has no attribute 'get'",
@@ -164,9 +179,24 @@ def test_normalize_custom_strength_definition_raises_stable_value_error_for_inva
             "has no attribute 'get'",
         ),
         (
+            lambda payload: payload["weeks"][0].__setitem__("days", {}),
+            "第 1 周的 days 必须为列表。",
+            "",
+        ),
+        (
             lambda payload: payload["weeks"][0].__setitem__("days", [1]),
             "第 1 周的 days 每一项都必须为对象。",
             "has no attribute 'get'",
+        ),
+        (
+            lambda payload: payload["weeks"][0]["days"][0]["exercises"][0].__setitem__("progression", []),
+            "progression 必须为对象。",
+            "",
+        ),
+        (
+            lambda payload: payload["weeks"][0]["days"][0].__setitem__("exercises", [123]),
+            "exercises 的每一项都必须为对象。",
+            "",
         ),
     ],
 )
@@ -182,4 +212,5 @@ def test_normalize_custom_strength_definition_rejects_invalid_structural_input_w
         normalize_custom_strength_definition(payload)
 
     assert str(exc_info.value) == expected_message
-    assert raw_error_fragment not in str(exc_info.value)
+    if raw_error_fragment:
+        assert raw_error_fragment not in str(exc_info.value)
