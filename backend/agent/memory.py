@@ -128,10 +128,12 @@ class MemoryRetriever:
                 if any(token in item.content.lower() or token in item.kind.lower() for token in tokens)
             ]
 
+        # 排序二级键用不可变的 created_at 取代会被每次检索改写的 last_used_at，
+        # 让记忆段在多次检索间逐字节稳定，利于前缀缓存命中。
         items.sort(
             key=lambda item: (
                 0 if item.kind == "safety" else 1,
-                -(item.last_used_at.timestamp() if item.last_used_at else 0),
+                -(item.created_at.timestamp() if item.created_at else 0),
                 -item.id,
             )
         )

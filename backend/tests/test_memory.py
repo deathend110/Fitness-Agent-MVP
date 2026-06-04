@@ -72,3 +72,25 @@ async def test_memory_retriever_prioritizes_safety_then_keyword_and_updates_last
 
     assert [item.kind for item in results[:2]] == ["safety", "preference"]
     assert all(item.last_used_at is not None for item in results)
+
+
+@pytest.mark.asyncio
+async def test_retrieve_ordering_is_stable_across_calls(
+    db_session: AsyncSession,
+) -> None:
+    # 连续两次检索的顺序必须逐项一致，锁定前缀缓存所依赖的记忆段稳定性。
+    db_session.add_all(
+        [
+            MemoryItem(kind="preference", content="用户偏好晚间训练。", confidence=0.9, created_at=utc_now()),
+            MemoryItem(kind="safety", content="用户深蹲到底部左膝疼痛。", confidence=0.95, created_at=utc_now()),
+            MemoryItem(kind="nutrition", content="用户不吃乳制品。", confidence=0.9, created_at=utc_now()),
+            MemoryItem(kind="goal", content="用户目标是增肌。", confidence=0.9, created_at=utc_now()),
+        ]
+    )
+    await db_session.commit()
+
+    first = await MemoryRetriever().retrieve(db_session)
+    second = await MemoryRetriever().retrieve(db_session)
+
+    assert [item.id for item in first] == [item.id for item in second]
+

@@ -202,7 +202,7 @@ uv run alembic -c backend\alembic.ini upgrade head
 - SSE 事件格式为 `event: delta / suggestion / proposal / tool_status / done / error`，`data` 始终是 JSON
 - `POST /api/chat/reply` 接收 `{sessionId?, messages, model?}` 或 Phase 3 新契约 `{sessionId?, userInput, model?}`，用于前端流式失败后的非流式回退
 - `reply / stream / background` 三条聊天入口现在都会先把新旧请求体归一成统一内部结构，再决定是否走 Agent 上下文编排
-- 新契约会调用 `backend.agent.chat_session.build_agent_request()`，按稳定 system prompt、当前用户状态、安全记忆、相关记忆、会话摘要、最近消息和当前输入构建 DeepSeek messages
+- 新契约会调用 `backend.agent.chat_session.build_agent_request()`，按稳定 system prompt、当前用户状态（仅 profile/weekly_plan）、安全记忆、相关记忆、会话摘要、今日/近期日志、最近消息和当前输入构建 DeepSeek messages；易变的 daily_logs 单独成段后移到稳定块之后，让相对稳定内容留在前缀以提升 DeepSeek 前缀缓存命中
 - DeepSeek Tool Calls 由 `run_tool_calling_chat()` 执行；每轮最多 4 次工具调用，工具参数非法或循环超限会返回可解释错误并记录 `ToolCallLog`
 - 流式和非流式请求都只在完整成功后一起写入本轮 user + assistant，错误时不写半截 assistant
 - `suggestion` 为可空 JSON，用于后续保存 AI 结构化建议

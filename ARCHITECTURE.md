@@ -325,7 +325,8 @@ docs/
 
 - `backend/agent/context_manager.py`
   - 定义 `PromptAssembler` 与 `TokenBudgetConfig`
-  - 按稳定 system prompt、当前用户状态、安全记忆、相关记忆、知识、会话摘要、最近消息、当前输入的顺序组装上下文
+  - 按稳定 system prompt、当前用户状态（仅 profile/weekly_plan）、安全记忆、相关记忆、知识、上传文件摘要、会话摘要、今日/近期日志、最近消息、当前输入的顺序组装上下文
+  - 易变的 `daily_logs` 已从 `current_state` 拆出，单独成 `daily_state` 段并后移到稳定块之后、最近消息之前；这样 profile/weekly_plan 等相对稳定内容能留在前缀，避免每天记日志就让整段 DeepSeek 前缀缓存失效
   - 使用保守 token 估算和回复预留预算，超预算时优先裁剪低优先级历史，并输出 debug metadata
   - `SummaryCompressor` 负责长对话摘要压缩，`StateReinjector` 负责压缩后回注当前 profile、weeklyPlan、today log、pending proposal 与工具 schema 版本
 

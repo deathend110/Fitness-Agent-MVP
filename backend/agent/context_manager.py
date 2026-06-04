@@ -305,7 +305,7 @@ class PromptAssembler:
             )
         ]
 
-        state_content = self._format_current_state(profile, weekly_plan, daily_logs)
+        state_content = self._format_current_state(profile, weekly_plan)
         if state_content:
             items.append(
                 _ContextItem(
@@ -361,6 +361,17 @@ class PromptAssembler:
                         priority=50,
                     )
                 )
+        # daily_logs 按日变化，排在所有相对稳定块之后、每轮易变的近期消息之前，避免每天失效整段前缀缓存。
+        daily_state_content = self._format_daily_state(daily_logs)
+        if daily_state_content:
+            items.append(
+                _ContextItem(
+                    "daily_state",
+                    {"role": "system", "content": daily_state_content},
+                    required=True,
+                    priority=60,
+                )
+            )
         for message in recent_messages[-12:]:
             role = str(message.get("role", "")).strip()
             content = str(message.get("content", "")).strip()
@@ -426,18 +437,22 @@ class PromptAssembler:
         self,
         profile: dict[str, Any] | None,
         weekly_plan: dict[str, Any] | None,
-        daily_logs: dict[str, Any] | None,
     ) -> str:
+        # 只保留变化不频繁的档案与周计划，让这段留在稳定前缀里，利于命中前缀缓存。
         sections: list[str] = []
         if profile:
             sections.append(f"档案: {_compact_json(profile)}")
         if weekly_plan:
             sections.append(f"本周计划: {_compact_json(weekly_plan)}")
-        if daily_logs:
-            sections.append(f"今日日志/最近日志: {_compact_json(daily_logs)}")
         if not sections:
             return ""
         return "## 当前用户状态\n" + "\n".join(sections)
+
+    def _format_daily_state(self, daily_logs: dict[str, Any] | None) -> str:
+        # daily_logs 按日期分键、每天都会变；单独成段并排到稳定前缀之后，避免每天失效整段缓存。
+        if not daily_logs:
+            return ""
+        return "## 今日/近期日志\n" + _compact_json(daily_logs)
 
     def _format_memory(self, title: str, memories: list[dict[str, Any]]) -> str:
         lines = [

@@ -1480,6 +1480,7 @@ async def _load_recent_daily_logs(session: AsyncSession, limit: int = 7) -> dict
 
 
 async def _load_memories(session: AsyncSession, limit: int = 12) -> list[dict[str, Any]]:
+    # Prompt 装配属于读取而非"使用"，排序也已不依赖 last_used_at，关闭写回以省去每轮一次 DB flush。
     return [
         {
             "id": item.id,
@@ -1487,7 +1488,7 @@ async def _load_memories(session: AsyncSession, limit: int = 12) -> list[dict[st
             "content": item.content,
             "confidence": item.confidence,
         }
-        for item in await MemoryRetriever().retrieve(session, limit=limit)
+        for item in await MemoryRetriever().retrieve(session, limit=limit, update_last_used=False)
     ]
 
 

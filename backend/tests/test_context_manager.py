@@ -44,10 +44,15 @@ def test_dynamic_state_is_after_stable_prefix_and_before_recent_history() -> Non
     assert context.messages[0]["role"] == "system"
     assert contents[1].startswith("## 当前用户状态")
     assert "力量增长" in contents[1]
+    # daily_logs 已移出稳定前缀，不应再出现在 current_state 段。
+    assert "深蹲速度变慢" not in contents[1]
     assert contents[2].startswith("## 安全限制")
     assert "左膝疼痛" in contents[2]
     assert contents[3].startswith("## 相关记忆")
-    assert "上次建议先降容量" in contents[4]
+    # daily_state 段排在相对稳定块之后，承载按日变化的 daily_logs。
+    assert contents[4].startswith("## 今日/近期日志")
+    assert "深蹲速度变慢" in contents[4]
+    assert "上次建议先降容量" in contents[5]
     assert context.messages[-1] == {
         "role": "user",
         "content": "请根据今天状态调整明天训练",
@@ -57,6 +62,9 @@ def test_dynamic_state_is_after_stable_prefix_and_before_recent_history() -> Non
         "current_state",
         "safety_memory",
     ]
+    # daily_state 必须在每轮易变的近期消息之前，保住前缀缓存。
+    sections = context.debug["selected_sections"]
+    assert sections.index("daily_state") < sections.index("recent_message")
 
 
 def test_token_budget_reserves_reply_space_and_trims_low_priority_history() -> None:
