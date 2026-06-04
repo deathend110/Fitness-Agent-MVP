@@ -68,16 +68,19 @@ function App() {
   const syncedDailyLogRef = useRef(null)
 
   function handleWeeklyPlanChange(nextWeeklyPlanOrUpdater) {
-    const nextWeeklyPlan = normalizeWeeklyPlan(
-      typeof nextWeeklyPlanOrUpdater === 'function'
-        ? nextWeeklyPlanOrUpdater(weeklyPlan)
-        : nextWeeklyPlanOrUpdater,
-    )
+    setWeeklyPlan((currentWeeklyPlan) => {
+      const nextWeeklyPlan = normalizeWeeklyPlan(
+        typeof nextWeeklyPlanOrUpdater === 'function'
+          ? nextWeeklyPlanOrUpdater(currentWeeklyPlan)
+          : nextWeeklyPlanOrUpdater,
+      )
 
-    setWeeklyPlan(nextWeeklyPlan)
-    if (planSource.activeSource === 'manual') {
-      setEffectiveWeeklyPlan(nextWeeklyPlan)
-    }
+      if (planSource.activeSource === 'manual') {
+        setEffectiveWeeklyPlan(nextWeeklyPlan)
+      }
+
+      return nextWeeklyPlan
+    })
   }
 
   useEffect(() => {

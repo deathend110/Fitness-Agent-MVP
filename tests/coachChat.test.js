@@ -64,8 +64,10 @@ test('App 源码会在 manual 来源下同步 weeklyPlan 与 effectiveWeeklyPlan
   const source = readFileSync('src/App.jsx', 'utf8')
 
   assert.match(source, /function handleWeeklyPlanChange\(nextWeeklyPlanOrUpdater\)/)
+  assert.match(source, /setWeeklyPlan\(\(currentWeeklyPlan\) => \{/)
   assert.match(source, /const nextWeeklyPlan = normalizeWeeklyPlan\(/)
-  assert.match(source, /setWeeklyPlan\(nextWeeklyPlan\)/)
+  assert.match(source, /nextWeeklyPlanOrUpdater === 'function'/)
+  assert.match(source, /nextWeeklyPlanOrUpdater\(currentWeeklyPlan\)/)
   assert.match(source, /if \(planSource\.activeSource === 'manual'\) \{/)
   assert.match(source, /setEffectiveWeeklyPlan\(nextWeeklyPlan\)/)
 })
