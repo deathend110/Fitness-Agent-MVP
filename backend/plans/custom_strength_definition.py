@@ -58,6 +58,7 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
         normalized_definition = CustomStrengthDefinitionSchema.model_validate(definition).model_dump()
     except ValidationError as exc:
         raise ValueError(_format_schema_validation_error(exc)) from None
+    _prune_category_specific_exercise_fields(normalized_definition)
     return normalized_definition
 
 
@@ -145,6 +146,7 @@ def _validate_custom_strength_exercise(
     if category not in VALID_CATEGORIES:
         raise ValueError("动作 category 非法。")
     exercise["prescription"] = _validate_prescription(exercise.get("prescription"))
+    _normalize_exercise_category_fields(exercise, category)
 
     progression = exercise.get("progression")
     if not isinstance(progression, dict):
@@ -176,13 +178,58 @@ def _validate_custom_strength_exercise(
     exercise["progression"] = {"mode": "static"}
 
 
+def _normalize_exercise_category_fields(exercise: dict[str, Any], category: str) -> None:
+    raw_load_text = exercise.get("loadText")
+    normalized_load_text = raw_load_text if isinstance(raw_load_text, str) else ""
+
+    if category == "main":
+        # 主项负重由 percent_tm 明确表达，referenceLift/loadText 都属于脏冗余字段，直接裁剪。
+        exercise.pop("referenceLift", None)
+        exercise.pop("loadText", None)
+        return
+
+    if category == "variation":
+        reference_lift = exercise.get("referenceLift")
+        if reference_lift is not None:
+            if not isinstance(reference_lift, str) or reference_lift not in VALID_MAIN_LIFTS:
+                raise ValueError("referenceLift 必须引用合法主项。")
+            exercise["referenceLift"] = reference_lift
+        else:
+            exercise.pop("referenceLift", None)
+        exercise["loadText"] = normalized_load_text
+        return
+
+    # accessory 允许保留自由负重描述，但不应该冒充“参考主项”。
+    exercise.pop("referenceLift", None)
+    exercise["loadText"] = normalized_load_text
+
+
+def _prune_category_specific_exercise_fields(definition: dict[str, Any]) -> None:
+    for week in definition.get("weeks", []):
+        for day in week.get("days", []):
+            for exercise in day.get("exercises", []):
+                category = exercise.get("category")
+                if category == "main":
+                    exercise.pop("referenceLift", None)
+                    exercise.pop("loadText", None)
+                elif category == "variation":
+                    if exercise.get("referenceLift") is None:
+                        exercise.pop("referenceLift", None)
+                elif category == "accessory":
+                    exercise.pop("referenceLift", None)
+
+
 def _format_schema_validation_error(exc: ValidationError) -> str:
     first_error = exc.errors()[0] if exc.errors() else None
     if not first_error:
         return "自定义力量计划定义校验失败。"
 
     location = ".".join(str(part) for part in first_error.get("loc", ()))
-    message = first_error.get("msg", "字段校验失败。")
+    error_type = first_error.get("type")
+    if error_type == "missing":
+        message = "必填字段缺失。"
+    else:
+        message = "字段校验失败。"
     if location:
         return f"{location}: {message}"
     return f"自定义力量计划定义校验失败：{message}"

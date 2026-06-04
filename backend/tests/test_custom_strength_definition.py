@@ -242,6 +242,69 @@ def test_normalize_custom_strength_definition_rejects_missing_lift_key_with_stab
     assert "liftKey" in str(exc_info.value)
 
 
+def test_normalize_custom_strength_definition_rejects_invalid_reference_lift_on_variation() -> None:
+    payload = build_valid_definition()
+    exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    exercise["category"] = "variation"
+    exercise["progression"] = {"mode": "static"}
+    exercise["referenceLift"] = "pullup"
+
+    with pytest.raises(ValueError) as exc_info:
+        normalize_custom_strength_definition(payload)
+
+    assert str(exc_info.value) == "referenceLift 必须引用合法主项。"
+
+
+def test_normalize_custom_strength_definition_cleans_category_specific_reference_lift_and_load_text_fields() -> None:
+    payload = build_valid_definition()
+    main_exercise = payload["weeks"][0]["days"][0]["exercises"][0]
+    main_exercise["referenceLift"] = "squat"
+    main_exercise["loadText"] = "85%"
+
+    payload["weeks"][0]["days"].append(
+        {
+            "dayIndex": 2,
+            "label": "周二",
+            "type": "upper_hypertrophy",
+            "exercises": [
+                {
+                    "id": "w1d2-bench-variation",
+                    "name": "Paused Bench",
+                    "category": "variation",
+                    "progression": {"mode": "static"},
+                    "prescription": {"sets": 4, "reps": 6},
+                    "referenceLift": "bench",
+                    "loadText": "RPE 8",
+                    "notes": "",
+                },
+                {
+                    "id": "w1d2-row",
+                    "name": "Chest Supported Row",
+                    "category": "accessory",
+                    "progression": {"mode": "static"},
+                    "prescription": {"sets": 3, "reps": 12},
+                    "referenceLift": "squat",
+                    "loadText": "3 x 12",
+                    "notes": "",
+                },
+            ],
+        }
+    )
+
+    normalized = normalize_custom_strength_definition(payload)
+
+    normalized_main_exercise = normalized["weeks"][0]["days"][0]["exercises"][0]
+    normalized_variation = normalized["weeks"][0]["days"][1]["exercises"][0]
+    normalized_accessory = normalized["weeks"][0]["days"][1]["exercises"][1]
+
+    assert "referenceLift" not in normalized_main_exercise
+    assert "loadText" not in normalized_main_exercise
+    assert normalized_variation["referenceLift"] == "bench"
+    assert normalized_variation["loadText"] == "RPE 8"
+    assert "referenceLift" not in normalized_accessory
+    assert normalized_accessory["loadText"] == "3 x 12"
+
+
 @pytest.mark.parametrize(
     ("mutator", "expected_fragment"),
     [
@@ -268,6 +331,8 @@ def test_normalize_custom_strength_definition_wraps_schema_validation_error_as_s
     assert isinstance(exc_info.value, ValueError)
     assert expected_fragment in str(exc_info.value)
     assert "ValidationError" not in str(exc_info.value)
+    assert "Input should" not in str(exc_info.value)
+    assert "Field required" not in str(exc_info.value)
 
 
 def test_normalize_custom_strength_definition_normalizes_unordered_weeks_to_stable_order() -> None:
