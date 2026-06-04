@@ -56,8 +56,9 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 ### 主页面职责
 
 - [src/tabs/ProfileTab.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/tabs/ProfileTab.jsx)
+  - 负责“我的档案”页的结构化摘要卡、分组表单和折叠式数据管理区
   - 编辑基础档案、训练目标、目标体重和三大项 1RM
-  - 集成数据导入导出面板
+  - 通过页面层局部 UI 状态控制数据导入导出面板的展开与收起
 
 - [src/tabs/PlanTab.jsx](/g:/VSCODE-G/Fitness Agent MVP/src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
@@ -84,6 +85,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - 本地迁移完成标记
 - 当前活动会话 id
 - 后台任务恢复锚点
+- 我的档案页“数据管理”折叠状态这类纯展示 UI 状态
 
 这些数据的角色不同：
 

@@ -93,20 +93,20 @@ function DataTransferPanel({
   const backendButtonDisabled = !isBackendReady || isMigrating || !onImportToBackend
 
   return (
-    <article className="rounded-xl border border-fitloop-line bg-fitloop-panel p-4 shadow-xl shadow-black/20">
+    <article className="rounded-[1.5rem] border border-fitloop-line bg-fitloop-panel-muted p-5 shadow-sm shadow-black/20">
       {migrationPrompt?.visible ? (
-        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="mb-5 rounded-[1.25rem] border border-amber-300/70 bg-amber-50 px-4 py-4 text-sm text-amber-700">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="max-w-2xl space-y-1">
-              <p className="font-semibold">检测到浏览器 localStorage 里仍有旧数据</p>
-              <p className="leading-6 text-amber-50/90">
+              <p className="font-semibold text-amber-800">检测到浏览器 localStorage 里仍有旧数据</p>
+              <p className="leading-6 text-amber-700/90">
                 当前后端还是空库，可以一键导入 `profile / weeklyPlan / dailyLog`。`chatHistory`
                 本阶段仍只保留在本地，不会写入数据库。
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
-                className="rounded-md border border-amber-300/50 bg-amber-400/20 px-3 py-2 text-sm font-medium text-amber-50 transition hover:bg-amber-400/30 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-amber-300 bg-amber-500 px-3.5 py-2 text-sm font-medium text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={backendButtonDisabled}
                 onClick={handleBackendImport}
                 type="button"
@@ -114,7 +114,7 @@ function DataTransferPanel({
                 {isMigrating ? '导入中...' : '一键导入到后端'}
               </button>
               <button
-                className="rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-fitloop-orange/30 hover:text-fitloop-orange"
+                className="rounded-xl border border-fitloop-line bg-fitloop-panel px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:border-fitloop-orange/30 hover:text-fitloop-orange"
                 onClick={onDismissMigrationPrompt}
                 type="button"
               >
@@ -125,7 +125,7 @@ function DataTransferPanel({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-slate-100">数据备份</p>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
@@ -136,14 +136,14 @@ function DataTransferPanel({
 
         <div className="flex flex-wrap gap-2">
           <button
-            className="rounded-md border border-fitloop-line bg-fitloop-panel px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-fitloop-orange/30 hover:bg-fitloop-orange/8 hover:text-fitloop-orange"
+            className="rounded-xl border border-fitloop-line bg-fitloop-panel px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:border-fitloop-orange/30 hover:bg-fitloop-orange/8 hover:text-fitloop-orange"
             onClick={handleExport}
             type="button"
           >
             导出备份
           </button>
           <button
-            className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={backendButtonDisabled}
             onClick={handleBackendImport}
             type="button"
@@ -151,7 +151,7 @@ function DataTransferPanel({
             {isMigrating ? '导入中...' : '导入到后端'}
           </button>
           <button
-            className="rounded-md border border-fitloop-orange bg-fitloop-orange px-3 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110"
+            className="rounded-xl border border-fitloop-orange bg-fitloop-orange px-3.5 py-2 text-sm font-medium text-white shadow-sm shadow-black/20 transition hover:brightness-110"
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >
@@ -176,7 +176,7 @@ function DataTransferPanel({
       </p>
 
       {notice.message ? (
-        <p className={`mt-4 rounded-md border px-3 py-2 text-sm leading-6 ${noticeTone}`}>
+        <p className={`mt-4 rounded-xl border px-3 py-2 text-sm leading-6 ${noticeTone}`}>
           {notice.message}
         </p>
       ) : null}
