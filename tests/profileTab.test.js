@@ -125,3 +125,18 @@ test('PlanTab 在尚未创建活动周期时会回退显示手动周计划', () 
     /planSource\.activeSource === 'cycle' && hasActiveCycle && effectiveWeeklyPlan/,
   )
 })
+
+test('PlanTab 创建周期计划后会保留完整 active cycle detail，避免把 response.cycle 内层对象误当成页面状态', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /function buildNextActiveCyclePayload\(response\) \{/)
+  assert.match(source, /if \(response\?\.activeCyclePlan\) \{/)
+  assert.match(source, /if \(response\?\.currentWeek \|\| response\?\.effectivePlan\) \{/)
+  assert.match(source, /return response \?\? null/)
+  assert.doesNotMatch(source, /return response\?\.activeCyclePlan \?\? response\?\.cycle \?\? response \?\? null/)
+  assert.match(source, /const nextActiveCyclePlan = buildNextActiveCyclePayload\(response\)/)
+  assert.match(source, /const nextEffectivePlan = readNextEffectivePlan\(response\)/)
+  assert.match(source, /onPlanSourceChange\?\.\(\{ activeSource: 'cycle' \}\)/)
+  assert.match(source, /onActiveCyclePlanChange\?\.\(nextActiveCyclePlan\)/)
+  assert.match(source, /if \(nextEffectivePlan\) \{\s*onEffectiveWeeklyPlanChange\?\.\(nextEffectivePlan\)/)
+})

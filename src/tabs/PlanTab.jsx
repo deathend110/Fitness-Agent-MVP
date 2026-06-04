@@ -246,7 +246,15 @@ function PlanTab({
   }
 
   function buildNextActiveCyclePayload(response) {
-    return response?.activeCyclePlan ?? response?.cycle ?? response ?? null
+    if (response?.activeCyclePlan) {
+      return response.activeCyclePlan
+    }
+
+    if (response?.currentWeek || response?.effectivePlan) {
+      return response ?? null
+    }
+
+    return response ?? null
   }
 
   function readNextEffectivePlan(response) {

@@ -250,6 +250,44 @@ async def test_stop_cycle_switches_back_to_manual_source(api_client: tuple[Async
 
 
 @pytest.mark.asyncio
+async def test_manual_weekly_plan_remains_unchanged_after_cycle_create_override_and_stop(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    manual_before = await client.get("/api/weekly-plan")
+    create_response = await client.post("/api/cycles", json=_build_create_cycle_payload())
+    cycle_id = create_response.json()["cycle"]["id"]
+
+    override_response = await client.put(
+        f"/api/cycles/{cycle_id}/weeks/1/override",
+        json={
+            "Tuesday": {
+                "type": "cycle_override_day",
+                "exercises": [
+                    {
+                        "name": "Cycle Pause Squat",
+                        "ref1RM": "squat",
+                        "pct": 0.66,
+                        "sets": 4,
+                        "reps": 4,
+                    }
+                ],
+            }
+        },
+    )
+    stop_response = await client.post(f"/api/cycles/{cycle_id}/stop")
+    manual_after = await client.get("/api/weekly-plan")
+
+    assert override_response.status_code == 200
+    assert stop_response.status_code == 200
+    assert manual_before.json() == manual_after.json()
+    assert manual_after.json()["Monday"]["exercises"][0]["name"] == "Manual Squat"
+    assert override_response.json()["effectivePlan"]["Tuesday"]["exercises"][0]["name"] == "Cycle Pause Squat"
+
+
+@pytest.mark.asyncio
 async def test_metrics_reads_cycle_plan_when_cycle_source_is_active(api_client: tuple[AsyncClient, Any]) -> None:
     client, session_factory = api_client
     await _seed_manual_state(session_factory)
