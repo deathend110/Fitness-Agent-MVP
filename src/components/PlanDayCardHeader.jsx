@@ -76,9 +76,11 @@ function PlanDayCardHeader({ dayLabel, displayModel, exerciseCount, isTrainingDa
           </span>
         ) : null}
 
-        <p className={`text-slate-400 ${isCompactRestDay ? 'text-[11px] leading-4' : 'text-xs leading-5'}`}>
-          {isTrainingDay ? preview.title : `${preview.title} · ${preview.meta}`}
-        </p>
+        {!isTrainingDay ? (
+          <p className={`text-slate-400 ${isCompactRestDay ? 'text-[11px] leading-4' : 'text-xs leading-5'}`}>
+            {`${preview.title} · ${preview.meta}`}
+          </p>
+        ) : null}
       </div>
     </div>
   )
