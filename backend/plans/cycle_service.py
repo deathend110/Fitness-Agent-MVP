@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import ActiveCyclePlan, CycleWeekSnapshot, PlanSourceState
 from backend.db.seed import DEFAULT_PLAN_SOURCE_STATE_ID
-from backend.plans.custom_strength_definition import normalize_custom_strength_definition
+from backend.plans.custom_strength_definition import VALID_MAIN_LIFTS, normalize_custom_strength_definition
 from backend.plans.custom_strength_engine import build_custom_strength_cycle_weeks
 from backend.plans.cycle_engine import build_cycle_week_plan, merge_cycle_week_override
 from backend.plans.preset_library import list_cycle_presets
@@ -309,20 +309,34 @@ def _validate_custom_strength_request_consistency(
 ) -> None:
     if payload.startDate != definition["startDate"]:
         raise ValueError("自定义力量周期的 startDate 与 config.startDate 不一致。")
-    if _normalize_custom_strength_base_lifts(payload.baseLifts) != definition["mainLifts"]:
+    payload_base_lifts = _parse_custom_strength_base_lifts(payload.baseLifts)
+    if payload_base_lifts != definition["mainLifts"]:
         raise ValueError("自定义力量周期的 baseLifts 与 config.mainLifts 不一致。")
 
 
-def _normalize_custom_strength_base_lifts(base_lifts: dict[str, Any]) -> dict[str, dict[str, float]]:
+def _parse_custom_strength_base_lifts(base_lifts: dict[str, Any]) -> dict[str, dict[str, float]]:
+    if not isinstance(base_lifts, dict):
+        raise ValueError("自定义力量周期的 baseLifts 必须为对象，且与 config.mainLifts 使用同一结构定义。")
+
     normalized: dict[str, dict[str, float]] = {}
     for lift_key, lift_payload in base_lifts.items():
-        if lift_key not in {"squat", "bench", "deadlift", "ohp"}:
-            continue
+        if lift_key not in VALID_MAIN_LIFTS:
+            raise ValueError(
+                f"自定义力量周期的 baseLifts.{lift_key} / baseLifts 必须与 config.mainLifts 使用同一结构定义。"
+            )
         if not isinstance(lift_payload, dict):
-            continue
-        tm_value = lift_payload.get("tm")
+            raise ValueError(
+                f"自定义力量周期的 baseLifts.{lift_key} / baseLifts 必须与 config.mainLifts 使用同一结构定义。"
+            )
+        if set(lift_payload.keys()) != {"tm"}:
+            raise ValueError(
+                f"自定义力量周期的 baseLifts.{lift_key} / baseLifts 必须与 config.mainLifts 使用同一结构定义。"
+            )
+        tm_value = lift_payload["tm"]
         if isinstance(tm_value, bool) or not isinstance(tm_value, int | float):
-            continue
+            raise ValueError(
+                f"自定义力量周期的 baseLifts.{lift_key} / baseLifts 必须与 config.mainLifts 使用同一结构定义。"
+            )
         normalized[lift_key] = {"tm": float(tm_value)}
     return normalized
 

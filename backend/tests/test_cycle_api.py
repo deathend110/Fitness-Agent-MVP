@@ -180,6 +180,15 @@ def _build_custom_strength_cycle_payload_with_conflict(
     return payload
 
 
+def _build_custom_strength_cycle_payload_with_invalid_base_lifts(
+    *,
+    raw_base_lifts: dict[str, Any],
+) -> dict[str, Any]:
+    payload = _build_custom_strength_cycle_payload()
+    payload["baseLifts"] = raw_base_lifts
+    return payload
+
+
 @pytest.mark.asyncio
 async def test_plan_source_defaults_to_manual_and_can_switch_to_cycle(api_client: tuple[AsyncClient, Any]) -> None:
     client, session_factory = api_client
@@ -378,6 +387,49 @@ async def test_create_cycle_rejects_custom_strength_when_top_level_base_lifts_co
 
     assert response.status_code == 400
     assert response.json()["detail"] == "自定义力量周期的 baseLifts 与 config.mainLifts 不一致。"
+
+
+@pytest.mark.asyncio
+async def test_create_cycle_rejects_custom_strength_when_top_level_base_lifts_contains_unknown_lift_key(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    response = await client.post(
+        "/api/cycles",
+        json=_build_custom_strength_cycle_payload_with_invalid_base_lifts(
+            raw_base_lifts={
+                "squat": {"tm": 180},
+                "bench": {"tm": 120},
+                "curl": {"tm": 20},
+            }
+        ),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "自定义力量周期的 baseLifts.curl / baseLifts 必须与 config.mainLifts 使用同一结构定义。"
+
+
+@pytest.mark.asyncio
+async def test_create_cycle_rejects_custom_strength_when_top_level_base_lifts_uses_invalid_payload_shape(
+    api_client: tuple[AsyncClient, Any],
+) -> None:
+    client, session_factory = api_client
+    await _seed_manual_state(session_factory)
+
+    response = await client.post(
+        "/api/cycles",
+        json=_build_custom_strength_cycle_payload_with_invalid_base_lifts(
+            raw_base_lifts={
+                "squat": 180,
+                "bench": {"tm": 120},
+            }
+        ),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "自定义力量周期的 baseLifts.squat / baseLifts 必须与 config.mainLifts 使用同一结构定义。"
 
 
 @pytest.mark.asyncio
