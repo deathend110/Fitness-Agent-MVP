@@ -24,7 +24,7 @@ def normalize_custom_strength_definition(payload: dict[str, Any]) -> dict[str, A
     normalized_main_lifts: dict[str, dict[str, float]] = {}
     for lift_key, lift_value in main_lifts.items():
         if lift_key not in VALID_MAIN_LIFTS:
-            continue
+            raise ValueError(f"mainLifts 包含非法主项 key：{lift_key}。")
         tm_value = float(lift_value.get("tm"))
         if tm_value <= 0:
             raise ValueError(f"{lift_key} 的 TM 必须大于 0。")

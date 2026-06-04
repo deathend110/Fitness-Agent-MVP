@@ -68,6 +68,14 @@ def test_normalize_custom_strength_definition_rejects_missing_tm_for_referenced_
         normalize_custom_strength_definition(payload)
 
 
+def test_normalize_custom_strength_definition_rejects_invalid_main_lift_key() -> None:
+    payload = build_valid_definition()
+    payload["mainLifts"]["pullup"] = {"tm": 60}
+
+    with pytest.raises(ValueError, match="pullup"):
+        normalize_custom_strength_definition(payload)
+
+
 def test_normalize_custom_strength_definition_rejects_percent_tm_on_variation() -> None:
     payload = build_valid_definition()
     payload["weeks"][0]["days"][0]["exercises"][0]["category"] = "variation"
