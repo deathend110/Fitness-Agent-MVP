@@ -141,10 +141,6 @@ MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.json
 npm test
 ```
 
-说明：
-
-- `prompt` 相关指标测试会显式传入 `referenceDate`，并基于 demo fixture 推导期望值，避免断言依赖运行当天日期
-
 前端构建：
 
 ```bash

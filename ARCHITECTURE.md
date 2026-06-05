@@ -128,11 +128,6 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - `chatHistory` 仍保留为前端兼容缓存，但真实会话与消息已由后端 `chat_session / chat_message` 承担
 - 活动会话 id、后台任务信息属于纯前端恢复状态，不写入后端业务表
 
-### 前端测试稳定性
-
-- `tests/prompt.test.js` 与 `tests/promptMetricsSection.test.js` 对 prompt 指标段使用显式 `referenceDate`
-- 这两组测试会从 demo fixture 和公开指标汇总函数推导期望值，避免因运行当天日期不同导致断言漂移
-
 ## 后端结构
 
 ### 应用入口
