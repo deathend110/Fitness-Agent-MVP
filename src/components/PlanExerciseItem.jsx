@@ -18,10 +18,13 @@ function PlanExerciseItem({
   oneRmOptions,
   profile,
   rpeError,
+  dragEnabled = false,
+  onMoveExercise,
 }) {
   const cardModel = buildPlanExerciseCardModel(exercise, profile)
   const menuActions = getPlanExerciseMenuActions()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [dropActive, setDropActive] = useState(false)
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -62,9 +65,54 @@ function PlanExerciseItem({
     }
   }
 
+  function isNoDragTarget(target) {
+    return target instanceof HTMLElement && Boolean(target.closest('[data-no-drag="true"]'))
+  }
+
+  function handleDragStart(event) {
+    if (!dragEnabled || isNoDragTarget(event.target)) {
+      event.preventDefault()
+      return
+    }
+
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', exercise.id)
+  }
+
+  function handleDrop(event) {
+    if (!dragEnabled) {
+      return
+    }
+
+    event.preventDefault()
+    setDropActive(false)
+    const fromExerciseId = event.dataTransfer.getData('text/plain')
+
+    if (!fromExerciseId || fromExerciseId === exercise.id) {
+      return
+    }
+
+    onMoveExercise?.(fromExerciseId, exercise.id)
+  }
+
   return (
     <li
-      className={`rounded-xl border px-3 py-3 shadow-sm shadow-black/20 ${cardModel.cardClassName}`}
+      className={`rounded-xl border px-3 py-3 shadow-sm shadow-black/20 ${cardModel.cardClassName} ${
+        dropActive ? 'ring-2 ring-fitloop-orange/70' : ''
+      }`}
+      draggable={dragEnabled}
+      onDragEnd={() => setDropActive(false)}
+      onDragLeave={() => setDropActive(false)}
+      onDragOver={(event) => {
+        if (!dragEnabled) {
+          return
+        }
+
+        event.preventDefault()
+        setDropActive(true)
+      }}
+      onDragStart={handleDragStart}
+      onDrop={handleDrop}
     >
       {isEditing ? (
         <PlanExerciseEditorCard
@@ -98,7 +146,7 @@ function PlanExerciseItem({
               </p>
             </div>
 
-            <div className="relative shrink-0" ref={menuRef}>
+            <div className="relative shrink-0" data-no-drag="true" ref={menuRef}>
               <button
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"

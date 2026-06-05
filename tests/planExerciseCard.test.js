@@ -148,3 +148,14 @@ test('PlanExerciseItem 会渲染固定重量来源说明与三点入口', () => 
   assert.match(source, /\{cardModel\.topMetaLabel \|\| '\\u00A0'\}/)
   assert.match(source, /aria-label="更多操作"/)
 })
+
+test('PlanExerciseItem 会保留菜单入口并为整卡拖拽添加隔离操作区', () => {
+  const source = fs.readFileSync(new URL('../src/components/PlanExerciseItem.jsx', import.meta.url), 'utf8')
+
+  assert.match(source, /draggable=\{dragEnabled\}/)
+  assert.match(source, /onDragStart=/)
+  assert.match(source, /onDragOver=/)
+  assert.match(source, /onDrop=/)
+  assert.match(source, /data-no-drag/)
+  assert.match(source, /aria-label="更多操作"/)
+})
