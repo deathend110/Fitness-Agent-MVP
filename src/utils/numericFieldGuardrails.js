@@ -1,7 +1,16 @@
+function freezeGuardrails(guardrails) {
+  const frozenEntries = Object.entries(guardrails).map(([fieldKey, rule]) => [
+    fieldKey,
+    Object.freeze({ ...rule }),
+  ])
+
+  return Object.freeze(Object.fromEntries(frozenEntries))
+}
+
 /**
  * 统一维护三大页面共享的数值边界，避免输入限制、错误提示和保存校验各自漂移。
  */
-export const NUMERIC_FIELD_GUARDRAILS = {
+export const NUMERIC_FIELD_GUARDRAILS = freezeGuardrails({
   'profile.basic.age': { label: '年龄', min: 12, max: 100, step: 1 },
   'profile.basic.height': { label: '身高', min: 120, max: 250, step: 0.1, unit: 'cm' },
   'profile.basic.weight': { label: '当前体重', min: 25, max: 300, step: 0.1, unit: 'kg' },
@@ -34,7 +43,7 @@ export const NUMERIC_FIELD_GUARDRAILS = {
   'plan.custom.bench.tm': { label: '卧推 TM', min: 5, max: 400, step: 0.1, unit: 'kg' },
   'plan.custom.deadlift.tm': { label: '硬拉 TM', min: 10, max: 500, step: 0.1, unit: 'kg' },
   'plan.custom.ohp.tm': { label: '推举 TM', min: 5, max: 250, step: 0.1, unit: 'kg' },
-}
+})
 
 function parseNumericDraft(value) {
   if (value === null || value === undefined) {
@@ -72,12 +81,73 @@ export function validateNumericFieldValue(fieldKey, value) {
   return null
 }
 
+function isReachableIntermediateValue(guardrail, nextValue) {
+  if (typeof nextValue !== 'string') {
+    return false
+  }
+
+  const normalizedValue = nextValue.trim()
+  if (!normalizedValue) {
+    return false
+  }
+
+  // 小数输入过程中允许保留未完成的小数形式，后续可继续补齐到合法值。
+  if (/^\d+\.$/.test(normalizedValue)) {
+    const integerPart = Number.parseInt(normalizedValue.slice(0, -1), 10)
+    return Number.isFinite(integerPart) && integerPart <= guardrail.max
+  }
+
+  if (!/^\d+(\.\d+)?$/.test(normalizedValue)) {
+    return false
+  }
+
+  const parsedValue = Number(normalizedValue)
+  if (!Number.isFinite(parsedValue) || parsedValue > guardrail.max) {
+    return false
+  }
+
+  const hasDecimalPoint = normalizedValue.includes('.')
+  if (hasDecimalPoint) {
+    return parsedValue < guardrail.min
+  }
+
+  if (parsedValue >= guardrail.min) {
+    return false
+  }
+
+  if (parsedValue === 0 && guardrail.min < 1) {
+    return true
+  }
+
+  const digitBudget = `${Math.trunc(guardrail.max)}`.length - normalizedValue.length
+  if (digitBudget < 0) {
+    return false
+  }
+
+  return parsedValue * 10 ** digitBudget >= guardrail.min
+}
+
 /**
  * 输入阶段越界时维持上一次稳定草稿，避免 UI 把非法值继续扩散到后续状态。
  */
 export function clampNumericInputDraft({ fieldKey, previousValue, nextValue }) {
+  const guardrail = getNumericFieldGuardrail(fieldKey)
+  if (!guardrail) {
+    return {
+      nextValue,
+      error: null,
+    }
+  }
+
   const error = validateNumericFieldValue(fieldKey, nextValue)
   if (error) {
+    if (isReachableIntermediateValue(guardrail, nextValue)) {
+      return {
+        nextValue,
+        error: null,
+      }
+    }
+
     return {
       nextValue: previousValue,
       error,

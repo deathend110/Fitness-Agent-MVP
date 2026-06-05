@@ -35,6 +35,20 @@ test('validateNumericFieldValue 对越界值返回稳定错误文案', () => {
   )
 })
 
+test('共享规则表和单条规则对象是只读的，调用方无法篡改共享配置', () => {
+  const originalMin = getNumericFieldGuardrail('plan.exercise.kg').min
+
+  assert.throws(() => {
+    NUMERIC_FIELD_GUARDRAILS['plan.exercise.kg'] = { label: '坏规则', min: -1, max: -1 }
+  }, TypeError)
+
+  assert.throws(() => {
+    getNumericFieldGuardrail('plan.exercise.kg').min = 999999
+  }, TypeError)
+
+  assert.equal(getNumericFieldGuardrail('plan.exercise.kg').min, originalMin)
+})
+
 test('clampNumericInputDraft 会保留空串并拒绝越界输入进入下一草稿值', () => {
   assert.deepEqual(
     clampNumericInputDraft({
@@ -54,6 +68,49 @@ test('clampNumericInputDraft 会保留空串并拒绝越界输入进入下一草
     { nextValue: '120', error: null },
   )
 
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'plan.exercise.kg',
+      previousValue: '100',
+      nextValue: '100000',
+    }),
+    {
+      nextValue: '100',
+      error: '固定重量 必须在 0.5-500kg 之间',
+    },
+  )
+})
+
+test('clampNumericInputDraft 会放行最终可达合法值的中间态输入', () => {
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'profile.oneRM.squat',
+      previousValue: '',
+      nextValue: '1',
+    }),
+    { nextValue: '1', error: null },
+  )
+
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'plan.exercise.kg',
+      previousValue: '',
+      nextValue: '0',
+    }),
+    { nextValue: '0', error: null },
+  )
+
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'plan.exercise.kg',
+      previousValue: '0',
+      nextValue: '0.',
+    }),
+    { nextValue: '0.', error: null },
+  )
+})
+
+test('clampNumericInputDraft 会继续拦截明显不可能形成合法值的草稿', () => {
   assert.deepEqual(
     clampNumericInputDraft({
       fieldKey: 'plan.exercise.kg',
