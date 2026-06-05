@@ -1,3 +1,5 @@
+import { getNumericFieldGuardrail, validateNumericFieldValue } from './numericFieldGuardrails.js'
+
 const DAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const MAIN_LIFT_KEYS = ['squat', 'bench', 'deadlift', 'ohp']
 
@@ -23,6 +25,14 @@ function normalizeNumber(value) {
   return Number.isFinite(parsedValue) ? parsedValue : null
 }
 
+function normalizeGuardrailedNumber(fieldKey, value) {
+  if (validateNumericFieldValue(fieldKey, value)) {
+    return null
+  }
+
+  return normalizeNumber(value)
+}
+
 function createEmptyDay(dayIndex) {
   return {
     dayIndex,
@@ -41,7 +51,7 @@ function createEmptyWeek(weekIndex) {
 
 function compactMainLifts(mainLifts = {}) {
   return MAIN_LIFT_KEYS.reduce((result, liftKey) => {
-    const tm = normalizeNumber(mainLifts?.[liftKey]?.tm)
+    const tm = normalizeGuardrailedNumber(`plan.custom.${liftKey}.tm`, mainLifts?.[liftKey]?.tm)
     if (tm === null) {
       return result
     }
@@ -79,7 +89,11 @@ export function createCustomStrengthDraft() {
 
 export function buildCreateCustomStrengthCyclePayload(draft = {}) {
   const mainLifts = compactMainLifts(draft?.mainLifts)
-  const weeks = normalizeWeeks(draft?.weeks)
+  const totalWeeksGuardrail = getNumericFieldGuardrail('plan.custom.totalWeeks')
+  const requestedWeeks = normalizeGuardrailedNumber('plan.custom.totalWeeks', draft?.totalWeeks)
+  const maxWeeks = totalWeeksGuardrail?.max ?? Number.POSITIVE_INFINITY
+  const baseWeeks = normalizeWeeks(draft?.weeks).slice(0, maxWeeks)
+  const weeks = requestedWeeks === null ? baseWeeks : baseWeeks.slice(0, requestedWeeks)
 
   return {
     presetKey: 'custom_strength',

@@ -90,6 +90,42 @@ test('ProfileTab 源码为档案页定义浅色渐变头图和分色摘要卡', 
   assert.match(source, /border-amber-200\/80/)
 })
 
+test('ProfileTab 源码会复用共享 targetWeight 与 1RM 字段配置，而不是继续手写 step 和边界', () => {
+  const source = readFileSync('src/tabs/ProfileTab.jsx', 'utf-8')
+
+  assert.match(source, /targetWeightField/)
+  assert.match(source, /min=\{targetWeightField\.min\}/)
+  assert.match(source, /max=\{targetWeightField\.max\}/)
+  assert.match(source, /step=\{targetWeightField\.step\}/)
+  assert.match(source, /inputMode=\{targetWeightField\.inputMode\}/)
+  assert.match(source, /min=\{field\.min\}/)
+  assert.match(source, /max=\{field\.max\}/)
+  assert.match(source, /step=\{field\.step\}/)
+})
+
+test('ProfileTab 源码会为档案数值输入挂接草稿拦截与字段级错误提示', () => {
+  const source = readFileSync('src/tabs/ProfileTab.jsx', 'utf-8')
+
+  assert.match(source, /clampNumericInputDraft/)
+  assert.match(source, /syncProfileDraft/)
+  assert.match(source, /fieldErrors/)
+  assert.match(source, /aria-invalid=\{Boolean/)
+  assert.match(source, /targetWeightField\.guardrailKey|field\.guardrailKey/)
+})
+
+test('训练计划相关源码会为动作编辑器和周期设置挂接共享数值 guardrail', () => {
+  const exerciseEditorSource = readFileSync('src/components/ExerciseEditor.jsx', 'utf-8')
+  const planSettingsSource = readFileSync('src/components/plan-settings/PlanSettingsPanel.jsx', 'utf-8')
+  const customPlanSource = readFileSync('src/components/plan-settings/CustomStrengthPlanEditor.jsx', 'utf-8')
+  const customLiftSource = readFileSync('src/components/plan-settings/CustomStrengthMainLiftEditor.jsx', 'utf-8')
+
+  assert.match(exerciseEditorSource, /getNumericFieldGuardrail/)
+  assert.match(exerciseEditorSource, /aria-invalid=/)
+  assert.match(planSettingsSource, /getNumericFieldGuardrail/)
+  assert.match(customPlanSource, /getNumericFieldGuardrail/)
+  assert.match(customLiftSource, /getNumericFieldGuardrail/)
+})
+
 test('PlanTab 源码包含手动周期设置流程的关键入口', () => {
   const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
 

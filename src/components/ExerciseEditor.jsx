@@ -1,17 +1,57 @@
-import { useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import {
   exerciseSetTypeOptions,
   exerciseTierOptions,
   exerciseWeightModes,
   getRpeFieldHint,
 } from '../utils/exerciseForm.js'
+import {
+  clampNumericInputDraft,
+  getNumericFieldGuardrail,
+} from '../utils/numericFieldGuardrails.js'
 
 function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null }) {
   const modeName = useId()
-  const rpeHint = getRpeFieldHint(rpeError)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const kgGuardrail = getNumericFieldGuardrail('plan.exercise.kg')
+  const pctGuardrail = getNumericFieldGuardrail('plan.exercise.pct')
+  const setsGuardrail = getNumericFieldGuardrail('plan.exercise.sets')
+  const repsGuardrail = getNumericFieldGuardrail('plan.exercise.reps')
+  const rpeGuardrail = getNumericFieldGuardrail('plan.exercise.rpe')
+  const rpeHint = getRpeFieldHint(fieldErrors['plan.exercise.rpe'] ?? rpeError)
+
+  useEffect(() => {
+    setFieldErrors((current) => {
+      const nextErrors = { ...current }
+      if (value.weightMode !== 'fixed') {
+        delete nextErrors['plan.exercise.kg']
+      }
+      if (value.weightMode !== 'percentage') {
+        delete nextErrors['plan.exercise.pct']
+      }
+      if (value.setType === 'custom') {
+        delete nextErrors['plan.exercise.reps']
+      }
+      return nextErrors
+    })
+  }, [value.setType, value.weightMode])
 
   function updateField(key, nextValue) {
     onChange({ ...value, [key]: nextValue })
+  }
+
+  function updateGuardedField(key, fieldKey, nextValue) {
+    const { nextValue: guardedValue, error } = clampNumericInputDraft({
+      fieldKey,
+      previousValue: value[key],
+      nextValue,
+    })
+
+    onChange({ ...value, [key]: guardedValue })
+    setFieldErrors((current) => ({
+      ...current,
+      [fieldKey]: error,
+    }))
   }
 
   function updateWeightMode(nextMode) {
@@ -114,39 +154,57 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
             <label className="space-y-2">
               <span className="text-sm text-slate-300">百分比</span>
               <input
+                aria-invalid={Boolean(fieldErrors['plan.exercise.pct'])}
                 className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
                 inputMode="decimal"
-                onChange={(event) => updateField('pct', event.target.value)}
-                step="0.01"
+                max={pctGuardrail.max}
+                min={pctGuardrail.min}
+                onChange={(event) => updateGuardedField('pct', 'plan.exercise.pct', event.target.value)}
+                step={pctGuardrail.step}
                 type="number"
                 value={value.pct}
               />
+              <p className="text-xs text-slate-400">
+                {fieldErrors['plan.exercise.pct'] ?? `范围 ${pctGuardrail.min}-${pctGuardrail.max}`}
+              </p>
             </label>
           </>
         ) : (
           <label className="space-y-2">
             <span className="text-sm text-slate-300">固定 kg</span>
             <input
+              aria-invalid={Boolean(fieldErrors['plan.exercise.kg'])}
               className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
               inputMode="decimal"
-              onChange={(event) => updateField('kg', event.target.value)}
-              step="0.5"
+              max={kgGuardrail.max}
+              min={kgGuardrail.min}
+              onChange={(event) => updateGuardedField('kg', 'plan.exercise.kg', event.target.value)}
+              step={kgGuardrail.step}
               type="number"
               value={value.kg}
             />
+            <p className="text-xs text-slate-400">
+              {fieldErrors['plan.exercise.kg'] ?? `范围 ${kgGuardrail.min}-${kgGuardrail.max}kg`}
+            </p>
           </label>
         )}
 
         <label className="space-y-2">
           <span className="text-sm text-slate-300">组数</span>
           <input
+            aria-invalid={Boolean(fieldErrors['plan.exercise.sets'])}
             className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             inputMode="numeric"
-            onChange={(event) => updateField('sets', event.target.value)}
-            step="1"
+            max={setsGuardrail.max}
+            min={setsGuardrail.min}
+            onChange={(event) => updateGuardedField('sets', 'plan.exercise.sets', event.target.value)}
+            step={setsGuardrail.step}
             type="number"
             value={value.sets}
           />
+          <p className="text-xs text-slate-400">
+            {fieldErrors['plan.exercise.sets'] ?? `范围 ${setsGuardrail.min}-${setsGuardrail.max} 组`}
+          </p>
         </label>
 
         <label className="space-y-2">
@@ -178,13 +236,19 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
           <label className="space-y-2">
             <span className="text-sm text-slate-300">次数</span>
             <input
+              aria-invalid={Boolean(fieldErrors['plan.exercise.reps'])}
               className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
               inputMode="numeric"
-              onChange={(event) => updateField('reps', event.target.value)}
-              step="1"
+              max={repsGuardrail.max}
+              min={repsGuardrail.min}
+              onChange={(event) => updateGuardedField('reps', 'plan.exercise.reps', event.target.value)}
+              step={repsGuardrail.step}
               type="number"
               value={value.reps}
             />
+            <p className="text-xs text-slate-400">
+              {fieldErrors['plan.exercise.reps'] ?? `范围 ${repsGuardrail.min}-${repsGuardrail.max} 次`}
+            </p>
           </label>
         )}
 
@@ -197,17 +261,17 @@ function ExerciseEditor({ value, onChange, oneRmOptions = [], rpeError = null })
         <label className="space-y-2">
           <span className="text-sm text-slate-300">RPE</span>
           <input
-            aria-invalid={Boolean(rpeError)}
+            aria-invalid={Boolean(fieldErrors['plan.exercise.rpe'] ?? rpeError)}
             className="w-full rounded-xl border border-fitloop-line bg-fitloop-panel px-3 py-2.5 text-slate-100 outline-none transition focus:border-fitloop-orange"
             inputMode="decimal"
-            max="10"
-            min="0"
-            onChange={(event) => updateField('rpe', event.target.value)}
-            step="0.5"
+            max={rpeGuardrail.max}
+            min={rpeGuardrail.min}
+            onChange={(event) => updateGuardedField('rpe', 'plan.exercise.rpe', event.target.value)}
+            step={rpeGuardrail.step}
             type="number"
             value={value.rpe}
           />
-          <p className={`text-xs ${rpeError ? 'text-rose-300' : 'text-slate-400'}`}>{rpeHint}</p>
+          <p className={`text-xs ${fieldErrors['plan.exercise.rpe'] || rpeError ? 'text-rose-300' : 'text-slate-400'}`}>{rpeHint}</p>
         </label>
       </div>
 

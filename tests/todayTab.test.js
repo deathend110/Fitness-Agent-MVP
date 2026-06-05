@@ -25,3 +25,12 @@ test('TodayTab 会读取 effectiveWeeklyPlan 而不是 manual weeklyPlan', () =>
   assert.match(source, /buildDailyMetricsPanelModel\(profile, effectiveWeeklyPlan, dailyLog\)/)
   assert.doesNotMatch(source, /function TodayTab\(\{ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach \}\)/)
 })
+
+test('TodayTab 源码会为日志数值输入挂接草稿拦截与字段级错误提示', () => {
+  const source = readFileSync('src/tabs/TodayTab.jsx', 'utf8')
+
+  assert.match(source, /clampNumericInputDraft/)
+  assert.match(source, /fieldErrors/)
+  assert.match(source, /aria-invalid=\{Boolean/)
+  assert.match(source, /field\.guardrailKey/)
+})

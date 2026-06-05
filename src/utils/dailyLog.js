@@ -1,4 +1,5 @@
 import { getTodayStr } from './calc.js'
+import { validateNumericFieldValue } from './numericFieldGuardrails.js'
 
 function toFormValue(value) {
   if (value === null || value === undefined) {
@@ -24,6 +25,26 @@ function toNullableNumber(value) {
 }
 
 /**
+ * 今日日志在落库前统一走共享 guardrail，保证手填和导入数据都遵守同一边界。
+ */
+function toGuardedNullableNumber(fieldKey, value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const trimmedValue = `${value}`.trim()
+  if (!trimmedValue) {
+    return null
+  }
+
+  if (validateNumericFieldValue(fieldKey, trimmedValue)) {
+    return null
+  }
+
+  return toNullableNumber(trimmedValue)
+}
+
+/**
  * 将已保存的今日日志转成表单草稿，保证可选字段为空时也能稳定渲染受控输入。
  */
 export function readTodayLogForm(entry = {}) {
@@ -45,13 +66,13 @@ export function readTodayLogForm(entry = {}) {
  */
 export function normalizeTodayLogEntry(form = {}) {
   return {
-    weight: toNullableNumber(form.weight),
-    kcal: toNullableNumber(form.kcal),
-    protein: toNullableNumber(form.protein),
-    sleep: toNullableNumber(form.sleep),
-    steps: toNullableNumber(form.steps),
-    fatigue: toNullableNumber(form.fatigue),
-    tdee: toNullableNumber(form.tdee),
+    weight: toGuardedNullableNumber('today.weight', form.weight),
+    kcal: toGuardedNullableNumber('today.kcal', form.kcal),
+    protein: toGuardedNullableNumber('today.protein', form.protein),
+    sleep: toGuardedNullableNumber('today.sleep', form.sleep),
+    steps: toGuardedNullableNumber('today.steps', form.steps),
+    fatigue: toGuardedNullableNumber('today.fatigue', form.fatigue),
+    tdee: toGuardedNullableNumber('today.tdee', form.tdee),
     trainingDone: Boolean(form.trainingDone),
     trainingNotes: `${form.trainingNotes ?? ''}`.trim(),
   }

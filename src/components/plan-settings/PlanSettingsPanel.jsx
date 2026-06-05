@@ -1,4 +1,9 @@
+import { useState } from 'react'
 import { cyclePlanWeekdayOptions, toggleTrainingDay } from '../../utils/cyclePlanForm.js'
+import {
+  clampNumericInputDraft,
+  getNumericFieldGuardrail,
+} from '../../utils/numericFieldGuardrails.js'
 import CustomStrengthPlanEditor from './CustomStrengthPlanEditor.jsx'
 
 function liftLabelMap(liftKey) {
@@ -48,6 +53,33 @@ function PlanSettingsPanel({
   planSettingsMode,
   settingsStatus,
 }) {
+  const [fieldErrors, setFieldErrors] = useState({})
+
+  function updateCycleLiftField(liftKey, metricKey, nextValue) {
+    const fieldKey = `plan.cycle.${liftKey}.${metricKey}`
+    const { nextValue: guardedValue, error } = clampNumericInputDraft({
+      fieldKey,
+      previousValue: cycleDraft.baseLifts[liftKey][metricKey],
+      nextValue,
+    })
+
+    onUpdateCycleDraft({
+      ...cycleDraft,
+      baseLifts: {
+        ...cycleDraft.baseLifts,
+        [liftKey]: {
+          ...cycleDraft.baseLifts[liftKey],
+          [metricKey]: guardedValue,
+        },
+      },
+    })
+
+    setFieldErrors((current) => ({
+      ...current,
+      [fieldKey]: error,
+    }))
+  }
+
   return (
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm shadow-black/10">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -178,40 +210,38 @@ function PlanSettingsPanel({
             {['squat', 'bench', 'deadlift'].map((liftKey) => (
               <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3" key={liftKey}>
                 <p className="text-sm font-semibold text-slate-800">{liftLabelMap(liftKey)}</p>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  onChange={(event) =>
-                    onUpdateCycleDraft({
-                      ...cycleDraft,
-                      baseLifts: {
-                        ...cycleDraft.baseLifts,
-                        [liftKey]: {
-                          ...cycleDraft.baseLifts[liftKey],
-                          oneRm: event.target.value,
-                        },
-                      },
-                    })
-                  }
-                  placeholder="1RM"
-                  value={cycleDraft.baseLifts[liftKey].oneRm}
-                />
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  onChange={(event) =>
-                    onUpdateCycleDraft({
-                      ...cycleDraft,
-                      baseLifts: {
-                        ...cycleDraft.baseLifts,
-                        [liftKey]: {
-                          ...cycleDraft.baseLifts[liftKey],
-                          tm: event.target.value,
-                        },
-                      },
-                    })
-                  }
-                  placeholder="TM"
-                  value={cycleDraft.baseLifts[liftKey].tm}
-                />
+                <label className="block space-y-1">
+                  <input
+                    aria-invalid={Boolean(fieldErrors[`plan.cycle.${liftKey}.oneRm`])}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    max={getNumericFieldGuardrail(`plan.cycle.${liftKey}.oneRm`)?.max}
+                    min={getNumericFieldGuardrail(`plan.cycle.${liftKey}.oneRm`)?.min}
+                    onChange={(event) => updateCycleLiftField(liftKey, 'oneRm', event.target.value)}
+                    placeholder="1RM"
+                    step={getNumericFieldGuardrail(`plan.cycle.${liftKey}.oneRm`)?.step}
+                    type="number"
+                    value={cycleDraft.baseLifts[liftKey].oneRm}
+                  />
+                  <span className="text-xs text-slate-400">
+                    {fieldErrors[`plan.cycle.${liftKey}.oneRm`] ?? '输入 1RM'}
+                  </span>
+                </label>
+                <label className="block space-y-1">
+                  <input
+                    aria-invalid={Boolean(fieldErrors[`plan.cycle.${liftKey}.tm`])}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    max={getNumericFieldGuardrail(`plan.cycle.${liftKey}.tm`)?.max}
+                    min={getNumericFieldGuardrail(`plan.cycle.${liftKey}.tm`)?.min}
+                    onChange={(event) => updateCycleLiftField(liftKey, 'tm', event.target.value)}
+                    placeholder="TM"
+                    step={getNumericFieldGuardrail(`plan.cycle.${liftKey}.tm`)?.step}
+                    type="number"
+                    value={cycleDraft.baseLifts[liftKey].tm}
+                  />
+                  <span className="text-xs text-slate-400">
+                    {fieldErrors[`plan.cycle.${liftKey}.tm`] ?? '输入 TM'}
+                  </span>
+                </label>
               </div>
             ))}
           </div>

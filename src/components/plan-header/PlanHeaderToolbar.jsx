@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import PlanHeaderLegend from './PlanHeaderLegend.jsx'
+import {
+  getNumericFieldGuardrail,
+  validateNumericFieldValue,
+} from '../../utils/numericFieldGuardrails.js'
 
 function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChange }) {
   const weekNumber = headerModel.weekMeta?.weekNumber ?? ''
+  const weekNumberGuardrail = getNumericFieldGuardrail('plan.weekMeta.weekNumber')
   const [isEditingWeekNumber, setIsEditingWeekNumber] = useState(false)
   const [weekNumberDraft, setWeekNumberDraft] = useState(`${weekNumber}`)
   const weekNumberInputRef = useRef(null)
@@ -24,8 +29,14 @@ function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChang
   }, [isEditingWeekNumber])
 
   function commitWeekNumber() {
-    const nextWeekNumber = Number.parseInt(weekNumberDraft, 10)
-    const isValidWeekNumber = Number.isInteger(nextWeekNumber) && nextWeekNumber > 0
+    const normalizedWeekNumber = `${weekNumberDraft}`.trim()
+    const hasStrictIntegerFormat = /^\d+$/.test(normalizedWeekNumber)
+    const validationError = hasStrictIntegerFormat
+      ? validateNumericFieldValue('plan.weekMeta.weekNumber', normalizedWeekNumber)
+      : '周数必须填写有效数字'
+    const nextWeekNumber = hasStrictIntegerFormat ? Number(normalizedWeekNumber) : Number.NaN
+    const isValidWeekNumber =
+      hasStrictIntegerFormat && !validationError && Number.isInteger(nextWeekNumber)
 
     if (isValidWeekNumber && nextWeekNumber !== weekNumber && onWeekNumberChange) {
       onWeekNumberChange(nextWeekNumber)
@@ -78,10 +89,13 @@ function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChang
               aria-label="编辑周数"
               className="w-14 border-none bg-transparent p-0 text-center text-xs font-bold text-fitloop-orange outline-none"
               inputMode="numeric"
+              max={weekNumberGuardrail.max}
+              min={weekNumberGuardrail.min}
               onBlur={commitWeekNumber}
               onChange={(event) => setWeekNumberDraft(event.target.value)}
               onKeyDown={handleWeekNumberKeyDown}
               ref={weekNumberInputRef}
+              step={weekNumberGuardrail.step}
               value={weekNumberDraft}
             />
           ) : (

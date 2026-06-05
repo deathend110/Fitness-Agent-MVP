@@ -15,7 +15,7 @@ test('buildCreateCyclePlanPayload 会把周期草稿安全映射成后端载荷'
     baseLifts: {
       squat: { oneRm: '180', tm: '165' },
       bench: { oneRm: '125.5', tm: '' },
-      deadlift: { oneRm: '220', tm: '0' },
+      deadlift: { oneRm: '220', tm: '190' },
     },
     config: {
       trainingDays: ['Tuesday', 'Thursday', 'Saturday'],
@@ -29,7 +29,7 @@ test('buildCreateCyclePlanPayload 会把周期草稿安全映射成后端载荷'
     baseLifts: {
       squat: { oneRm: 180, tm: 165 },
       bench: { oneRm: 125.5, tm: null },
-      deadlift: { oneRm: 220, tm: 0 },
+      deadlift: { oneRm: 220, tm: 190 },
     },
     config: {
       trainingDays: ['Tuesday', 'Thursday', 'Saturday'],
@@ -64,6 +64,28 @@ test('buildCreateCyclePlanPayload 会把空白和非法数字归一化为 null',
     config: {
       trainingDays: ['Monday', 'Friday'],
     },
+  })
+})
+
+test('buildCreateCyclePlanPayload 会把越界 oneRm 和 tm 清洗为 null', () => {
+  const payload = buildCreateCyclePlanPayload({
+    presetKey: 'candito_6week',
+    startDate: '2026-06-10',
+    goal: 'strength',
+    baseLifts: {
+      squat: { oneRm: '9.9', tm: '501' },
+      bench: { oneRm: '5', tm: '4.9' },
+      deadlift: { oneRm: '500', tm: '500.1' },
+    },
+    config: {
+      trainingDays: ['Monday'],
+    },
+  })
+
+  assert.deepEqual(payload.baseLifts, {
+    squat: { oneRm: null, tm: null },
+    bench: { oneRm: 5, tm: null },
+    deadlift: { oneRm: 500, tm: null },
   })
 })
 

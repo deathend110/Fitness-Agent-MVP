@@ -6,7 +6,12 @@ import {
   oneRmFields,
   profileToDraft,
   sexOptions,
+  syncProfileDraft,
+  targetWeightField,
 } from '../utils/profileForm.js'
+import {
+  clampNumericInputDraft,
+} from '../utils/numericFieldGuardrails.js'
 import { buildProfileSummaryCards, getProfileFieldHint } from '../utils/profileView.js'
 
 const summaryCardToneClassNames = {
@@ -64,10 +69,12 @@ function ProfileTab({
   profile,
 }) {
   const [draft, setDraft] = useState(() => profileToDraft(profile))
+  const [fieldErrors, setFieldErrors] = useState({})
   const [isDataPanelOpen, setIsDataPanelOpen] = useState(false)
 
   useEffect(() => {
-    setDraft(profileToDraft(profile))
+    setDraft((currentDraft) => syncProfileDraft(currentDraft, profile))
+    setFieldErrors({})
   }, [profile])
 
   function commitDraft(nextDraft) {
@@ -85,6 +92,35 @@ function ProfileTab({
     })
   }
 
+  function setFieldError(fieldKey, error) {
+    setFieldErrors((current) => {
+      if (!error && !current[fieldKey]) {
+        return current
+      }
+
+      return {
+        ...current,
+        [fieldKey]: error,
+      }
+    })
+  }
+
+  function updateGuardedNestedField(group, field, value) {
+    if (!field.guardrailKey) {
+      updateNestedField(group, field.key, value)
+      return
+    }
+
+    const { nextValue, error } = clampNumericInputDraft({
+      fieldKey: field.guardrailKey,
+      previousValue: draft[group][field.key],
+      nextValue: value,
+    })
+
+    updateNestedField(group, field.key, nextValue)
+    setFieldError(field.guardrailKey, error)
+  }
+
   function updateTopLevelField(key, value) {
     commitDraft({
       ...draft,
@@ -92,8 +128,25 @@ function ProfileTab({
     })
   }
 
+  function updateGuardedTopLevelField(field, value) {
+    if (!field.guardrailKey) {
+      updateTopLevelField(field.key, value)
+      return
+    }
+
+    const { nextValue, error } = clampNumericInputDraft({
+      fieldKey: field.guardrailKey,
+      previousValue: draft[field.key],
+      nextValue: value,
+    })
+
+    updateTopLevelField(field.key, nextValue)
+    setFieldError(field.guardrailKey, error)
+  }
+
   function renderBasicField(field) {
     const hint = getProfileFieldHint(field.key)
+    const error = field.guardrailKey ? fieldErrors[field.guardrailKey] : null
 
     if (field.type === 'select') {
       return (
@@ -119,13 +172,17 @@ function ProfileTab({
         <FieldLabel hint={hint} label={field.label} />
         <input
           className="h-12 w-full rounded-2xl border border-fitloop-line bg-fitloop-panel-muted px-4 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+          aria-invalid={Boolean(error)}
+          max={field.max}
+          min={field.min}
           inputMode={field.inputMode}
-          onChange={(event) => updateNestedField('basic', field.key, event.target.value)}
+          onChange={(event) => updateGuardedNestedField('basic', field, event.target.value)}
           placeholder={hint || field.label}
           step={field.step}
           type={field.type}
           value={field.key === 'name' ? draft.basic.name : draft.basic[field.key]}
         />
+        <span className="text-xs leading-5 text-slate-400">{error ?? hint}</span>
       </label>
     )
   }
@@ -201,13 +258,19 @@ function ProfileTab({
                 />
                 <input
                   className="h-12 w-full rounded-2xl border border-fitloop-line bg-fitloop-panel-muted px-4 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-                  inputMode="numeric"
-                  onChange={(event) => updateTopLevelField('targetWeight', event.target.value)}
+                  aria-invalid={Boolean(fieldErrors[targetWeightField.guardrailKey])}
+                  max={targetWeightField.max}
+                  min={targetWeightField.min}
+                  inputMode={targetWeightField.inputMode}
+                  onChange={(event) => updateGuardedTopLevelField(targetWeightField, event.target.value)}
                   placeholder="目标体重，单位 kg"
-                  step="0.1"
-                  type="number"
+                  step={targetWeightField.step}
+                  type={targetWeightField.type}
                   value={draft.targetWeight}
                 />
+                <span className="text-xs leading-5 text-slate-400">
+                  {fieldErrors[targetWeightField.guardrailKey] ?? getProfileFieldHint('targetWeight')}
+                </span>
               </label>
 
               <label className="space-y-3">
@@ -244,13 +307,19 @@ function ProfileTab({
                 <FieldLabel hint="单位 kg" label={field.label} />
                 <input
                   className="h-12 w-full rounded-2xl border border-fitloop-line bg-fitloop-panel-muted px-4 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-                  inputMode="numeric"
-                  onChange={(event) => updateNestedField('oneRM', field.key, event.target.value)}
+                  aria-invalid={Boolean(fieldErrors[field.guardrailKey])}
+                  max={field.max}
+                  min={field.min}
+                  inputMode={field.inputMode}
+                  onChange={(event) => updateGuardedNestedField('oneRM', field, event.target.value)}
                   placeholder="单位 kg"
-                  step="0.1"
-                  type="number"
+                  step={field.step}
+                  type={field.type}
                   value={draft.oneRM[field.key]}
                 />
+                <span className="text-xs leading-5 text-slate-400">
+                  {fieldErrors[field.guardrailKey] ?? '单位 kg'}
+                </span>
               </label>
             ))}
           </div>

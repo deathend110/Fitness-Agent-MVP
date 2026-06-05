@@ -1,3 +1,5 @@
+import { validateNumericFieldValue } from './numericFieldGuardrails.js'
+
 const DEFAULT_TRAINING_DAYS = ['Monday', 'Wednesday', 'Friday']
 const WEEKDAY_OPTIONS = [
   'Monday',
@@ -29,6 +31,14 @@ function normalizeNumber(value) {
 
   const parsedValue = Number(normalizedValue)
   return Number.isFinite(parsedValue) ? parsedValue : null
+}
+
+function normalizeGuardrailedNumber(fieldKey, value) {
+  if (validateNumericFieldValue(fieldKey, value)) {
+    return null
+  }
+
+  return normalizeNumber(value)
 }
 
 function normalizeTrainingDays(trainingDays = []) {
@@ -99,16 +109,16 @@ export function buildCreateCyclePlanPayload(draft = {}) {
     goal: normalizeText(draft?.goal),
     baseLifts: {
       squat: {
-        oneRm: normalizeNumber(baseLifts?.squat?.oneRm),
-        tm: normalizeNumber(baseLifts?.squat?.tm),
+        oneRm: normalizeGuardrailedNumber('plan.cycle.squat.oneRm', baseLifts?.squat?.oneRm),
+        tm: normalizeGuardrailedNumber('plan.cycle.squat.tm', baseLifts?.squat?.tm),
       },
       bench: {
-        oneRm: normalizeNumber(baseLifts?.bench?.oneRm),
-        tm: normalizeNumber(baseLifts?.bench?.tm),
+        oneRm: normalizeGuardrailedNumber('plan.cycle.bench.oneRm', baseLifts?.bench?.oneRm),
+        tm: normalizeGuardrailedNumber('plan.cycle.bench.tm', baseLifts?.bench?.tm),
       },
       deadlift: {
-        oneRm: normalizeNumber(baseLifts?.deadlift?.oneRm),
-        tm: normalizeNumber(baseLifts?.deadlift?.tm),
+        oneRm: normalizeGuardrailedNumber('plan.cycle.deadlift.oneRm', baseLifts?.deadlift?.oneRm),
+        tm: normalizeGuardrailedNumber('plan.cycle.deadlift.tm', baseLifts?.deadlift?.tm),
       },
     },
     config: {
