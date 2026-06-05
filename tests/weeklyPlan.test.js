@@ -220,11 +220,13 @@ test('reorderExercisesInDay 会保留 weekMeta 并在非法输入时返回原计
   }
 
   const samePlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-squat', 'monday-squat')
+  const missingFromExerciseIdPlan = reorderExercisesInDay(weeklyPlan, 'Monday', '', 'monday-rdl')
   const missingTargetPlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'missing', 'monday-rdl')
   const missingToExerciseIdPlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-rdl', '')
   const missingDestinationPlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-rdl', 'missing')
 
   assert.deepEqual(samePlan, weeklyPlan)
+  assert.deepEqual(missingFromExerciseIdPlan, weeklyPlan)
   assert.deepEqual(missingTargetPlan, weeklyPlan)
   assert.deepEqual(missingToExerciseIdPlan, weeklyPlan)
   assert.deepEqual(missingDestinationPlan, weeklyPlan)
