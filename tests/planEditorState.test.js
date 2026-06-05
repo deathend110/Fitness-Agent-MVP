@@ -174,6 +174,15 @@ test('canReorderPlanDayExercises 仅在无编辑态且动作数大于 1 时允�
 
   assert.equal(
     canReorderPlanDayExercises({
+      editingState: startEditingExercise('Tuesday', { id: 'tuesday-bench', name: '卧推' }, []),
+      dayKey: 'Monday',
+      exerciseCount: 2,
+    }),
+    true,
+  )
+
+  assert.equal(
+    canReorderPlanDayExercises({
       editingState: clearPlanEditorState(),
       dayKey: 'Monday',
       exerciseCount: 1,
