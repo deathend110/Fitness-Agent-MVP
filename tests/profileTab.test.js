@@ -206,7 +206,16 @@ test('PlanTab 源码会通过 applyPlanMutation 接通动作拖拽排序写回',
   const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
 
   assert.match(source, /reorderExercisesInDay/)
-  assert.match(source, /handleReorderExercise/)
-  assert.match(source, /applyPlanMutation\(\(currentPlan\)\s*=>\s*reorderExercisesInDay/)
-  assert.match(source, /onMoveExercise/)
+  assert.match(
+    source,
+    /async function handleReorderExercise\(dayKey,\s*fromExerciseId,\s*toExerciseId\)/,
+  )
+  assert.match(
+    source,
+    /applyPlanMutation\(\(currentPlan\)\s*=>\s*reorderExercisesInDay\(currentPlan,\s*dayKey,\s*fromExerciseId,\s*toExerciseId\)/,
+  )
+  assert.match(
+    source,
+    /onMoveExercise=\{\(fromId,\s*toId\)\s*=>\s*handleReorderExercise\(\s*column\.dayKey,\s*fromId,\s*toId\s*\)\s*\}/,
+  )
 })
