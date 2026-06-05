@@ -1,3 +1,5 @@
+import { validateNumericFieldValue } from './numericFieldGuardrails.js'
+
 export const exerciseWeightModes = [
   { value: 'percentage', label: '挂钩 1RM 百分比' },
   { value: 'fixed', label: '直接填写 kg' },
@@ -11,9 +13,6 @@ export const exerciseSetTypeOptions = [
   { value: 'custom', label: '自定义' },
 ]
 
-const RPE_MIN = 0
-const RPE_MAX = 10
-const RPE_RANGE_ERROR = 'RPE 只能在 0-10 之间'
 const RPE_RANGE_HINT = 'RPE 请输入 0-10 之间的数值'
 
 function toInputValue(value) {
@@ -54,19 +53,8 @@ function toNumberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-// RPE 只允许落在课程要求的闭区间里，避免计划被写入越界训练强度。
 export function getRpeValidationError(rpeValue) {
-  const parsed = toNumberOrNull(rpeValue)
-
-  if (parsed === null) {
-    return null
-  }
-
-  if (parsed < RPE_MIN || parsed > RPE_MAX) {
-    return RPE_RANGE_ERROR
-  }
-
-  return null
+  return validateNumericFieldValue('plan.exercise.rpe', rpeValue)
 }
 
 export function getRpeFieldHint(rpeError) {
@@ -131,7 +119,17 @@ export function draftToExercise(draft = {}) {
 }
 
 export function buildExerciseSavePayload(draft = {}) {
-  if (getRpeValidationError(draft.rpe)) {
+  const setType = draft.setType === 'custom' ? 'custom' : 'straight'
+  const weightMode = draft.weightMode === 'percentage' ? 'percentage' : 'fixed'
+  const numericFieldErrors = [
+    weightMode === 'fixed' ? validateNumericFieldValue('plan.exercise.kg', draft.kg) : null,
+    weightMode === 'percentage' ? validateNumericFieldValue('plan.exercise.pct', draft.pct) : null,
+    validateNumericFieldValue('plan.exercise.sets', draft.sets),
+    setType === 'custom' ? null : validateNumericFieldValue('plan.exercise.reps', draft.reps),
+    getRpeValidationError(draft.rpe),
+  ].filter(Boolean)
+
+  if (numericFieldErrors.length > 0) {
     return null
   }
 

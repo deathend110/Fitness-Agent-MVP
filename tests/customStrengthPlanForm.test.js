@@ -103,6 +103,34 @@ test('buildCreateCustomStrengthCyclePayload 会用最终 weeks 长度矫正 tota
   assert.equal(payload.config.weeks.length, 2)
 })
 
+test('buildCreateCustomStrengthCyclePayload 会过滤非法 TM 并约束 totalWeeks', () => {
+  const payload = buildCreateCustomStrengthCyclePayload({
+    name: '越界草稿',
+    startDate: '2026-06-09',
+    totalWeeks: 99,
+    mainLifts: {
+      squat: { tm: '9.9' },
+      bench: { tm: '120' },
+      deadlift: { tm: '500.1' },
+      ohp: { tm: '-1' },
+    },
+    weeks: [
+      { weekIndex: 1, days: [] },
+      { weekIndex: 2, days: [] },
+      { weekIndex: 3, days: [] },
+    ],
+  })
+
+  assert.deepEqual(payload.baseLifts, {
+    bench: { tm: 120 },
+  })
+  assert.deepEqual(payload.config.mainLifts, {
+    bench: { tm: 120 },
+  })
+  assert.equal(payload.config.totalWeeks, 3)
+  assert.equal(payload.config.weeks.length, 3)
+})
+
 test('buildCreateCustomStrengthCyclePayload 会在 weeks 非数组时稳定回退', () => {
   const payload = buildCreateCustomStrengthCyclePayload({
     name: '异常草稿',
