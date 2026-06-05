@@ -6,7 +6,7 @@ import PlanExerciseItem from './PlanExerciseItem.jsx'
 import PlanDayEmptyState from './plan-rest/PlanDayEmptyState.jsx'
 import PlanRestDayPanel from './plan-rest/PlanRestDayPanel.jsx'
 import { createExerciseDraft } from '../utils/exerciseForm.js'
-import { NEW_PLAN_EXERCISE_ID } from '../utils/planEditorState.js'
+import { NEW_PLAN_EXERCISE_ID, canReorderPlanDayExercises } from '../utils/planEditorState.js'
 import { buildPlanDayDisplayModel } from '../utils/planDayDisplay.js'
 
 function PlanDayCard({
@@ -26,6 +26,7 @@ function PlanDayCard({
   onSaveExercise,
   onCancelEditing,
   onDeleteExercise,
+  onMoveExercise,
   profile,
   rpeError,
 }) {
@@ -42,6 +43,15 @@ function PlanDayCard({
   const showDayTypeSection = displayModel.showDayTypeSection !== false
   const dayTypeSectionVariant = displayModel.dayTypeSectionVariant ?? 'full'
   const isCompactRestDay = displayModel.layout === 'rest-compact'
+  // 仅在当前天没有编辑中动作且至少有两个动作时允许排序，避免把其他日期的编辑态误伤成全局禁拖。
+  const dragEnabled = canReorderPlanDayExercises({
+    editingState: {
+      dayKey,
+      exerciseId: editingExerciseId,
+    },
+    dayKey,
+    exerciseCount: plan.exercises.length,
+  }) && editingExerciseId !== NEW_PLAN_EXERCISE_ID
   // 新增动作时优先展示新增表单，避免和空状态提示同时抢占注意力。
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
 
@@ -105,6 +115,7 @@ function PlanDayCard({
           <ul className="space-y-3">
             {plan.exercises.map((exercise) => (
               <PlanExerciseItem
+                dragEnabled={dragEnabled}
                 draft={exerciseDraft}
                 exercise={exercise}
                 isEditing={isExerciseEditing(exercise.id)}
@@ -113,6 +124,7 @@ function PlanDayCard({
                 onDelete={() => onDeleteExercise(exercise.id)}
                 onDraftChange={onDraftChange}
                 onEdit={() => onEditExercise(exercise)}
+                onMoveExercise={onMoveExercise}
                 onSave={onSaveExercise}
                 oneRmOptions={oneRmOptions}
                 profile={profile}
