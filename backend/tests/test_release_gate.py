@@ -76,3 +76,11 @@ def test_build_release_gate_stages_keeps_required_order() -> None:
         "uv run python -m playwright install chromium",
         "uv run python scripts/check-release-env.py",
     ]
+
+
+def test_browser_core_stage_includes_release_core_journey_script() -> None:
+    stages = build_release_gate_stages()
+    browser_core = next(stage for stage in stages if stage["id"] == "browser-core")
+
+    assert "uv run python tests/e2e/release_core_journey.py" in browser_core["commands"]
+    assert Path("tests/e2e/release_core_journey.py").exists()
