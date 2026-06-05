@@ -12,7 +12,7 @@ const planExerciseItemSource = fs.readFileSync(
 
 function loadPlanExerciseItemHelpers() {
   const helperBlockMatch = planExerciseItemSource.match(
-    /export function isPlanExerciseNoDragTarget[\s\S]*?export function shouldBlockPlanExerciseDragStart[\s\S]*?\n}\n/,
+    /export function isPlanExerciseNoDragTarget[\s\S]*?export function shouldBlockPlanExerciseDragStart[\s\S]*?\r?\n}\r?\n/,
   )
 
   assert.ok(helperBlockMatch, '未找到 PlanExerciseItem 拖拽 helper 定义')
