@@ -8,16 +8,16 @@ export const sexOptions = [
 export const basicFields = [
   { key: 'name', label: '姓名', type: 'text' },
   { key: 'sex', label: '性别', type: 'select' },
-  { key: 'age', label: '年龄', type: 'number', step: '1', inputMode: 'numeric' },
-  { key: 'height', label: '身高 (cm)', type: 'number', step: '0.1', inputMode: 'numeric' },
-  { key: 'weight', label: '当前体重 (kg)', type: 'number', step: '0.1', inputMode: 'numeric' },
-  { key: 'waist', label: '腰围 (cm)', type: 'number', step: '0.1', inputMode: 'numeric' },
+  { key: 'age', label: '年龄', type: 'number', step: '1', inputMode: 'numeric', guardrailKey: 'profile.basic.age' },
+  { key: 'height', label: '身高 (cm)', type: 'number', step: '0.1', inputMode: 'numeric', guardrailKey: 'profile.basic.height' },
+  { key: 'weight', label: '当前体重 (kg)', type: 'number', step: '0.1', inputMode: 'numeric', guardrailKey: 'profile.basic.weight' },
+  { key: 'waist', label: '腰围 (cm)', type: 'number', step: '0.1', inputMode: 'numeric', guardrailKey: 'profile.basic.waist' },
 ]
 
 export const oneRmFields = [
-  { key: 'squat', label: '深蹲 (kg)' },
-  { key: 'bench', label: '卧推 (kg)' },
-  { key: 'deadlift', label: '硬拉 (kg)' },
+  { key: 'squat', label: '深蹲 (kg)', guardrailKey: 'profile.oneRM.squat' },
+  { key: 'bench', label: '卧推 (kg)', guardrailKey: 'profile.oneRM.bench' },
+  { key: 'deadlift', label: '硬拉 (kg)', guardrailKey: 'profile.oneRM.deadlift' },
 ]
 
 export function toInputValue(value) {

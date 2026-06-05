@@ -138,3 +138,29 @@ test('normalizeTodayLogEntry 会保留空值，避免把未填写字段写成非
     trainingNotes: '',
   })
 })
+
+test('normalizeTodayLogEntry 会把 step 不合法的最终值清洗为 null，同时不破坏合法值和空值', () => {
+  const entry = normalizeTodayLogEntry({
+    weight: '82.5',
+    kcal: '12.5',
+    protein: '',
+    sleep: '7.3',
+    steps: '1000.5',
+    fatigue: '3.5',
+    tdee: '2500',
+    trainingDone: false,
+    trainingNotes: '',
+  })
+
+  assert.deepEqual(entry, {
+    weight: 82.5,
+    kcal: null,
+    protein: null,
+    sleep: 7.3,
+    steps: null,
+    fatigue: null,
+    tdee: 2500,
+    trainingDone: false,
+    trainingNotes: '',
+  })
+})

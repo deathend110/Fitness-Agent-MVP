@@ -6,6 +6,7 @@ import {
   getNumericFieldGuardrail,
   validateNumericFieldValue,
   clampNumericInputDraft,
+  getNumericFieldInputProps,
 } from '../src/utils/numericFieldGuardrails.js'
 
 test('共享规则层会暴露完整规则表，并返回档案体重和动作 RPE 的范围配置', () => {
@@ -15,6 +16,24 @@ test('共享规则层会暴露完整规则表，并返回档案体重和动作 R
   assert.equal(getNumericFieldGuardrail('plan.exercise.rpe').min, 0)
   assert.equal(getNumericFieldGuardrail('plan.exercise.rpe').max, 10)
   assert.equal(getNumericFieldGuardrail('unknown.field'), null)
+})
+
+test('共享规则层会提供可直接复用的输入约束，避免调用方手写 min/max/step', () => {
+  assert.deepEqual(getNumericFieldInputProps('profile.basic.weight'), {
+    min: 25,
+    max: 300,
+    step: 0.1,
+    inputMode: null,
+  })
+
+  assert.deepEqual(getNumericFieldInputProps('today.fatigue'), {
+    min: 1,
+    max: 5,
+    step: 1,
+    inputMode: null,
+  })
+
+  assert.equal(getNumericFieldInputProps('unknown.field'), null)
 })
 
 test('validateNumericFieldValue 对空值放行，对合法值返回 null', () => {
@@ -32,6 +51,21 @@ test('validateNumericFieldValue 对越界值返回稳定错误文案', () => {
   assert.equal(
     validateNumericFieldValue('profile.oneRM.bench', '-1'),
     '卧推 1RM 必须在 5-400kg 之间',
+  )
+})
+
+test('validateNumericFieldValue 会拦截不符合 step 语义的最终值', () => {
+  assert.equal(
+    validateNumericFieldValue('today.fatigue', '3.5'),
+    '疲劳度 必须按 1 的步长填写',
+  )
+  assert.equal(
+    validateNumericFieldValue('today.kcal', '12.5'),
+    '热量 必须按 1 的步长填写',
+  )
+  assert.equal(
+    validateNumericFieldValue('plan.exercise.kg', '0.55'),
+    '固定重量 必须按 0.5 的步长填写',
   )
 })
 

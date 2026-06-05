@@ -59,8 +59,62 @@ function parseNumericDraft(value) {
   return Number.isFinite(parsedValue) ? parsedValue : Number.NaN
 }
 
+function countDecimalPlaces(value) {
+  const normalizedValue = `${value}`.toLowerCase()
+
+  if (normalizedValue.includes('e')) {
+    const [mantissa, exponentValue] = normalizedValue.split('e')
+    const exponent = Number.parseInt(exponentValue, 10)
+    const mantissaDecimals = countDecimalPlaces(mantissa)
+    return Math.max(0, mantissaDecimals - exponent)
+  }
+
+  const decimalPart = normalizedValue.split('.')[1]
+  return decimalPart ? decimalPart.length : 0
+}
+
+function isAlignedToStep(parsedValue, guardrail) {
+  const step = Number(guardrail.step)
+  if (!Number.isFinite(step) || step <= 0) {
+    return true
+  }
+
+  const base = Number.isFinite(guardrail.min) ? guardrail.min : 0
+  const scale = 10 ** Math.max(
+    countDecimalPlaces(step),
+    countDecimalPlaces(base),
+    countDecimalPlaces(parsedValue),
+  )
+
+  const scaledDelta = Math.round((parsedValue - base) * scale)
+  const scaledStep = Math.round(step * scale)
+
+  if (scaledStep === 0) {
+    return true
+  }
+
+  return scaledDelta % scaledStep === 0
+}
+
 export function getNumericFieldGuardrail(fieldKey) {
   return NUMERIC_FIELD_GUARDRAILS[fieldKey] ?? null
+}
+
+/**
+ * 供后续页面接线直接复用共享规则里的输入约束，避免在组件层重复抄写 min/max/step。
+ */
+export function getNumericFieldInputProps(fieldKey) {
+  const guardrail = getNumericFieldGuardrail(fieldKey)
+  if (!guardrail) {
+    return null
+  }
+
+  return {
+    min: guardrail.min ?? null,
+    max: guardrail.max ?? null,
+    step: guardrail.step ?? null,
+    inputMode: guardrail.inputMode ?? null,
+  }
 }
 
 export function validateNumericFieldValue(fieldKey, value) {
@@ -76,6 +130,10 @@ export function validateNumericFieldValue(fieldKey, value) {
 
   if (!Number.isFinite(parsedValue) || parsedValue < guardrail.min || parsedValue > guardrail.max) {
     return `${guardrail.label} 必须在 ${guardrail.min}-${guardrail.max}${guardrail.unit ?? ''} 之间`
+  }
+
+  if (!isAlignedToStep(parsedValue, guardrail)) {
+    return `${guardrail.label} 必须按 ${guardrail.step} 的步长填写`
   }
 
   return null

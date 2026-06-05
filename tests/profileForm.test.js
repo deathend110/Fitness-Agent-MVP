@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { draftToProfile } from '../src/utils/profileForm.js'
+import { basicFields, draftToProfile, oneRmFields } from '../src/utils/profileForm.js'
 
 test('draftToProfile 会把越界档案数值转成 null，避免非法业务值落库', () => {
   const profile = draftToProfile({
@@ -70,5 +70,68 @@ test('draftToProfile 会保留空值并透传合法档案数值', () => {
     goal: 'cut',
     targetWeight: null,
     notes: 'ok',
+  })
+})
+
+test('profileForm 的数值字段配置会直接携带 guardrailKey，避免页面层重复手写映射', () => {
+  assert.deepEqual(
+    basicFields
+      .filter((field) => field.type === 'number')
+      .map((field) => ({ key: field.key, guardrailKey: field.guardrailKey })),
+    [
+      { key: 'age', guardrailKey: 'profile.basic.age' },
+      { key: 'height', guardrailKey: 'profile.basic.height' },
+      { key: 'weight', guardrailKey: 'profile.basic.weight' },
+      { key: 'waist', guardrailKey: 'profile.basic.waist' },
+    ],
+  )
+
+  assert.deepEqual(
+    oneRmFields.map((field) => ({ key: field.key, guardrailKey: field.guardrailKey })),
+    [
+      { key: 'squat', guardrailKey: 'profile.oneRM.squat' },
+      { key: 'bench', guardrailKey: 'profile.oneRM.bench' },
+      { key: 'deadlift', guardrailKey: 'profile.oneRM.deadlift' },
+    ],
+  )
+})
+
+test('draftToProfile 会把 step 不合法的最终值转成 null，同时保留合法值和空值', () => {
+  const profile = draftToProfile({
+    basic: {
+      name: 'C',
+      sex: 'male',
+      age: '30.5',
+      height: '165.5',
+      weight: '',
+      waist: '80.05',
+    },
+    oneRM: {
+      squat: '140.25',
+      bench: '100',
+      deadlift: '',
+    },
+    goal: '',
+    targetWeight: '70.05',
+    notes: '',
+  })
+
+  assert.deepEqual(profile, {
+    basic: {
+      name: 'C',
+      sex: 'male',
+      age: null,
+      height: 165.5,
+      weight: null,
+      waist: null,
+    },
+    oneRM: {
+      squat: null,
+      bench: 100,
+      deadlift: null,
+    },
+    goal: '',
+    targetWeight: null,
+    notes: '',
   })
 })
