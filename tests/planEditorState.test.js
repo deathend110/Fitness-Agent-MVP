@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  canReorderPlanDayExercises,
   NEW_PLAN_EXERCISE_ID,
   clearPlanEditorState,
   clearPlanEditorStateAfterDelete,
@@ -141,6 +142,44 @@ test('clearPlanEditorState 会回到空闲状态', () => {
     exerciseId: null,
     draft: null,
   })
+})
+
+test('canReorderPlanDayExercises 仅在无编辑态且动作数大于 1 时允许拖拽', () => {
+  assert.equal(
+    canReorderPlanDayExercises({
+      editingState: clearPlanEditorState(),
+      dayKey: 'Monday',
+      exerciseCount: 2,
+    }),
+    true,
+  )
+
+  assert.equal(
+    canReorderPlanDayExercises({
+      editingState: startEditingExercise('Monday', { id: 'monday-squat', name: '深蹲' }, []),
+      dayKey: 'Monday',
+      exerciseCount: 2,
+    }),
+    false,
+  )
+
+  assert.equal(
+    canReorderPlanDayExercises({
+      editingState: startAddingExercise('Monday', []),
+      dayKey: 'Monday',
+      exerciseCount: 2,
+    }),
+    false,
+  )
+
+  assert.equal(
+    canReorderPlanDayExercises({
+      editingState: clearPlanEditorState(),
+      dayKey: 'Monday',
+      exerciseCount: 1,
+    }),
+    false,
+  )
 })
 
 test('编辑百分比动作和固定重量动作后，weeklyPlan 写回结果会同步更新对应展示字段', () => {
