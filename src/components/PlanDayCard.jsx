@@ -40,13 +40,14 @@ function PlanDayCard({
   const showNewExerciseEditor =
     displayModel.showAddExerciseButton && editingExerciseId === NEW_PLAN_EXERCISE_ID
   const hasExercises = plan.exercises.length > 0
+  const isEditingDay = editingExerciseId !== null
   const showDayTypeSection = displayModel.showDayTypeSection !== false
   const dayTypeSectionVariant = displayModel.dayTypeSectionVariant ?? 'full'
   const isCompactRestDay = displayModel.layout === 'rest-compact'
   // 仅在当前卡片真实处于编辑态时才把 dayKey 传入判定，避免其他日期编辑时把本日误判成禁拖。
   const dragEnabled = canReorderPlanDayExercises({
     editingState: {
-      dayKey: editingExerciseId ? dayKey : null,
+      dayKey: isEditingDay ? dayKey : null,
       exerciseId: editingExerciseId,
     },
     dayKey,
