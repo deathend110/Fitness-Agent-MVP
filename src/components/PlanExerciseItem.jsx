@@ -59,11 +59,13 @@ export function createPlanExerciseDragState() {
 }
 
 export function shouldBlockPlanExerciseDragStart(dragEnabled, dragState) {
+  const blocked = dragState.consumeDragBlock()
+
   if (!dragEnabled) {
     return true
   }
 
-  return dragState.consumeDragBlock()
+  return blocked
 }
 
 function PlanExerciseItem({
