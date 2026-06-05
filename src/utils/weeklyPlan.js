@@ -236,16 +236,24 @@ export function reorderExercisesInDay(weeklyPlan, dayKey, fromExerciseId, toExer
     return weeklyPlan
   }
 
-  const currentIndex = currentExercises.findIndex((exercise) => exercise.id === fromExerciseId)
-  const targetIndex = currentExercises.findIndex((exercise) => exercise.id === toExerciseId)
-
-  if (currentIndex < 0 || targetIndex < 0 || currentIndex === targetIndex) {
+  if (
+    !currentExercises.some((exercise) => exercise.id === fromExerciseId) ||
+    !currentExercises.some((exercise) => exercise.id === toExerciseId)
+  ) {
     return weeklyPlan
   }
 
   return updateDayPlan(weeklyPlan, dayKey, (dayPlan) => {
+    const currentIndex = dayPlan.exercises.findIndex((exercise) => exercise.id === fromExerciseId)
+    const targetIndex = dayPlan.exercises.findIndex((exercise) => exercise.id === toExerciseId)
+
+    if (currentIndex < 0 || targetIndex < 0 || currentIndex === targetIndex) {
+      return dayPlan
+    }
+
     const nextExercises = [...dayPlan.exercises]
     const [movedExercise] = nextExercises.splice(currentIndex, 1)
+    // 先删后插时，若动作从前往后移动，目标索引会先左移一位。
     const nextTargetIndex = currentIndex < targetIndex ? targetIndex - 1 : targetIndex
     nextExercises.splice(nextTargetIndex, 0, movedExercise)
 
