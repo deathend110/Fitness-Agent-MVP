@@ -6,6 +6,66 @@ import {
 } from '../utils/planEditorState.js'
 import PlanExerciseEditorCard from './PlanExerciseEditorCard.jsx'
 
+export function isPlanExerciseNoDragTarget(target) {
+  return Boolean(
+    target && typeof target.closest === 'function' && target.closest('[data-no-drag="true"]'),
+  )
+}
+
+export function createPlanExerciseDragState() {
+  let dragBlocked = false
+  let dropDepth = 0
+  let dropActive = false
+
+  return {
+    get dragBlocked() {
+      return dragBlocked
+    },
+    get dropDepth() {
+      return dropDepth
+    },
+    get dropActive() {
+      return dropActive
+    },
+    markPointerDown(target) {
+      dragBlocked = isPlanExerciseNoDragTarget(target)
+      return dragBlocked
+    },
+    consumeDragBlock() {
+      const blocked = dragBlocked
+      dragBlocked = false
+      return blocked
+    },
+    enter(enabled) {
+      if (!enabled) {
+        return dropActive
+      }
+
+      dropDepth += 1
+      dropActive = true
+      return dropActive
+    },
+    leave() {
+      dropDepth = Math.max(0, dropDepth - 1)
+      dropActive = dropDepth > 0
+      return dropActive
+    },
+    resetDrop() {
+      dropDepth = 0
+      dropActive = false
+      return dropActive
+    },
+  }
+}
+
+export function shouldBlockPlanExerciseDragStart(dragEnabled, dragState) {
+  if (!dragEnabled) {
+    return true
+  }
+
+  return dragState.consumeDragBlock()
+}
+
 function PlanExerciseItem({
   exercise,
   isEditing,
@@ -25,6 +85,7 @@ function PlanExerciseItem({
   const menuActions = getPlanExerciseMenuActions()
   const [menuOpen, setMenuOpen] = useState(false)
   const [dropActive, setDropActive] = useState(false)
+  const dragStateRef = useRef(createPlanExerciseDragState())
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -65,16 +126,14 @@ function PlanExerciseItem({
     }
   }
 
-  function isNoDragTarget(target) {
-    return target instanceof HTMLElement && Boolean(target.closest('[data-no-drag="true"]'))
-  }
-
   function handleDragStart(event) {
-    if (!dragEnabled || isNoDragTarget(event.target)) {
+    if (shouldBlockPlanExerciseDragStart(dragEnabled, dragStateRef.current)) {
       event.preventDefault()
       return
     }
 
+    dragStateRef.current.resetDrop()
+    setDropActive(false)
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', exercise.id)
   }
@@ -85,6 +144,7 @@ function PlanExerciseItem({
     }
 
     event.preventDefault()
+    dragStateRef.current.resetDrop()
     setDropActive(false)
     const fromExerciseId = event.dataTransfer.getData('text/plain')
 
@@ -101,15 +161,27 @@ function PlanExerciseItem({
         dropActive ? 'ring-2 ring-fitloop-orange/70' : ''
       }`}
       draggable={dragEnabled}
-      onDragEnd={() => setDropActive(false)}
-      onDragLeave={() => setDropActive(false)}
+      onDragEnd={() => {
+        dragStateRef.current.resetDrop()
+        setDropActive(false)
+      }}
+      onDragEnter={(event) => {
+        if (!dragEnabled) {
+          return
+        }
+
+        event.preventDefault()
+        setDropActive(dragStateRef.current.enter(true))
+      }}
+      onDragLeave={() => {
+        setDropActive(dragStateRef.current.leave())
+      }}
       onDragOver={(event) => {
         if (!dragEnabled) {
           return
         }
 
         event.preventDefault()
-        setDropActive(true)
       }}
       onDragStart={handleDragStart}
       onDrop={handleDrop}
@@ -146,7 +218,14 @@ function PlanExerciseItem({
               </p>
             </div>
 
-            <div className="relative shrink-0" data-no-drag="true" ref={menuRef}>
+            <div
+              className="relative shrink-0"
+              data-no-drag="true"
+              onPointerDownCapture={(event) => {
+                dragStateRef.current.markPointerDown(event.target)
+              }}
+              ref={menuRef}
+            >
               <button
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
