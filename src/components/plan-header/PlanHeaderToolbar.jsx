@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import PlanHeaderLegend from './PlanHeaderLegend.jsx'
 
-function PlanHeaderToolbar({ headerModel, onWeekNumberChange }) {
+function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChange }) {
   const weekNumber = headerModel.weekMeta?.weekNumber ?? ''
   const [isEditingWeekNumber, setIsEditingWeekNumber] = useState(false)
   const [weekNumberDraft, setWeekNumberDraft] = useState(`${weekNumber}`)
@@ -93,6 +93,7 @@ function PlanHeaderToolbar({ headerModel, onWeekNumberChange }) {
         <button
           aria-label={headerModel.settingsButton.label}
           className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm shadow-black/20 transition hover:border-slate-300 hover:text-slate-800"
+          onClick={onPlanSettingsClick}
           title={headerModel.settingsButton.hint}
           type="button"
         >

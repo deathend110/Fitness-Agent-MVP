@@ -13,11 +13,14 @@ from backend.agent.chat_session import build_agent_request
 from backend.api import chat as chat_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
 from backend.db.models import (
+    ActiveCyclePlan,
     Base,
     ChatMessage,
     ChatSession,
+    CycleWeekSnapshot,
     DailyLog,
     MemoryItem,
+    PlanSourceState,
     Profile,
     WeeklyPlanDay,
     utc_now,
@@ -134,6 +137,43 @@ async def seed_agent_state(session: AsyncSession) -> ChatSession:
                 created_at=utc_now(),
             ),
         ]
+    )
+    await session.commit()
+    return chat_session
+
+
+async def seed_cycle_agent_state(session: AsyncSession) -> ChatSession:
+    chat_session = await seed_agent_state(session)
+    session.add(PlanSourceState(id=1, active_source="cycle"))
+    cycle = ActiveCyclePlan(
+        preset_key="candito_6week",
+        status="active",
+        start_date="2026-06-01",
+        current_week_index=1,
+        goal="力量提升",
+        base_lifts={"squat": {"oneRm": 180, "tm": 162}, "bench": {"oneRm": 120, "tm": 108}},
+        config={"trainingDays": ["Tuesday", "Thursday", "Saturday", "Sunday"]},
+    )
+    session.add(cycle)
+    await session.flush()
+    session.add(
+        CycleWeekSnapshot(
+            cycle_id=cycle.id,
+            week_index=1,
+            generated_plan={
+                "Monday": {"type": "cycle_rest", "exercises": []},
+                "Tuesday": {"type": "lower_strength", "exercises": [{"name": "周期深蹲", "sets": 6, "reps": 4}]},
+                "Wednesday": {"type": "rest", "exercises": []},
+                "Thursday": {"type": "upper_strength", "exercises": [{"name": "周期卧推", "sets": 6, "reps": 4}]},
+                "Friday": {"type": "rest", "exercises": []},
+                "Saturday": {"type": "lower_power", "exercises": [{"name": "周期硬拉", "sets": 4, "reps": 4}]},
+                "Sunday": {"type": "upper_power", "exercises": [{"name": "周期上肢", "sets": 5, "reps": 4}]},
+            },
+            override_plan=None,
+            is_confirmed=True,
+            week_start="2026-06-01",
+            week_end="2026-06-07",
+        )
     )
     await session.commit()
     return chat_session
@@ -303,3 +343,25 @@ async def test_build_agent_request_includes_committed_proposal_status_in_recent_
     rendered = "\n".join(message["content"] for message in request.messages if message["role"] != "system")
     assert "建议状态：committed" in rendered
     assert "proposalId=proposal-1" in rendered
+
+
+@pytest.mark.asyncio
+async def test_build_agent_request_reads_cycle_effective_plan_and_cycle_summary(
+    db_session: AsyncSession,
+) -> None:
+    chat_session = await seed_cycle_agent_state(db_session)
+
+    request = await build_agent_request(
+        session=db_session,
+        session_id=chat_session.id,
+        user_input="这周按周期计划怎么练？",
+        model_config={"model": "deepseek-chat"},
+    )
+
+    rendered = "\n".join(message["content"] for message in request.messages)
+    assert "当前计划来源：周期计划" in rendered
+    assert "candito_6week" in rendered
+    assert "当前周次" in rendered
+    assert "当前状态" in rendered
+    assert "周期深蹲" in rendered
+    assert "深蹲" not in rendered or "周期深蹲" in rendered

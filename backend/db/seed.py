@@ -3,10 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.db.models import DailyLog, Profile, WEEKDAY_ORDER, WeeklyPlanDay
+from backend.db.models import DailyLog, PlanSourceState, Profile, WEEKDAY_ORDER, WeeklyPlanDay
 
 
 DEFAULT_PROFILE_ID = 1
+DEFAULT_PLAN_SOURCE_STATE_ID = 1
 
 EMPTY_PROFILE_BASIC = {
     "name": "",
@@ -44,6 +45,15 @@ async def seed_if_empty(session_factory: async_sessionmaker[AsyncSession]) -> No
                     goal="",
                     target_weight=None,
                     notes="",
+                )
+            )
+
+        source_state = await session.get(PlanSourceState, DEFAULT_PLAN_SOURCE_STATE_ID)
+        if source_state is None:
+            session.add(
+                PlanSourceState(
+                    id=DEFAULT_PLAN_SOURCE_STATE_ID,
+                    active_source="manual",
                 )
             )
 

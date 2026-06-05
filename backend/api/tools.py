@@ -7,13 +7,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agent.active_plan import load_active_cycle_context, load_effective_weekly_plan
 from backend.agent.adopt_plan import (
     build_day_plan_replace_proposal,
     build_plan_change_proposal,
     commit_plan_proposal,
     ignore_plan_proposal,
 )
-from backend.api.weekly_plan import build_weekly_plan_response, dump_weekly_plan_response
 from backend.db.database import get_db_session
 from backend.db.models import ChatMessage, WeeklyPlanDay
 from backend.schemas import WeeklyPlanSchema
@@ -89,7 +89,12 @@ async def commit_plan_change(
             "plan": current_plan,
         }
 
-    await _write_plan(session, result.next_plan)
+    cycle_context = await load_active_cycle_context(session)
+    if cycle_context is not None:
+        cycle_context["snapshot"].override_plan = result.next_plan
+        await session.commit()
+    else:
+        await _write_plan(session, result.next_plan)
     await _sync_committed_proposal_status(session, payload.proposalId)
     refreshed_plan = await _load_current_plan(session)
     return {
@@ -119,9 +124,7 @@ async def ignore_plan_change(
 
 
 async def _load_current_plan(session: AsyncSession) -> dict[str, Any]:
-    result = await session.execute(select(WeeklyPlanDay))
-    days = {item.day_key: item for item in result.scalars().all()}
-    return dump_weekly_plan_response(build_weekly_plan_response(days))
+    return await load_effective_weekly_plan(session)
 
 
 async def _write_plan(session: AsyncSession, plan: dict[str, Any]) -> None:

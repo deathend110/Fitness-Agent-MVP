@@ -103,6 +103,121 @@ class DailyLogMapSchema(RootModel[dict[str, DailyLogEntrySchema]]):
     pass
 
 
+class PlanSourceSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    activeSource: Literal["manual", "cycle"] = "manual"
+    updatedAt: datetime | None = None
+
+
+class CyclePresetSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    key: str
+    label: str
+    summary: str = ""
+    supportedWeeks: list[int] = Field(default_factory=list)
+    supportsTm: bool = False
+    repeatMode: Literal["fixed_length", "repeating"] = "fixed_length"
+
+
+class CustomStrengthMainLiftSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    tm: float | None = Field(default=None, gt=0)
+
+
+class CustomStrengthExerciseSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    name: str
+    category: Literal["main", "variation", "accessory"]
+    progression: dict[str, Any] = Field(default_factory=dict)
+    prescription: dict[str, Any] = Field(default_factory=dict)
+    referenceLift: str | None = None
+    loadText: str = ""
+    notes: str = ""
+
+
+class CustomStrengthDaySchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    dayIndex: int = Field(..., ge=1, le=7)
+    label: str
+    type: str
+    exercises: list[CustomStrengthExerciseSchema] = Field(default_factory=list)
+
+
+class CustomStrengthWeekSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    weekIndex: int = Field(..., ge=1)
+    days: list[CustomStrengthDaySchema] = Field(default_factory=list)
+
+
+class CustomStrengthDefinitionSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    planType: Literal["custom_strength"]
+    name: str
+    startDate: str
+    totalWeeks: int = Field(..., ge=1)
+    mainLifts: dict[str, CustomStrengthMainLiftSchema] = Field(default_factory=dict)
+    weeks: list[CustomStrengthWeekSchema] = Field(default_factory=list)
+
+
+class ActiveCyclePlanSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    presetKey: str
+    status: Literal["draft", "active", "completed", "archived"]
+    startDate: str
+    currentWeekIndex: int = Field(..., ge=1)
+    pendingWeekIndex: int | None = Field(default=None, ge=1)
+    goal: str = ""
+    baseLifts: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+    lastGeneratedAt: datetime | None = None
+    lastConfirmedAt: datetime | None = None
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
+
+class CycleCreateRequestSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    presetKey: str
+    startDate: str
+    goal: str = ""
+    baseLifts: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class CycleWeekSnapshotSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    cycleId: int
+    weekIndex: int
+    generatedPlan: dict[str, Any]
+    overridePlan: dict[str, Any] | None = None
+    effectivePlan: dict[str, Any]
+    isConfirmed: bool
+    weekStart: str
+    weekEnd: str
+    createdAt: datetime | None = None
+    updatedAt: datetime | None = None
+
+
+class ActiveCycleDetailSchema(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    cycle: ActiveCyclePlanSchema
+    currentWeek: CycleWeekSnapshotSchema
+    effectivePlan: dict[str, Any]
+
+
 class ChatSessionCreateSchema(BaseModel):
     title: str | None = None
 

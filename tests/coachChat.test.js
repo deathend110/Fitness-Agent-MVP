@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 
 import {
   buildBackgroundCoachTaskRecord,
@@ -49,6 +50,29 @@ test('requestCoachReply 会把用户输入交给后端 Agent，不再构建 syst
     thinking: undefined,
     userInput: '最近疲劳度有点高，要不要调整计划？',
   })
+})
+
+test('CoachTab 源码会消费 effectiveWeeklyPlan 作为教练上下文计划', () => {
+  const source = readFileSync('src/tabs/CoachTab.jsx', 'utf8')
+
+  assert.match(source, /function CoachTab\(\{[\s\S]*effectiveWeeklyPlan,[\s\S]*\}\)/)
+  assert.match(source, /weeklyPlan: effectiveWeeklyPlan,/)
+  assert.doesNotMatch(source, /function CoachTab\(\{[\s\S]*\bweeklyPlan,\b[\s\S]*\}\)/)
+})
+
+test('App 源码会在 manual 来源下同步 weeklyPlan 与 effectiveWeeklyPlan', () => {
+  const source = readFileSync('src/App.jsx', 'utf8')
+
+  assert.match(source, /function handleWeeklyPlanChange\(nextWeeklyPlanOrUpdater\)/)
+  assert.match(source, /setWeeklyPlan\(\(currentWeeklyPlan\) => \{/)
+  assert.match(source, /const nextWeeklyPlan = normalizeWeeklyPlan\(/)
+  assert.match(source, /nextWeeklyPlanOrUpdater === 'function'/)
+  assert.match(source, /nextWeeklyPlanOrUpdater\(currentWeeklyPlan\)/)
+  assert.match(
+    source,
+    /if \(planSource\.activeSource === 'manual' \|\| !Number\.isInteger\(activeCyclePlan\?\.cycle\?\.id\)\) \{/,
+  )
+  assert.match(source, /setEffectiveWeeklyPlan\(nextWeeklyPlan\)/)
 })
 
 test('requestCoachReply 会保留模型和 thinking 配置', async () => {

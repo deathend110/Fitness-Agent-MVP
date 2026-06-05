@@ -10,6 +10,10 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - 后端负责结构化数据持久化、AI 教练上下文组装、工具回环、Provider 适配和文件摘要处理
 - SQLite 是主数据源
 - `localStorage` 仍然存在，但主要承担缓存、迁移兼容和少量前端恢复状态
+- 训练计划存在两个来源：
+  - 手动周计划
+  - 周期计划当前周投影
+- 今日日志、指标、AI 教练和计划卡提交统一读取“当前激活计划来源”的有效周计划
 
 当前核心业务闭环如下：
 
@@ -27,16 +31,17 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [src/App.jsx](src/App.jsx)
   - 管理四个主页面：`Profile`、`Plan`、`Today`、`Coach`
-  - 应用启动时调用 `loadAppData()` 从后端读取 `profile / weeklyPlan / dailyLog`
+  - 应用启动时调用 `loadAppData()` 从后端读取 `profile / weeklyPlan / planSource / effectiveWeeklyPlan / activeCyclePlan / dailyLog`
   - 同时保留 `localStorage` 缓存，后端不可用时页面仍能展示本地数据
   - 负责把 `profile / weeklyPlan / dailyLog` 的改动异步回写后端
+  - 当当前来源为 `manual` 时，负责同步 `weeklyPlan -> effectiveWeeklyPlan`
   - 负责 localStorage 首次迁移提示与导入后端入口
 
 ### 前端 API 层
 
 - [src/api/backendClient.js](src/api/backendClient.js)
   - 普通 REST 接口客户端
-  - 负责档案、周计划、今日日志、会话、消息、草稿、文件、模型配置、指标和计划卡提交
+  - 负责档案、周计划、计划来源、周期计划、今日日志、会话、消息、草稿、文件、模型配置、指标和计划卡提交
   - 是前端非聊天场景的统一后端访问层
 
 - [src/api/coachBackend.js](src/api/coachBackend.js)
@@ -48,6 +53,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/api/appData.js](src/api/appData.js)
   - 把前端数据结构映射到后端字段结构
   - 负责 `oneRM <-> oneRm`、`tdee <-> tdeeManual` 等字段转换
+  - 负责把后端的 `weeklyPlan + activeCyclePlan` 归并成前端消费的 `effectiveWeeklyPlan`
 
 - [src/api/deepseek.js](src/api/deepseek.js)
   - 历史兼容壳
@@ -62,18 +68,42 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
+  - 通过“计划设置”分开管理“设置页当前选择模式”和“真实生效的计划来源”
+  - 管理预制周期草稿 `cycleDraft` 与自定义力量草稿 `customStrengthDraft`
+  - 管理周期模板选择、开始日期、目标、`1RM / TM`、训练日、启用当前周期、生成下一周、确认推进和停止周期
+  - 管理自定义力量周期计划的创建提交，并通过独立 payload builder 调用后端 `/api/cycles`
   - 管理按日训练类型、动作增删改和动作表单状态
   - 日期列头部直接整合星期、日期与动作统计，减少重复标签带来的竖向占用
+  - 周期模式激活时展示的是 `effectiveWeeklyPlan` 对应的当前周投影
+
+- [src/utils/cyclePlanForm.js](src/utils/cyclePlanForm.js)
+  - 预制周期计划草稿与 payload 映射工具
+
+- [src/utils/customStrengthPlanForm.js](src/utils/customStrengthPlanForm.js)
+  - 自定义力量周期计划草稿与 payload 映射工具
+  - 负责默认 4 周草稿、主项 TM 紧凑化、`baseLifts / config.mainLifts` 同构约束，以及 `totalWeeks / weeks.length` 一致性
+
+- [src/components/plan-settings/CustomStrengthPlanEditor.jsx](src/components/plan-settings/CustomStrengthPlanEditor.jsx)
+  - 自定义力量周期计划的最小可提交流程编辑器
+  - 当前支持名称、开始日期、周数、主项 TM 和周列表基础 day type 维护
+
+- [src/components/plan-settings/CustomStrengthMainLiftEditor.jsx](src/components/plan-settings/CustomStrengthMainLiftEditor.jsx)
+  - 负责主项 TM 输入
+
+- [src/components/plan-settings/CustomStrengthWeekEditor.jsx](src/components/plan-settings/CustomStrengthWeekEditor.jsx)
+  - 负责按周展示 day type 与动作数量预览
 
 - [src/tabs/TodayTab.jsx](src/tabs/TodayTab.jsx)
   - 编辑今日日志
   - 按“身体数据 / 摄入记录 / 恢复与状态”组织录入区
+  - 读取 `effectiveWeeklyPlan` 生成今日计划摘要和复杂指标
   - 展示复杂指标、已保存摘要、今日计划和体重趋势图
 
 - [src/tabs/CoachTab.jsx](src/tabs/CoachTab.jsx)
   - AI 教练页的页面编排中心
   - 管理会话列表、当前会话、消息列表、流式状态、后台思考状态、草稿、附件和模型选择
   - 通过 `requestCoachReply / requestCoachReplyStream / startBackgroundCoachReply` 驱动聊天链路
+  - 把 `effectiveWeeklyPlan` 作为当前训练计划上下文发给后端
   - 负责 proposal 卡确认、忽略、消息元数据合并和会话恢复
 
 ### 前端状态与本地缓存
@@ -82,6 +112,9 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - `profile`
 - `weeklyPlan`
+- `planSource`
+- `effectiveWeeklyPlan`
+- `activeCyclePlan`
 - `dailyLog`
 - `chatHistory`
 - 本地迁移完成标记
@@ -91,7 +124,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 这些数据的角色不同：
 
-- `profile / weeklyPlan / dailyLog` 的主数据源是后端 SQLite，本地只做缓存和降级展示
+- `profile / weeklyPlan / planSource / effectiveWeeklyPlan / activeCyclePlan / dailyLog` 的主数据源是后端 SQLite，本地只做缓存和降级展示
 - `chatHistory` 仍保留为前端兼容缓存，但真实会话与消息已由后端 `chat_session / chat_message` 承担
 - 活动会话 id、后台任务信息属于纯前端恢复状态，不写入后端业务表
 
@@ -104,6 +137,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 启动时建表、播种默认数据、加载 provider runtime、初始化后台任务 worker
   - 注册以下路由模块：
     - `profile`
+    - `cycle_plans`
     - `weekly_plan`
     - `daily_log`
     - `drafts`
@@ -126,6 +160,17 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - `GET /api/weekly-plan`
   - `PUT /api/weekly-plan`
   - `POST /api/weekly-plan/adopt` 兼容旧采纳协议
+
+- [backend/api/cycle_plans.py](backend/api/cycle_plans.py)
+  - `GET /api/plan-source`
+  - `PUT /api/plan-source`
+  - `GET /api/cycles/presets`
+  - `POST /api/cycles`
+  - `GET /api/cycles/active`
+  - `POST /api/cycles/{id}/generate-next-week`
+  - `POST /api/cycles/{id}/confirm-next-week`
+  - `PUT /api/cycles/{id}/weeks/{week}/override`
+  - `POST /api/cycles/{id}/stop`
 
 - [backend/api/daily_log.py](backend/api/daily_log.py)
   - `GET /api/daily-log`
@@ -168,10 +213,27 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [backend/agent/chat_session.py](backend/agent/chat_session.py)
   - AI 教练主编排层
-  - 负责从数据库读取 profile、weekly plan、daily logs、summary、memory、knowledge、recent messages、file summary
+  - 负责从数据库读取 profile、当前激活来源的 effective weekly plan、daily logs、summary、memory、knowledge、recent messages、file summary
   - 负责构建 Agent request
   - 负责 provider 绑定、运行时协议转换、OpenAI-compatible / Gemini / fallback 客户端接线
   - 负责统一工具回环入口
+
+- [backend/agent/active_plan.py](backend/agent/active_plan.py)
+  - 负责读取当前激活计划来源
+  - 把周期计划当前周快照和覆盖层合并成 `effectiveWeeklyPlan`
+  - 给 metrics、AI、工具链提供统一计划入口
+
+- [backend/plans/custom_strength_definition.py](backend/plans/custom_strength_definition.py)
+  - 自定义力量周期计划定义层
+  - 负责 normalize / validate、自定义动作分类约束、主项 TM 校验和 definition 稳定化
+
+- [backend/plans/custom_strength_engine.py](backend/plans/custom_strength_engine.py)
+  - 自定义力量周期计划周编译层
+  - 负责把 definition 物化成多周 `weeklyPlan` 快照
+
+- [backend/plans/weekly_plan_materializer.py](backend/plans/weekly_plan_materializer.py)
+  - 预制周期引擎与自定义力量引擎共享的周计划物化 helper
+  - 负责 canonical exercise 结构、`loadRef` 构建和 override 辅助逻辑
 
 - [backend/agent/tool_calling.py](backend/agent/tool_calling.py)
   - 定义工具注册表、工具参数模型和工具处理函数
@@ -240,6 +302,18 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 4. 后端写入 SQLite
 5. 前端同时保留 localStorage 缓存
 
+### 计划来源与有效周计划
+
+1. 前端通过“计划设置”选择当前设置模式，并在用户确认后再切换 `manual` 或 `cycle`
+2. `manual` 来源直接读取和写回 [backend/api/weekly_plan.py](backend/api/weekly_plan.py)
+3. `cycle` 来源通过 [backend/api/cycle_plans.py](backend/api/cycle_plans.py) 创建或推进活动周期
+   - 预制模板走 [backend/plans/cycle_engine.py](backend/plans/cycle_engine.py)
+   - 自定义力量周期走 [backend/plans/custom_strength_definition.py](backend/plans/custom_strength_definition.py) 和 [backend/plans/custom_strength_engine.py](backend/plans/custom_strength_engine.py)
+4. [backend/agent/active_plan.py](backend/agent/active_plan.py) 根据 `plan_source_state` 决定返回：
+   - 手动周计划
+   - 周期当前周 `generated_plan + override_plan` 合并后的有效周计划
+5. 前端把这个结果存成 `effectiveWeeklyPlan`，供训练计划页、今日日志、AI 教练统一消费
+
 ### AI 教练对话
 
 1. [src/tabs/CoachTab.jsx](src/tabs/CoachTab.jsx) 收集 `userInput / model / thinking / fileIds / sessionId`
@@ -259,7 +333,9 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 1. 模型返回待确认 proposal 卡
 2. 前端点击采纳
 3. [src/api/backendClient.js](src/api/backendClient.js) 中的 `commitPlanChange()` 调用 `POST /api/tools/plan/commit`
-4. 后端校验 proposal 并写回 `weekly_plan_day`
+4. 后端校验 proposal 并根据当前来源选择写回位置：
+   - `manual`：写回 `weekly_plan_day`
+   - `cycle`：写回当前周期周快照的 `override_plan`
 5. 同步把相关 assistant 消息中的 suggestion 状态更新为 `committed`
 
 ## 存储结构
@@ -271,6 +347,16 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - `weekly_plan_day`
   - 一周七天的训练类型与动作数组
+
+- `plan_source_state`
+  - 当前训练计划来源，固定为 `manual` 或 `cycle`
+
+- `active_cycle_plan`
+  - 当前活动周期的模板、目标、周次、`1RM / TM` 基线和轻量配置
+  - 自定义力量周期计划也复用这张表，其中 `preset_key = "custom_strength"`，`config` 保存归一化后的 definition
+
+- `cycle_week_snapshot`
+  - 周期某一周的生成结果、覆盖层、确认状态和周起止日期
 
 - `daily_log`
   - 某日体重、热量、蛋白质、睡眠、疲劳、步数、训练完成情况、备注和手动 TDEE
@@ -323,13 +409,15 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 后端会按当前实现读取：
 
 - `profile`
-- `weekly_plan`
+- `effective_weekly_plan`
 - `daily_logs`
 - `memory_item`
 - `knowledge_item`
 - `chat_session_summary`
 - `chat_message`
 - `uploaded_file` 摘要
+
+如果当前来源是周期计划，还会补充一个只读周期摘要，包含当前模板、周次和状态。
 
 然后拼成模型请求消息。这个过程在后端完成，前端不再负责 system prompt 编排。
 
@@ -342,7 +430,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - OpenAI-compatible runtime
 - Gemini-native runtime
 
-当 provider runtime 缺失或不可用时，可以回退到 `DeepSeekClient`。
+当 provider runtime 缺失或不可用时，可以回退到 [backend/agent/deepseek_client.py](backend/agent/deepseek_client.py) 中的 `DeepSeekClient`。
 
 ### 工具回环
 
@@ -358,6 +446,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - 生成单日计划替换 proposal
 
 模型需要工具时，后端会执行工具并将结果继续回灌给模型，而不是把工具逻辑留给前端。
+
+这里的“读取周计划”已经统一走 [backend/agent/active_plan.py](backend/agent/active_plan.py)，不会绕过当前激活来源。
 
 ### 输出
 
@@ -404,5 +494,9 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [backend/agent/deepseek_client.py](backend/agent/deepseek_client.py)
   - 当前仍保留为 fallback 客户端
   - 正常情况下，主链路优先走 provider runtime
+
+- `plan_source_state + weekly_plan_day` 旧直接读取路径
+  - 当前仍存在手动周计划主数据
+  - 但新的下游消费方应该优先通过 [backend/agent/active_plan.py](backend/agent/active_plan.py) 获取 `effectiveWeeklyPlan`
 
 这些兼容层仍需在架构认知里保留，因为它们会影响当前运行行为和测试路径。

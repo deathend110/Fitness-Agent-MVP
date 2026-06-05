@@ -89,3 +89,79 @@ test('ProfileTab 源码为档案页定义浅色渐变头图和分色摘要卡', 
   assert.match(source, /border-violet-200\/70/)
   assert.match(source, /border-amber-200\/80/)
 })
+
+test('PlanTab 源码包含手动周期设置流程的关键入口', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /isPlanSettingsOpen/)
+  assert.match(source, /planSettingsMode/)
+  assert.match(source, /planSource\.activeSource/)
+  assert.match(source, /非周期计划/)
+  assert.match(source, /周期计划/)
+  assert.match(source, /getCyclePresets|createCyclePlan/)
+  assert.match(source, /customStrengthDraft/)
+  assert.match(source, /handleCreateCustomStrengthCyclePlan/)
+  assert.match(source, /生成下一周|确认进入下一周|停止周期/)
+})
+
+test('PlanTab 源码在周期来源下会走当前周 override 更新链路', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /planSource\.activeSource === 'cycle'/)
+  assert.match(source, /activeCyclePlan\?\.cycle\?\.id/)
+  assert.match(source, /activeCyclePlan\?\.cycle\?\.currentWeekIndex/)
+  assert.match(source, /backendClient\.updateCycleWeekOverride/)
+  assert.match(source, /onEffectiveWeeklyPlanChange\?\.\(/)
+})
+
+test('PlanTab 源码在手动来源下仍保留 onWeeklyPlanChange 更新链路', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /if \(!isCycleOverrideMode\(\)\) \{/)
+  assert.match(source, /onWeeklyPlanChange\(planUpdater\)/)
+  assert.match(source, /if \(isCycleOverrideMode\(\)\) \{\s*return/)
+  assert.match(source, /weekMeta/)
+})
+
+test('PlanTab 生成下一周后会重新读取 active cycle detail，而不是把 snapshot 直接写进 activeCyclePlan', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /await backendClient\.generateNextCycleWeek\(activeCyclePlan\.cycle\.id\)/)
+  assert.match(source, /const nextActiveCyclePlan = await backendClient\.getActiveCyclePlan\(\)/)
+})
+
+test('PlanTab 在尚未创建活动周期时会回退显示手动周计划', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /const hasActiveCycle = Number\.isInteger\(activeCyclePlan\?\.cycle\?\.id\)/)
+  assert.match(
+    source,
+    /planSource\.activeSource === 'cycle' && hasActiveCycle && effectiveWeeklyPlan/,
+  )
+})
+
+test('PlanTab 创建周期计划后会保留完整 active cycle detail，避免把 response.cycle 内层对象误当成页面状态', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /function buildNextActiveCyclePayload\(response\) \{/)
+  assert.match(source, /if \(response\?\.activeCyclePlan\) \{/)
+  assert.match(source, /if \(response\?\.currentWeek \|\| response\?\.effectivePlan\) \{/)
+  assert.match(source, /return response \?\? null/)
+  assert.doesNotMatch(source, /return response\?\.activeCyclePlan \?\? response\?\.cycle \?\? response \?\? null/)
+  assert.match(source, /const nextActiveCyclePlan = buildNextActiveCyclePayload\(response\)/)
+  assert.match(source, /const nextEffectivePlan = readNextEffectivePlan\(response\)/)
+  assert.match(source, /onPlanSourceChange\?\.\(\{ activeSource: 'cycle' \}\)/)
+  assert.match(source, /onActiveCyclePlanChange\?\.\(nextActiveCyclePlan\)/)
+  assert.match(source, /if \(nextEffectivePlan\) \{\s*onEffectiveWeeklyPlanChange\?\.\(nextEffectivePlan\)/)
+})
+
+test('PlanTab 源码会把设置页模式与真实计划来源拆开，并通过后端接口显式切换真实来源', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /resolvePlanSettingsMode/)
+  assert.match(source, /setPlanSettingsMode/)
+  assert.match(source, /function handleSelectPlanSettingsMode/)
+  assert.match(source, /backendClient\.updatePlanSource\(\{ activeSource: 'manual' \}\)/)
+  assert.match(source, /backendClient\.updatePlanSource\(\{ activeSource: 'cycle' \}\)/)
+  assert.match(source, /buildCycleSettingsStatus/)
+})

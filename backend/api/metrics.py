@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.agent.active_plan import load_effective_weekly_plan
 from backend.db.database import get_db_session
-from backend.db.models import DailyLog, Profile, WEEKDAY_ORDER, WeeklyPlanDay
+from backend.db.models import DailyLog, Profile
 from backend.db.seed import DEFAULT_PROFILE_ID
 from backend.metrics.daily_metrics import build_daily_metrics_summary
 
@@ -38,13 +38,7 @@ async def _load_profile(session: AsyncSession) -> dict[str, Any] | None:
 
 
 async def _load_weekly_plan(session: AsyncSession) -> dict[str, Any]:
-    result = await session.execute(select(WeeklyPlanDay))
-    days = {item.day_key: item for item in result.scalars().all()}
-    return {
-        day_key: {"type": days[day_key].type, "exercises": days[day_key].exercises}
-        for day_key in WEEKDAY_ORDER
-        if day_key in days
-    }
+    return await load_effective_weekly_plan(session)
 
 
 async def _load_daily_log(session: AsyncSession, target_date: str) -> dict[str, Any] | None:

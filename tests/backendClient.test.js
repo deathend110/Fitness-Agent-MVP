@@ -10,6 +10,7 @@ import {
   fromBackendDailyLog,
   fromBackendProfile,
   isSameAppDataSnapshot,
+  loadAppData,
   saveDailyLog,
   toBackendDailyLog,
   toBackendProfile,
@@ -112,6 +113,123 @@ test('createBackendClient 会使用 JSON POST/PUT/GET 调用约定接口', async
   assert.equal(requests[16].options.method, 'PUT')
   assert.deepEqual(JSON.parse(requests[16].options.body), { content: 'hello', attachedFileIds: [1] })
   assert.equal(requests[17].url, 'http://127.0.0.1:8000/api/metrics/daily-summary?date=2026-06-01')
+})
+
+test('周期计划与计划来源接口会命中正确的后端路由', async () => {
+  const requests = []
+  const client = createBackendClient({
+    baseUrl: 'http://127.0.0.1:8000/api',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options })
+
+      return {
+        ok: true,
+        json: async () => ({ ok: true }),
+      }
+    },
+  })
+
+  await client.getPlanSource()
+  await client.updatePlanSource({ activeSource: 'cycle' })
+  await client.getCyclePresets()
+  await client.createCyclePlan({
+    presetKey: 'candito_6week',
+    startDate: '2026-06-01',
+    goal: 'strength',
+    baseLifts: { squat: { oneRm: 150 } },
+    config: { trainingDays: ['Tuesday', 'Thursday'] },
+  })
+  await client.getActiveCyclePlan()
+  await client.generateNextCycleWeek(8)
+  await client.confirmNextCycleWeek(8)
+  await client.updateCycleWeekOverride(8, 2, { Monday: { type: 'bench', exercises: [] } })
+  await client.stopCyclePlan(8)
+
+  assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/plan-source')
+  assert.equal(requests[0].options.method, 'GET')
+  assert.equal(requests[1].url, 'http://127.0.0.1:8000/api/plan-source')
+  assert.equal(requests[1].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(requests[1].options.body), { activeSource: 'cycle' })
+  assert.equal(requests[2].url, 'http://127.0.0.1:8000/api/cycles/presets')
+  assert.equal(requests[2].options.method, 'GET')
+  assert.equal(requests[3].url, 'http://127.0.0.1:8000/api/cycles')
+  assert.equal(requests[3].options.method, 'POST')
+  assert.equal(requests[4].url, 'http://127.0.0.1:8000/api/cycles/active')
+  assert.equal(requests[4].options.method, 'GET')
+  assert.equal(
+    requests[5].url,
+    'http://127.0.0.1:8000/api/cycles/8/generate-next-week',
+  )
+  assert.equal(requests[5].options.method, 'POST')
+  assert.equal(requests[6].url, 'http://127.0.0.1:8000/api/cycles/8/confirm-next-week')
+  assert.equal(requests[6].options.method, 'POST')
+  assert.equal(requests[7].url, 'http://127.0.0.1:8000/api/cycles/8/weeks/2/override')
+  assert.equal(requests[7].options.method, 'PUT')
+  assert.deepEqual(JSON.parse(requests[7].options.body), {
+    Monday: { type: 'bench', exercises: [] },
+  })
+  assert.equal(requests[8].url, 'http://127.0.0.1:8000/api/cycles/8/stop')
+  assert.equal(requests[8].options.method, 'POST')
+})
+
+test('createCyclePlan 会保留 custom_strength 载荷结构并发送到 cycles 接口', async () => {
+  const requests = []
+  const client = createBackendClient({
+    baseUrl: 'http://127.0.0.1:8000/api',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options })
+
+      return {
+        ok: true,
+        json: async () => ({ ok: true }),
+      }
+    },
+  })
+
+  await client.createCyclePlan({
+    presetKey: 'custom_strength',
+    startDate: '2026-06-09',
+    goal: 'strength',
+    baseLifts: {
+      squat: { tm: 180 },
+      bench: { tm: 120 },
+    },
+    config: {
+      planType: 'custom_strength',
+      name: '四周力量周期',
+      startDate: '2026-06-09',
+      totalWeeks: 2,
+      mainLifts: {
+        squat: { tm: 180 },
+        bench: { tm: 120 },
+      },
+      weeks: [],
+    },
+  })
+
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].url, 'http://127.0.0.1:8000/api/cycles')
+  assert.equal(requests[0].options.method, 'POST')
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    presetKey: 'custom_strength',
+    startDate: '2026-06-09',
+    goal: 'strength',
+    baseLifts: {
+      squat: { tm: 180 },
+      bench: { tm: 120 },
+    },
+    config: {
+      planType: 'custom_strength',
+      name: '四周力量周期',
+      startDate: '2026-06-09',
+      totalWeeks: 2,
+      mainLifts: {
+        squat: { tm: 180 },
+        bench: { tm: 120 },
+      },
+      weeks: [],
+    },
+  })
 })
 
 test('commitCoachSuggestion 会优先走 proposal commit，缺少 proposalId 时才回退 legacy adopt', async () => {
@@ -319,4 +437,56 @@ test('saveDailyLog 只会把相对上次后端快照发生变化的日期写回�
       payload: { weight: 79.8, tdeeManual: 2450 },
     },
   ])
+})
+
+test('loadAppData 会同时加载计划来源、有效周计划和活动周期', async () => {
+  const weeklyPlan = {
+    Monday: { type: 'upper', exercises: [{ id: 'manual-bench', name: '卧推' }] },
+  }
+  const effectivePlan = {
+    Monday: { type: 'cycle', exercises: [{ id: 'cycle-bench', name: '节奏卧推' }] },
+  }
+  const activeCyclePlan = {
+    cycle: { id: 3, presetKey: 'madcow_5x5' },
+    effectivePlan,
+  }
+
+  const appData = await loadAppData({
+    client: {
+      getProfile: async () => ({ name: 'Ada', oneRm: { squat: 140 } }),
+      getWeeklyPlan: async () => weeklyPlan,
+      getDailyLog: async () => ({ '2026-06-01': { tdeeManual: 2500 } }),
+      getPlanSource: async () => ({ activeSource: 'cycle' }),
+      getActiveCyclePlan: async () => activeCyclePlan,
+    },
+  })
+
+  assert.deepEqual(appData.profile, { name: 'Ada', oneRM: { squat: 140 } })
+  assert.deepEqual(appData.weeklyPlan, weeklyPlan)
+  assert.deepEqual(appData.effectiveWeeklyPlan, effectivePlan)
+  assert.deepEqual(appData.planSource, { activeSource: 'cycle' })
+  assert.deepEqual(appData.activeCyclePlan, activeCyclePlan)
+  assert.deepEqual(appData.dailyLog, {
+    '2026-06-01': { tdee: 2500 },
+  })
+})
+
+test('loadAppData 在没有活动周期时会把 effectiveWeeklyPlan 回退到 manual weeklyPlan', async () => {
+  const weeklyPlan = {
+    Tuesday: { type: 'pull', exercises: [{ id: 'manual-row', name: '杠铃划船' }] },
+  }
+
+  const appData = await loadAppData({
+    client: {
+      getProfile: async () => ({}),
+      getWeeklyPlan: async () => weeklyPlan,
+      getDailyLog: async () => ({}),
+      getPlanSource: async () => ({ activeSource: 'manual' }),
+      getActiveCyclePlan: async () => null,
+    },
+  })
+
+  assert.deepEqual(appData.planSource, { activeSource: 'manual' })
+  assert.equal(appData.activeCyclePlan, null)
+  assert.deepEqual(appData.effectiveWeeklyPlan, weeklyPlan)
 })

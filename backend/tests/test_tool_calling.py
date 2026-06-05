@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agent.tool_calling import (
@@ -16,7 +17,17 @@ from backend.agent.tool_calling import (
     build_default_tool_registry,
 )
 from backend.db.database import create_engine_and_session_factory
-from backend.db.models import Base, DailyLog, MemoryItem, Profile, WeeklyPlanDay, utc_now
+from backend.db.models import (
+    ActiveCyclePlan,
+    Base,
+    CycleWeekSnapshot,
+    DailyLog,
+    MemoryItem,
+    PlanSourceState,
+    Profile,
+    WeeklyPlanDay,
+    utc_now,
+)
 
 
 @pytest_asyncio.fixture
@@ -41,6 +52,42 @@ async def seed_tool_state(session: AsyncSession) -> None:
             DailyLog(date="2026-05-31", fatigue=5, sleep=6.5, training_notes="深蹲速度下降"),
             MemoryItem(kind="safety", content="用户深蹲到底部左膝疼痛。", confidence=0.95, created_at=utc_now()),
         ]
+    )
+    await session.commit()
+
+
+async def seed_cycle_tool_state(session: AsyncSession) -> None:
+    await seed_tool_state(session)
+    session.add(PlanSourceState(id=1, active_source="cycle"))
+    cycle = ActiveCyclePlan(
+        preset_key="candito_6week",
+        status="active",
+        start_date="2026-06-01",
+        current_week_index=1,
+        goal="力量提升",
+        base_lifts={"squat": {"oneRm": 180, "tm": 162}},
+        config={},
+    )
+    session.add(cycle)
+    await session.flush()
+    session.add(
+        CycleWeekSnapshot(
+            cycle_id=cycle.id,
+            week_index=1,
+            generated_plan={
+                "Monday": {"type": "cycle_strength", "exercises": [{"name": "周期深蹲", "pct": 0.8, "ref1RM": "squat"}]},
+                "Tuesday": {"type": "rest", "exercises": []},
+                "Wednesday": {"type": "rest", "exercises": []},
+                "Thursday": {"type": "rest", "exercises": []},
+                "Friday": {"type": "rest", "exercises": []},
+                "Saturday": {"type": "rest", "exercises": []},
+                "Sunday": {"type": "rest", "exercises": []},
+            },
+            override_plan=None,
+            is_confirmed=True,
+            week_start="2026-06-01",
+            week_end="2026-06-07",
+        )
     )
     await session.commit()
 
@@ -93,6 +140,17 @@ async def test_readonly_tools_execute_and_slim_large_results(db_session: AsyncSe
     slimmed = ToolResultSlimmer(max_chars=60).slim("get_weekly_plan", weekly_plan)
     assert len(slimmed) <= 80
     assert "深蹲" in slimmed
+
+
+@pytest.mark.asyncio
+async def test_get_weekly_plan_reads_cycle_effective_plan_when_cycle_source_is_active(db_session: AsyncSession) -> None:
+    await seed_cycle_tool_state(db_session)
+    registry = build_default_tool_registry()
+
+    weekly_plan = await registry.execute(db_session, "get_weekly_plan", {})
+
+    assert weekly_plan["Monday"]["type"] == "cycle_strength"
+    assert weekly_plan["Monday"]["exercises"][0]["name"] == "周期深蹲"
 
 
 @pytest.mark.asyncio

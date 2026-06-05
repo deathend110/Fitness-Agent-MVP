@@ -223,10 +223,10 @@ function resolveThinkingState(models = [], selectedModel, thinking) {
 function CoachTab({
   chatHistory,
   dailyLog,
+  effectiveWeeklyPlan,
   onChatHistoryChange,
   onWeeklyPlanChange,
   profile,
-  weeklyPlan,
 }) {
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [attachedFiles, setAttachedFiles] = useState([])
@@ -985,7 +985,7 @@ function CoachTab({
       model: selectedModel,
       thinking,
       userInput,
-      weeklyPlan,
+      weeklyPlan: effectiveWeeklyPlan,
     }
 
     setErrorMessage('')

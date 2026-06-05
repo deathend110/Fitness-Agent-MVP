@@ -59,6 +59,12 @@ def test_settings_support_backend_host_and_backend_port():
     assert settings.backend_port == 9234
 
 
+def test_settings_support_custom_cors_origins_list():
+    settings = Settings(cors_origins=["http://127.0.0.1:5181", "http://localhost:5173"])
+
+    assert settings.cors_origins == ["http://127.0.0.1:5181", "http://localhost:5173"]
+
+
 def test_settings_use_generic_llm_timeout_field():
     settings = Settings(llm_timeout_seconds=45.5)
 

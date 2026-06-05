@@ -9,13 +9,13 @@ import { buildWeightChartModel } from '../utils/weightChart.js'
 
 const WeightChart = lazy(() => import('../components/WeightChart.jsx'))
 
-function TodayTab({ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach }) {
+function TodayTab({ dailyLog, effectiveWeeklyPlan, profile, onDailyLogChange, onOpenCoach }) {
   const todayDate = getTodayStr()
   const todayPlanKey = getTodayKey()
   const todayLog = dailyLog?.[todayDate]
-  const todayPlan = weeklyPlan?.[todayPlanKey] ?? { type: 'rest', exercises: [] }
+  const todayPlan = effectiveWeeklyPlan?.[todayPlanKey] ?? { type: 'rest', exercises: [] }
   const todayPlanSummary = buildTodayPlanSummary(todayPlan, profile?.oneRM)
-  const dailyMetricsPanel = buildDailyMetricsPanelModel(profile, weeklyPlan, dailyLog)
+  const dailyMetricsPanel = buildDailyMetricsPanelModel(profile, effectiveWeeklyPlan, dailyLog)
   const weightChartModel = buildWeightChartModel(dailyLog, todayDate)
   const fieldGroups = useMemo(() => buildTodayLogFieldGroups(), [])
   const summaryItems = useMemo(() => buildTodayLogSummaryItems(todayLog), [todayLog])

@@ -19,7 +19,7 @@ from backend.agent.adopt_plan import (
 from backend.api import chat as chat_api
 from backend.api import tools as tools_api
 from backend.db.database import create_engine_and_session_factory, get_db_session
-from backend.db.models import Base
+from backend.db.models import ActiveCyclePlan, Base, CycleWeekSnapshot, PlanSourceState, WeeklyPlanDay
 from backend.main import app
 
 pytestmark = [
@@ -54,6 +54,25 @@ async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides.clear()
     clear_plan_change_proposals()
     await engine.dispose()
+
+
+async def _seed_cycle_mode(async_client: AsyncClient) -> int:
+    await async_client.put("/api/weekly-plan", json=build_weekly_plan())
+    create_response = await async_client.post(
+        "/api/cycles",
+        json={
+            "presetKey": "candito_6week",
+            "startDate": "2026-06-01",
+            "goal": "力量提升",
+            "baseLifts": {
+                "squat": {"oneRm": 180, "tm": 162},
+                "bench": {"oneRm": 120, "tm": 108},
+                "deadlift": {"oneRm": 220, "tm": 198},
+            },
+            "config": {"trainingDays": ["Tuesday", "Thursday", "Saturday", "Sunday"]},
+        },
+    )
+    return create_response.json()["cycle"]["id"]
 
 
 def build_weekly_plan() -> dict:
@@ -485,3 +504,39 @@ async def test_plan_tools_reject_invalid_changes_without_dirty_write(api_client:
     assert invalid.status_code == 200
     assert invalid.json()["validation"]["ok"] is False
     assert (await api_client.get("/api/weekly-plan")).json() == original_plan
+
+
+@pytest.mark.asyncio
+async def test_plan_propose_uses_cycle_effective_plan_when_cycle_source_is_active(api_client: AsyncClient) -> None:
+    await _seed_cycle_mode(api_client)
+
+    response = await api_client.post(
+        "/api/tools/plan/propose",
+        json={"sessionId": 8, "day": "Tuesday", "summary": "降低周期深蹲强度", "changes": [{"action": "update", "exerciseName": "Back Squat", "field": "pct", "newValue": 0.76}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["validation"]["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_plan_commit_in_cycle_mode_writes_snapshot_override_and_not_manual_weekly_plan(api_client: AsyncClient) -> None:
+    cycle_id = await _seed_cycle_mode(api_client)
+    proposal = await api_client.post(
+        "/api/tools/plan/propose",
+        json={"sessionId": 9, "day": "Tuesday", "summary": "降低周期深蹲强度", "changes": [{"action": "update", "exerciseName": "Back Squat", "field": "pct", "newValue": 0.76}]},
+    )
+    proposal_id = proposal.json()["proposalId"]
+
+    committed = await api_client.post("/api/tools/plan/commit", json={"proposalId": proposal_id})
+
+    assert committed.status_code == 200
+    assert committed.json()["ok"] is True
+    assert committed.json()["plan"]["Tuesday"]["exercises"][0]["pct"] == 0.76
+
+    current_plan = await api_client.get("/api/weekly-plan")
+    assert current_plan.json()["Monday"]["exercises"][0]["name"] == "深蹲"
+
+    active_cycle = await api_client.get("/api/cycles/active")
+    assert active_cycle.json()["cycle"]["id"] == cycle_id
+    assert active_cycle.json()["currentWeek"]["overridePlan"]["Tuesday"]["exercises"][0]["pct"] == 0.76

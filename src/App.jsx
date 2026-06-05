@@ -43,6 +43,11 @@ function App() {
   const [weeklyPlan, setWeeklyPlan] = useState(() =>
     normalizeWeeklyPlan(loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan)),
   )
+  const [planSource, setPlanSource] = useState(() => ({ activeSource: 'manual' }))
+  const [effectiveWeeklyPlan, setEffectiveWeeklyPlan] = useState(() =>
+    normalizeWeeklyPlan(loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan)),
+  )
+  const [activeCyclePlan, setActiveCyclePlan] = useState(null)
   const [dailyLog, setDailyLog] = useState(() =>
     loadInitialState(storageKeys.dailyLog, defaultDailyLog),
   )
@@ -62,6 +67,23 @@ function App() {
   const syncedWeeklyPlanRef = useRef(null)
   const syncedDailyLogRef = useRef(null)
 
+  function handleWeeklyPlanChange(nextWeeklyPlanOrUpdater) {
+    setWeeklyPlan((currentWeeklyPlan) => {
+      const nextWeeklyPlan = normalizeWeeklyPlan(
+        typeof nextWeeklyPlanOrUpdater === 'function'
+          ? nextWeeklyPlanOrUpdater(currentWeeklyPlan)
+          : nextWeeklyPlanOrUpdater,
+      )
+
+      // 只有真正进入活动周期后，effectiveWeeklyPlan 才应脱离 manual weeklyPlan。
+      if (planSource.activeSource === 'manual' || !Number.isInteger(activeCyclePlan?.cycle?.id)) {
+        setEffectiveWeeklyPlan(nextWeeklyPlan)
+      }
+
+      return nextWeeklyPlan
+    })
+  }
+
   useEffect(() => {
     let cancelled = false
     const abortController = new AbortController()
@@ -76,6 +98,11 @@ function App() {
 
         setProfile(nextData.profile)
         setWeeklyPlan(normalizeWeeklyPlan(nextData.weeklyPlan))
+        setPlanSource(nextData.planSource ?? { activeSource: 'manual' })
+        setEffectiveWeeklyPlan(
+          normalizeWeeklyPlan(nextData.effectiveWeeklyPlan ?? nextData.weeklyPlan),
+        )
+        setActiveCyclePlan(nextData.activeCyclePlan ?? null)
         setDailyLog(nextData.dailyLog)
         syncedProfileRef.current = nextData.profile
         syncedWeeklyPlanRef.current = normalizeWeeklyPlan(nextData.weeklyPlan)
@@ -223,8 +250,13 @@ function App() {
     dailyLog: nextDailyLog,
     chatHistory: nextChatHistory,
   }) {
+    const normalizedWeeklyPlan = normalizeWeeklyPlan(nextWeeklyPlan)
+
     setProfile(nextProfile)
-    setWeeklyPlan(normalizeWeeklyPlan(nextWeeklyPlan))
+    setWeeklyPlan(normalizedWeeklyPlan)
+    setEffectiveWeeklyPlan(normalizedWeeklyPlan)
+    setPlanSource({ activeSource: 'manual' })
+    setActiveCyclePlan(null)
     setDailyLog(nextDailyLog)
     setChatHistory(nextChatHistory)
   }
@@ -277,7 +309,16 @@ function App() {
       case 'plan':
         return (
           <PlanTab
-            onWeeklyPlanChange={setWeeklyPlan}
+            activeCyclePlan={activeCyclePlan}
+            effectiveWeeklyPlan={effectiveWeeklyPlan}
+            onActiveCyclePlanChange={setActiveCyclePlan}
+            onEffectiveWeeklyPlanChange={(nextPlan) =>
+              setEffectiveWeeklyPlan(normalizeWeeklyPlan(nextPlan))
+            }
+            onPlanSettingsClick={() => {}}
+            onPlanSourceChange={setPlanSource}
+            planSource={planSource}
+            onWeeklyPlanChange={handleWeeklyPlanChange}
             profile={profile}
             weeklyPlan={weeklyPlan}
           />
@@ -286,10 +327,10 @@ function App() {
         return (
           <TodayTab
             dailyLog={dailyLog}
+            effectiveWeeklyPlan={effectiveWeeklyPlan}
             onDailyLogChange={setDailyLog}
             onOpenCoach={handleOpenCoachTab}
             profile={profile}
-            weeklyPlan={weeklyPlan}
           />
         )
       case 'coach':
@@ -297,10 +338,10 @@ function App() {
           <CoachTab
             chatHistory={chatHistory}
             dailyLog={dailyLog}
+            effectiveWeeklyPlan={effectiveWeeklyPlan}
             onChatHistoryChange={setChatHistory}
-            onWeeklyPlanChange={setWeeklyPlan}
+            onWeeklyPlanChange={handleWeeklyPlanChange}
             profile={profile}
-            weeklyPlan={weeklyPlan}
           />
         )
       default:

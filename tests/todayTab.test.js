@@ -16,3 +16,12 @@ test('TodayTab 源码包含记录优先工作台结构与分组录入区', () =>
   assert.match(source, /<DailyMetricsPanel/)
   assert.match(source, /<WeightChart/)
 })
+
+test('TodayTab 会读取 effectiveWeeklyPlan 而不是 manual weeklyPlan', () => {
+  const source = readFileSync('src/tabs/TodayTab.jsx', 'utf8')
+
+  assert.match(source, /function TodayTab\(\{ dailyLog, effectiveWeeklyPlan, profile, onDailyLogChange, onOpenCoach \}\)/)
+  assert.match(source, /const todayPlan = effectiveWeeklyPlan\?\.\[todayPlanKey\]/)
+  assert.match(source, /buildDailyMetricsPanelModel\(profile, effectiveWeeklyPlan, dailyLog\)/)
+  assert.doesNotMatch(source, /function TodayTab\(\{ dailyLog, weeklyPlan, profile, onDailyLogChange, onOpenCoach \}\)/)
+})

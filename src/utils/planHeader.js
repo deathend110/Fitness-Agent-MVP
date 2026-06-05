@@ -9,11 +9,11 @@ const PLAN_HEADER_VIEW_TABS = [
 ]
 const PLAN_SETTINGS_BUTTON = {
   label: '计划设置',
-  hint: '当前仅保留训练计划设置入口，后续版本会接入周期模板与高级配置。',
-  title: '计划设置（开发中）',
-  description: '训练计划页头部暂时只保留一个统一入口，供后续接入计划模板、周期节奏和高级设置。',
-  confirmLabel: '知道了',
-  isPlaceholder: true,
+  hint: '打开训练计划设置入口，切换手动计划与周期计划。',
+  title: '训练计划设置',
+  description: '进入训练计划设置入口，查看当前计划来源并管理周期计划配置。',
+  confirmLabel: '打开设置',
+  isPlaceholder: false,
 }
 
 function isPlainObject(value) {

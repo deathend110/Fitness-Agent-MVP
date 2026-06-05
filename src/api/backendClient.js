@@ -173,8 +173,48 @@ export function createBackendClient(options = {}) {
     getWeeklyPlan({ signal } = {}) {
       return request('/weekly-plan', { signal })
     },
+    getPlanSource({ signal } = {}) {
+      return request('/plan-source', { signal })
+    },
+    updatePlanSource(payload, { signal } = {}) {
+      return request('/plan-source', { method: 'PUT', body: payload, signal })
+    },
     updateWeeklyPlan(payload, { signal } = {}) {
       return request('/weekly-plan', { method: 'PUT', body: payload, signal })
+    },
+    getCyclePresets({ signal } = {}) {
+      return request('/cycles/presets', { signal })
+    },
+    createCyclePlan(payload, { signal } = {}) {
+      return request('/cycles', { method: 'POST', body: payload, signal })
+    },
+    getActiveCyclePlan({ signal } = {}) {
+      return request('/cycles/active', { signal })
+    },
+    generateNextCycleWeek(cycleId, { signal } = {}) {
+      return request(`/cycles/${cycleId}/generate-next-week`, {
+        method: 'POST',
+        signal,
+      })
+    },
+    confirmNextCycleWeek(cycleId, { signal } = {}) {
+      return request(`/cycles/${cycleId}/confirm-next-week`, {
+        method: 'POST',
+        signal,
+      })
+    },
+    updateCycleWeekOverride(cycleId, weekIndex, payload, { signal } = {}) {
+      return request(`/cycles/${cycleId}/weeks/${weekIndex}/override`, {
+        method: 'PUT',
+        body: payload,
+        signal,
+      })
+    },
+    stopCyclePlan(cycleId, { signal } = {}) {
+      return request(`/cycles/${cycleId}/stop`, {
+        method: 'POST',
+        signal,
+      })
     },
     adoptWeeklyPlanChange(payload, { signal } = {}) {
       return request('/weekly-plan/adopt', { method: 'POST', body: payload, signal })
