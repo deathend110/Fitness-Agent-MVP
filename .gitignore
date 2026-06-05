@@ -4,6 +4,7 @@ dist/
 .worktrees/
 .obsidian/
 .claude/
+.superpowers/
 
 .env
 .env.*
