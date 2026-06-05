@@ -223,3 +223,34 @@ export function removeExerciseFromDay(weeklyPlan, dayKey, exerciseId) {
     exercises: dayPlan.exercises.filter((exercise) => exercise.id !== exerciseId),
   }))
 }
+
+export function reorderExercisesInDay(weeklyPlan, dayKey, fromExerciseId, toExerciseId) {
+  if (!fromExerciseId || !toExerciseId || fromExerciseId === toExerciseId) {
+    return weeklyPlan
+  }
+
+  const currentDayPlan = isPlainObject(weeklyPlan) ? weeklyPlan[dayKey] : null
+  const currentExercises = Array.isArray(currentDayPlan?.exercises) ? currentDayPlan.exercises : null
+
+  if (!currentExercises || currentExercises.length < 2) {
+    return weeklyPlan
+  }
+
+  const currentIndex = currentExercises.findIndex((exercise) => exercise.id === fromExerciseId)
+  const targetIndex = currentExercises.findIndex((exercise) => exercise.id === toExerciseId)
+
+  if (currentIndex < 0 || targetIndex < 0 || currentIndex === targetIndex) {
+    return weeklyPlan
+  }
+
+  return updateDayPlan(weeklyPlan, dayKey, (dayPlan) => {
+    const nextExercises = [...dayPlan.exercises]
+    const [movedExercise] = nextExercises.splice(currentIndex, 1)
+    nextExercises.splice(targetIndex, 0, movedExercise)
+
+    return {
+      ...dayPlan,
+      exercises: nextExercises,
+    }
+  })
+}
