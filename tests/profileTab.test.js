@@ -201,3 +201,21 @@ test('PlanTab 源码会把设置页模式与真实计划来源拆开，并通过
   assert.match(source, /backendClient\.updatePlanSource\(\{ activeSource: 'cycle' \}\)/)
   assert.match(source, /buildCycleSettingsStatus/)
 })
+
+test('PlanTab 源码会通过 applyPlanMutation 接通动作拖拽排序写回', () => {
+  const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
+
+  assert.match(source, /reorderExercisesInDay/)
+  assert.match(
+    source,
+    /async function handleReorderExercise\(dayKey,\s*fromExerciseId,\s*toExerciseId\)/,
+  )
+  assert.match(
+    source,
+    /applyPlanMutation\(\(currentPlan\)\s*=>\s*reorderExercisesInDay\(currentPlan,\s*dayKey,\s*fromExerciseId,\s*toExerciseId\)/,
+  )
+  assert.match(
+    source,
+    /onMoveExercise=\{\(fromId,\s*toId\)\s*=>\s*handleReorderExercise\(\s*column\.dayKey,\s*fromId,\s*toId\s*\)\s*\}/,
+  )
+})

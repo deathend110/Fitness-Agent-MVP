@@ -87,17 +87,21 @@ def ensure_vite_dev_server(app_url=APP_URL):
                     process.kill()
 
 
-def install_coach_backend_fetch_mock(context, config):
+def install_coach_backend_fetch_mock(context, config, persisted_state_key=None):
     # 在页面内接管 /api fetch，让流式分块、消息持久化和切页回页共用同一份状态。
     context.add_init_script(
         """
         (() => {
           const mockConfig = %s;
+          const persistedStateKey = %s;
           const nativeFetch = window.fetch.bind(window);
           const encoder = new TextEncoder();
           const jsonClone = (value) => JSON.parse(JSON.stringify(value ?? null));
-
-          const state = {
+          const persistedStateText = persistedStateKey
+            ? window.localStorage.getItem(persistedStateKey)
+            : null;
+          const existingState = persistedStateText ? JSON.parse(persistedStateText) : null;
+          const state = existingState ?? {
             profile: jsonClone(mockConfig.profile),
             weeklyPlan: jsonClone(mockConfig.weeklyPlan),
             dailyLog: jsonClone(mockConfig.dailyLog ?? {}),
@@ -119,6 +123,16 @@ def install_coach_backend_fetch_mock(context, config):
             nextMessageId: Number.isFinite(mockConfig.nextMessageId) ? mockConfig.nextMessageId : 1000,
           };
 
+          function persistState() {
+            if (!persistedStateKey) {
+              return;
+            }
+
+            // 仅在调用方显式要求时才跨 reload 持久化 mock 状态，避免放大 shared helper 默认语义。
+            window.localStorage.setItem(persistedStateKey, JSON.stringify(state));
+          }
+
+          persistState();
           window.__coachMockState = state;
 
           function jsonResponse(payload, status = 200) {
@@ -253,6 +267,7 @@ def install_coach_backend_fetch_mock(context, config):
 
             if (method === 'PUT' && path === '/profile') {
               state.profile = body ?? state.profile;
+              persistState();
               return jsonResponse(state.profile);
             }
 
@@ -262,6 +277,7 @@ def install_coach_backend_fetch_mock(context, config):
 
             if (method === 'PUT' && path === '/weekly-plan') {
               state.weeklyPlan = body ?? state.weeklyPlan;
+              persistState();
               return jsonResponse(state.weeklyPlan);
             }
 
@@ -295,6 +311,7 @@ def install_coach_backend_fetch_mock(context, config):
               state.sessions = [nextSession, ...state.sessions.filter((item) => item.id !== nextSession.id)];
               ensureSessionMessages(nextSession.id);
               ensureSessionDraft(nextSession.id);
+              persistState();
               return jsonResponse(nextSession);
             }
 
@@ -312,6 +329,7 @@ def install_coach_backend_fetch_mock(context, config):
                   ...ensureSessionDraft(sessionId),
                   ...(body ?? {}),
                 };
+                persistState();
                 return jsonResponse({ ok: true });
               }
             }
@@ -330,6 +348,7 @@ def install_coach_backend_fetch_mock(context, config):
                 content: replyScenario.text || '',
                 suggestion: replyScenario.proposal ?? replyScenario.suggestion ?? null,
               });
+              persistState();
               return jsonResponse(replyScenario);
             }
 
@@ -337,6 +356,7 @@ def install_coach_backend_fetch_mock(context, config):
               state.streamCalls.push(body);
               ensureUserMessage(sessionId, body);
               const scenario = state.streamScenarios.shift();
+              persistState();
 
               if (!scenario) {
                 return jsonResponse({ message: 'missing stream scenario' }, 500);
@@ -372,6 +392,7 @@ def install_coach_backend_fetch_mock(context, config):
                       suggestion: streamState.proposal ?? streamState.suggestion ?? null,
                     });
                     streamState.persisted = true;
+                    persistState();
                   }
 
                   function emitNext() {
@@ -408,6 +429,7 @@ def install_coach_backend_fetch_mock(context, config):
                           kind: event.kind,
                           text: typeof event.text === 'string' ? event.text : '',
                         });
+                        persistState();
                       }
 
                       if (event?.kind === 'done') {
@@ -445,11 +467,13 @@ def install_coach_backend_fetch_mock(context, config):
               if (commitResult?.plan) {
                 state.weeklyPlan = jsonClone(commitResult.plan);
               }
+              persistState();
               return jsonResponse(commitResult);
             }
 
             if (method === 'POST' && path === '/tools/plan/ignore') {
               state.ignoreCalls.push(body);
+              persistState();
               return jsonResponse({ ok: true });
             }
 
@@ -457,7 +481,10 @@ def install_coach_backend_fetch_mock(context, config):
           };
         })();
         """
-        % json.dumps(config, ensure_ascii=False)
+        % (
+            json.dumps(config, ensure_ascii=False),
+            json.dumps(persisted_state_key, ensure_ascii=False),
+        )
     )
 
 

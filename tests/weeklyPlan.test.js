@@ -6,6 +6,7 @@ import {
   getPlanDayTypes,
   getPlanDayTypeSuggestions,
   normalizeWeeklyPlan,
+  reorderExercisesInDay,
   removeExerciseFromDay,
   updateDayType,
   updateExerciseInDay,
@@ -190,6 +191,105 @@ test('removeExerciseFromDay 删除动作时不会影响其他日期', () => {
   assert.equal(nextPlan.Monday.exercises.some((exercise) => exercise.id === 'monday-rdl'), false)
   assert.equal(nextPlan.Monday.exercises.length, demoWeeklyPlan.Monday.exercises.length - 1)
   assert.equal(nextPlan.Friday.exercises.length, demoWeeklyPlan.Friday.exercises.length)
+})
+
+test('reorderExercisesInDay 会在同一天内调整动作顺序并保留动作内容', () => {
+  const nextPlan = reorderExercisesInDay(
+    demoWeeklyPlan,
+    'Monday',
+    'monday-rdl',
+    'monday-squat',
+  )
+
+  assert.deepEqual(
+    nextPlan.Monday.exercises.map((exercise) => exercise.id),
+    ['monday-rdl', 'monday-squat'],
+  )
+  assert.equal(nextPlan.Monday.exercises[0].name, demoWeeklyPlan.Monday.exercises[1].name)
+  assert.equal(nextPlan.Tuesday.exercises.length, demoWeeklyPlan.Tuesday.exercises.length)
+})
+
+test('reorderExercisesInDay 会把前面的动作移动到后方目标之前', () => {
+  const weeklyPlan = {
+    ...demoWeeklyPlan,
+    Monday: {
+      ...demoWeeklyPlan.Monday,
+      exercises: [
+        ...demoWeeklyPlan.Monday.exercises,
+        {
+          id: 'monday-leg-curl',
+          name: '腿弯举',
+          ref1RM: null,
+          pct: null,
+          kg: 35,
+          sets: 3,
+          reps: 12,
+          rpe: null,
+          note: '',
+        },
+      ],
+    },
+  }
+
+  const nextPlan = reorderExercisesInDay(
+    weeklyPlan,
+    'Monday',
+    'monday-squat',
+    'monday-leg-curl',
+  )
+
+  assert.deepEqual(
+    nextPlan.Monday.exercises.map((exercise) => exercise.id),
+    ['monday-rdl', 'monday-squat', 'monday-leg-curl'],
+  )
+  assert.equal(nextPlan.Monday.exercises[1].name, weeklyPlan.Monday.exercises[0].name)
+})
+
+test('reorderExercisesInDay 会保留 weekMeta 并在非法输入时返回原计划', () => {
+  const weeklyPlan = {
+    ...demoWeeklyPlan,
+    weekMeta: {
+      weekNumber: 23,
+      weekStart: '2026-06-01',
+      weekEnd: '2026-06-07',
+    },
+  }
+
+  const samePlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-squat', 'monday-squat')
+  const missingFromExerciseIdPlan = reorderExercisesInDay(weeklyPlan, 'Monday', '', 'monday-rdl')
+  const missingTargetPlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'missing', 'monday-rdl')
+  const missingToExerciseIdPlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-rdl', '')
+  const missingDestinationPlan = reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-rdl', 'missing')
+
+  assert.deepEqual(samePlan, weeklyPlan)
+  assert.deepEqual(missingFromExerciseIdPlan, weeklyPlan)
+  assert.deepEqual(missingTargetPlan, weeklyPlan)
+  assert.deepEqual(missingToExerciseIdPlan, weeklyPlan)
+  assert.deepEqual(missingDestinationPlan, weeklyPlan)
+  assert.deepEqual(
+    reorderExercisesInDay(weeklyPlan, 'Monday', 'monday-rdl', 'monday-squat').weekMeta,
+    weeklyPlan.weekMeta,
+  )
+})
+
+test('reorderExercisesInDay 遇到单动作日时不做变更', () => {
+  const weeklyPlan = {
+    ...demoWeeklyPlan,
+    Monday: {
+      ...demoWeeklyPlan.Monday,
+      exercises: [demoWeeklyPlan.Monday.exercises[0]],
+    },
+  }
+
+  assert.deepEqual(
+    reorderExercisesInDay(
+      weeklyPlan,
+      'Monday',
+      weeklyPlan.Monday.exercises[0].id,
+      'monday-rdl',
+    ),
+    weeklyPlan,
+  )
 })
 
 test('normalizeWeeklyPlan 会把旧结构动作升级为结构化字段并补齐 7 天', () => {

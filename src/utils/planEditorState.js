@@ -49,6 +49,18 @@ export function clearPlanEditorStateAfterDelete(currentState, dayKey, exerciseId
   return currentState
 }
 
+export function canReorderPlanDayExercises({ editingState, dayKey, exerciseCount }) {
+  if (!Number.isInteger(exerciseCount) || exerciseCount < 2) {
+    return false
+  }
+
+  if (editingState?.dayKey !== dayKey) {
+    return true
+  }
+
+  return false
+}
+
 const PLAN_EXERCISE_MENU_ACTIONS = [
   { key: 'edit', label: '编辑动作', tone: 'default' },
   { key: 'delete', label: '删除动作', tone: 'danger' },

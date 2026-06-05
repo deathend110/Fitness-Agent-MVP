@@ -33,6 +33,7 @@ import {
 import {
   addExerciseToDay,
   removeExerciseFromDay,
+  reorderExercisesInDay,
   updateDayType,
   updateExerciseInDay,
 } from '../utils/weeklyPlan.js'
@@ -202,6 +203,16 @@ function PlanTab({
         removeExerciseFromDay(currentPlan, dayKey, exerciseId),
       )
       setEditingState((current) => clearPlanEditorStateAfterDelete(current, dayKey, exerciseId))
+    } catch (error) {
+      setCycleActionMessage(error.message)
+    }
+  }
+
+  async function handleReorderExercise(dayKey, fromExerciseId, toExerciseId) {
+    try {
+      await applyPlanMutation((currentPlan) =>
+        reorderExercisesInDay(currentPlan, dayKey, fromExerciseId, toExerciseId),
+      )
     } catch (error) {
       setCycleActionMessage(error.message)
     }
@@ -484,6 +495,9 @@ function PlanTab({
                 onDeleteExercise={(exerciseId) => deleteExercise(column.dayKey, exerciseId)}
                 onDraftChange={updateDraft}
                 onEditExercise={(exercise) => handleStartEditExercise(column.dayKey, exercise)}
+                onMoveExercise={(fromId, toId) =>
+                  handleReorderExercise(column.dayKey, fromId, toId)
+                }
                 onSaveExercise={saveExercise}
                 onStartAdd={() => handleStartAddExercise(column.dayKey)}
                 oneRmOptions={oneRmOptions}

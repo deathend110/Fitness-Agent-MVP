@@ -1,8 +1,44 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
+import vm from 'node:vm'
 
 import { buildPlanExerciseCardModel } from '../src/utils/planExerciseCard.js'
+
+const planExerciseItemSource = fs.readFileSync(
+  new URL('../src/components/PlanExerciseItem.jsx', import.meta.url),
+  'utf8',
+)
+
+function loadPlanExerciseItemHelpers() {
+  const helperBlockMatch = planExerciseItemSource.match(
+    /export function isPlanExerciseNoDragTarget[\s\S]*?export function shouldBlockPlanExerciseDragStart[\s\S]*?\n}\n/,
+  )
+
+  assert.ok(helperBlockMatch, '未找到 PlanExerciseItem 拖拽 helper 定义')
+
+  const helperBlock = helperBlockMatch[0].replaceAll('export function', 'function')
+  const script = new vm.Script(
+    `${helperBlock}
+module.exports = {
+  isPlanExerciseNoDragTarget,
+  createPlanExerciseDragState,
+  shouldBlockPlanExerciseDragStart,
+}`,
+  )
+  const context = {
+    module: { exports: {} },
+    exports: {},
+  }
+
+  script.runInNewContext(context)
+  return context.module.exports
+}
+
+const {
+  createPlanExerciseDragState,
+  shouldBlockPlanExerciseDragStart,
+} = loadPlanExerciseItemHelpers()
 
 test('buildPlanExerciseCardModel 会把主项百分比动作整理成效果稿卡片模型', () => {
   const model = buildPlanExerciseCardModel(
@@ -143,8 +179,72 @@ test('buildPlanExerciseCardModel 会为长动作名和未命名动作保留稳�
 })
 
 test('PlanExerciseItem 会渲染固定重量来源说明与三点入口', () => {
-  const source = fs.readFileSync(new URL('../src/components/PlanExerciseItem.jsx', import.meta.url), 'utf8')
+  assert.match(planExerciseItemSource, /\{cardModel\.topMetaLabel \|\| '\\u00A0'\}/)
+  assert.match(planExerciseItemSource, /aria-label="更多操作"/)
+})
 
-  assert.match(source, /\{cardModel\.topMetaLabel \|\| '\\u00A0'\}/)
-  assert.match(source, /aria-label="更多操作"/)
+test('PlanExerciseItem 会保留菜单入口并为整卡拖拽添加隔离操作区', () => {
+  assert.match(planExerciseItemSource, /draggable=\{dragEnabled\}/)
+  assert.match(planExerciseItemSource, /onDragStart=/)
+  assert.match(planExerciseItemSource, /onDragEnter=/)
+  assert.match(planExerciseItemSource, /onDragOver=/)
+  assert.match(planExerciseItemSource, /onDrop=/)
+  assert.match(planExerciseItemSource, /data-no-drag/)
+  assert.match(planExerciseItemSource, /onPointerDownCapture=/)
+  assert.match(planExerciseItemSource, /aria-label="更多操作"/)
+})
+
+test('shouldBlockPlanExerciseDragStart 会在 no-drag 区域按下后阻断一次拖拽启动', () => {
+  const targetInMenu = {
+    closest(selector) {
+      return selector === '[data-no-drag="true"]' ? {} : null
+    },
+  }
+  const state = createPlanExerciseDragState()
+
+  assert.equal(state.dragBlocked, false)
+  assert.equal(state.markPointerDown(targetInMenu), true)
+  assert.equal(state.dragBlocked, true)
+  assert.equal(shouldBlockPlanExerciseDragStart(true, state), true)
+  assert.equal(state.dragBlocked, false)
+  assert.equal(shouldBlockPlanExerciseDragStart(true, state), false)
+  assert.equal(state.markPointerDown(null), false)
+  assert.equal(shouldBlockPlanExerciseDragStart(false, state), true)
+})
+
+test('shouldBlockPlanExerciseDragStart 在禁拖期间也会消费阻断状态，避免重新启用后误伤第一次正常拖拽', () => {
+  const targetInMenu = {
+    closest(selector) {
+      return selector === '[data-no-drag="true"]' ? {} : null
+    },
+  }
+  const state = createPlanExerciseDragState()
+
+  assert.equal(state.markPointerDown(targetInMenu), true)
+  assert.equal(state.dragBlocked, true)
+  assert.equal(shouldBlockPlanExerciseDragStart(false, state), true)
+  assert.equal(state.dragBlocked, false)
+  assert.equal(shouldBlockPlanExerciseDragStart(true, state), false)
+})
+
+test('createPlanExerciseDragState 会稳定维护拖拽悬停深度，避免卡片内部切换时闪烁', () => {
+  const state = createPlanExerciseDragState()
+
+  assert.equal(state.dropActive, false)
+  assert.equal(state.enter(true), true)
+  assert.equal(state.dropActive, true)
+  assert.equal(state.enter(true), true)
+  assert.equal(state.dropDepth, 2)
+  assert.equal(state.leave(), true)
+  assert.equal(state.dropActive, true)
+  assert.equal(state.dropDepth, 1)
+  assert.equal(state.leave(), false)
+  assert.equal(state.dropActive, false)
+  assert.equal(state.dropDepth, 0)
+  assert.equal(state.enter(false), false)
+  assert.equal(state.dropDepth, 0)
+  state.enter(true)
+  state.resetDrop()
+  assert.equal(state.dropActive, false)
+  assert.equal(state.dropDepth, 0)
 })
