@@ -4,7 +4,7 @@ import {
   clampNumericInputDraft,
   getNumericFieldGuardrail,
 } from '../../utils/numericFieldGuardrails.js'
-import CustomStrengthPlanEditor from './CustomStrengthPlanEditor.jsx'
+import CustomStrengthPlanDialog from './CustomStrengthPlanDialog.jsx'
 
 function liftLabelMap(liftKey) {
   if (liftKey === 'squat') {
@@ -54,6 +54,7 @@ function PlanSettingsPanel({
   settingsStatus,
 }) {
   const [fieldErrors, setFieldErrors] = useState({})
+  const [isCustomStrengthDialogOpen, setIsCustomStrengthDialogOpen] = useState(false)
 
   function updateCycleLiftField(liftKey, metricKey, nextValue) {
     const fieldKey = `plan.cycle.${liftKey}.${metricKey}`
@@ -325,17 +326,28 @@ function PlanSettingsPanel({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-slate-800">自定义力量周期计划</p>
             <p className="text-sm text-slate-500">
-              这里仅负责挂载自定义力量编辑器，具体草稿状态与创建动作仍由 PlanTab 编排。
+              默认保持收起，避免计划设置页被大块表单长期占用；具体草稿状态与创建动作仍由
+              PlanTab 编排。
             </p>
-            <p className="text-xs text-slate-500">提交动作：创建自定义力量周期计划</p>
+            <p className="text-xs text-slate-500">点击后以弹窗方式填写并创建自定义力量周期计划。</p>
           </div>
 
-          <CustomStrengthPlanEditor
+          <button
+            className="inline-flex rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50"
+            onClick={() => setIsCustomStrengthDialogOpen(true)}
+            type="button"
+          >
+            打开自定义力量周期计划弹窗
+          </button>
+
+          <CustomStrengthPlanDialog
             canCreate={settingsStatus.canCreateCycle}
             draft={customStrengthDraft}
             isSubmitting={isCycleSubmitting}
             onChange={onUpdateCustomStrengthDraft}
+            onClose={() => setIsCustomStrengthDialogOpen(false)}
             onSubmit={onCreateCustomStrengthCyclePlan}
+            open={isCustomStrengthDialogOpen}
           />
 
           {cycleActionMessage ? <p className="text-sm text-slate-500">{cycleActionMessage}</p> : null}

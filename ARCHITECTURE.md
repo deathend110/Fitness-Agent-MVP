@@ -97,6 +97,10 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 自定义力量周期计划的最小可提交流程编辑器
   - 当前支持名称、开始日期、周数、主项 TM 和周列表基础 day type 维护
 
+- [src/components/plan-settings/CustomStrengthPlanDialog.jsx](src/components/plan-settings/CustomStrengthPlanDialog.jsx)
+  - 复用 AI 设置弹窗的遮罩与居中布局样式
+  - 负责把自定义力量周期编辑器从计划设置页常驻区域移到默认收起的弹窗中
+
 - [src/components/plan-settings/CustomStrengthMainLiftEditor.jsx](src/components/plan-settings/CustomStrengthMainLiftEditor.jsx)
   - 负责主项 TM 输入
 
