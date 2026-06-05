@@ -90,7 +90,6 @@ test('buildSystemPrompt 在休息日会把训练消耗写成 0 且保留固定 k
   const weeklyPlan = {
     Sunday: { type: 'rest', exercises: [] },
     Monday: { type: 'rest', exercises: [] },
-    Tuesday: { type: 'rest', exercises: [] },
     Wednesday: { type: 'rest', exercises: [] },
     Thursday: { type: 'rest', exercises: [] },
     Friday: { type: 'rest', exercises: [] },
