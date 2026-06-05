@@ -40,8 +40,8 @@ function SectionCard({ children, eyebrow, title, description }) {
           {eyebrow}
         </p>
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold text-slate-100">{title}</h3>
-          <p className="max-w-2xl text-sm leading-6 text-slate-400">{description}</p>
+          <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
+          <p className="max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
         </div>
       </div>
       <div className="mt-6">{children}</div>
@@ -52,8 +52,8 @@ function SectionCard({ children, eyebrow, title, description }) {
 function FieldLabel({ label, hint }) {
   return (
     <div className="space-y-1">
-      <span className="text-sm font-medium text-slate-300">{label}</span>
-      {hint ? <p className="text-xs leading-5 text-slate-400">{hint}</p> : null}
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      {hint ? <p className="text-xs leading-5 text-slate-500">{hint}</p> : null}
     </div>
   )
 }
@@ -195,21 +195,24 @@ function ProfileTab({
         <div className="relative px-6 py-8 sm:px-8 sm:py-9">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_top_left,rgba(109,94,252,0.18),transparent_58%)]" />
           <div className="pointer-events-none absolute right-0 top-10 h-36 w-36 rounded-full bg-[radial-gradient(circle,rgba(56,189,248,0.18),transparent_68%)]" />
-          <div className="relative">
+          <div className="relative space-y-4">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-fitloop-orange">
               Profile
             </p>
-            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <h2 className="text-3xl font-semibold tracking-tight text-slate-100 sm:text-[2.15rem]">
-                  我的档案
-                </h2>
-                <p className="max-w-2xl text-sm leading-7 text-slate-400 sm:text-[15px]">
-                  记录当前身体数据、训练目标和力量基线，作为计划安排与 AI 教练判断的基础输入。
-                </p>
-              </div>
-              <div className="inline-flex items-center rounded-full border border-fitloop-orange/30 bg-white/75 px-4 py-2 text-sm text-fitloop-orange shadow-sm shadow-black/20 backdrop-blur">
+            <div className="space-y-3">
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-[2.15rem]">
+                我的档案
+              </h2>
+              <p className="max-w-2xl text-sm leading-7 text-slate-600 sm:text-[15px]">
+                记录当前身体数据、训练目标和力量基线，作为计划安排与 AI 教练判断的基础输入。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <div className="inline-flex items-center rounded-full border border-fitloop-orange/30 bg-white/80 px-4 py-2 text-sm text-fitloop-orange shadow-sm shadow-black/10 backdrop-blur">
                 当前数据会同步保存到本地与后端
+              </div>
+              <div className="inline-flex items-center rounded-full border border-fitloop-line bg-white/70 px-4 py-2 text-sm text-slate-600 shadow-sm shadow-black/5 backdrop-blur">
+                档案信息将参与计划与 AI 上下文构建
               </div>
             </div>
           </div>
@@ -220,11 +223,11 @@ function ProfileTab({
                 className={`rounded-[1.5rem] border p-5 shadow-lg backdrop-blur ${card.tone}`}
                 key={card.key}
               >
-                <p className="text-sm font-medium text-slate-400">{card.label}</p>
-                <p className="mt-3 text-[1.7rem] font-semibold tracking-tight text-slate-100">
+                <p className="text-sm font-medium text-slate-600">{card.label}</p>
+                <p className="mt-3 text-[1.7rem] font-semibold tracking-tight text-slate-900">
                   {card.value}
                 </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-400">
+                <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-500">
                   {card.hint}
                 </p>
               </article>

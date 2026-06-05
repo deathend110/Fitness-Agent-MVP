@@ -90,6 +90,17 @@ test('ProfileTab 源码为档案页定义浅色渐变头图和分色摘要卡', 
   assert.match(source, /border-amber-200\/80/)
 })
 
+test('ProfileTab 源码会把档案头图整理为单列文案流，并把同步提示收进标题下方标签行', () => {
+  const source = readFileSync('src/tabs/ProfileTab.jsx', 'utf-8')
+
+  assert.match(source, /space-y-4/)
+  assert.match(source, /flex flex-wrap gap-2/)
+  assert.match(source, /档案信息将参与计划与 AI 上下文构建/)
+  assert.doesNotMatch(source, /lg:flex-row/)
+  assert.doesNotMatch(source, /lg:items-end/)
+  assert.doesNotMatch(source, /lg:justify-between/)
+})
+
 test('ProfileTab 源码会复用共享 targetWeight 与 1RM 字段配置，而不是继续手写 step 和边界', () => {
   const source = readFileSync('src/tabs/ProfileTab.jsx', 'utf-8')
 
