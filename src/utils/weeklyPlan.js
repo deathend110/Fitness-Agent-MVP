@@ -246,7 +246,8 @@ export function reorderExercisesInDay(weeklyPlan, dayKey, fromExerciseId, toExer
   return updateDayPlan(weeklyPlan, dayKey, (dayPlan) => {
     const nextExercises = [...dayPlan.exercises]
     const [movedExercise] = nextExercises.splice(currentIndex, 1)
-    nextExercises.splice(targetIndex, 0, movedExercise)
+    const nextTargetIndex = currentIndex < targetIndex ? targetIndex - 1 : targetIndex
+    nextExercises.splice(nextTargetIndex, 0, movedExercise)
 
     return {
       ...dayPlan,
