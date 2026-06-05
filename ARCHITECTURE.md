@@ -64,6 +64,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/tabs/ProfileTab.jsx](src/tabs/ProfileTab.jsx)
   - 负责“我的档案”页的浅色渐变头图、结构化摘要卡、分组表单和折叠式数据管理区
   - 编辑基础档案、训练目标、目标体重和三大项 1RM
+  - 数值字段通过共享 guardrail 做输入阶段限制、字段级错误提示和 profile 回流时的中间态草稿保留
   - 通过页面层局部 UI 状态控制数据导入导出面板的展开与收起
 
 - [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
@@ -75,6 +76,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 管理按日训练类型、动作增删改和动作表单状态
   - 日期列头部直接整合星期、日期与动作统计，减少重复标签带来的竖向占用
   - 周期模式激活时展示的是 `effectiveWeeklyPlan` 对应的当前周投影
+  - 动作编辑器、周期 1RM/TM、周数编辑和自定义力量周期表单都复用共享数值 guardrail
 
 - [src/utils/cyclePlanForm.js](src/utils/cyclePlanForm.js)
   - 预制周期计划草稿与 payload 映射工具
@@ -82,6 +84,11 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/utils/customStrengthPlanForm.js](src/utils/customStrengthPlanForm.js)
   - 自定义力量周期计划草稿与 payload 映射工具
   - 负责默认 4 周草稿、主项 TM 紧凑化、`baseLifts / config.mainLifts` 同构约束，以及 `totalWeeks / weeks.length` 一致性
+
+- [src/utils/numericFieldGuardrails.js](src/utils/numericFieldGuardrails.js)
+  - 统一维护档案、今日日志、训练计划、周期计划和自定义力量周期计划的共享数值规则
+  - 输出 `min / max / step` 输入约束、字段错误文案、中间态草稿判定和保存前复核能力
+  - 负责拦截科学计数法、进制字面量、越界值和步长非法值
 
 - [src/components/plan-settings/CustomStrengthPlanEditor.jsx](src/components/plan-settings/CustomStrengthPlanEditor.jsx)
   - 自定义力量周期计划的最小可提交流程编辑器
@@ -96,6 +103,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/tabs/TodayTab.jsx](src/tabs/TodayTab.jsx)
   - 编辑今日日志
   - 按“身体数据 / 摄入记录 / 恢复与状态”组织录入区
+  - 数值字段通过共享 guardrail 在输入阶段即时限制并显示字段级提示
   - 读取 `effectiveWeeklyPlan` 生成今日计划摘要和复杂指标
   - 展示复杂指标、已保存摘要、今日计划和体重趋势图
 
@@ -127,6 +135,13 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - `profile / weeklyPlan / planSource / effectiveWeeklyPlan / activeCyclePlan / dailyLog` 的主数据源是后端 SQLite，本地只做缓存和降级展示
 - `chatHistory` 仍保留为前端兼容缓存，但真实会话与消息已由后端 `chat_session / chat_message` 承担
 - 活动会话 id、后台任务信息属于纯前端恢复状态，不写入后端业务表
+
+### 前端数值输入约束
+
+- 关键数值字段统一从 [src/utils/numericFieldGuardrails.js](src/utils/numericFieldGuardrails.js) 读取 `min / max / step`
+- 页面输入阶段统一通过 `clampNumericInputDraft()` 拦截明显异常值，并通过 `aria-invalid` 与字段下方文案显示错误
+- 档案页额外通过 `syncProfileDraft()` 保留 `165.`、`.5`、`1` 这类仍可继续输入到合法值的中间态草稿
+- 训练计划页的动作编辑器、周期设置、周数编辑和自定义力量周期设置都走同一套 guardrail，避免页面层手写边界常量
 
 ## 后端结构
 
@@ -301,6 +316,14 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 3. [src/api/backendClient.js](src/api/backendClient.js) 调用后端 CRUD 接口
 4. 后端写入 SQLite
 5. 前端同时保留 localStorage 缓存
+
+在写入前，前端还会先做一轮同源数值复核：
+
+- `draftToProfile()` 复核档案数值
+- `normalizeTodayLogEntry()` 复核今日日志数值
+- `buildExerciseSavePayload()` 复核动作重量、组数、次数、百分比和 RPE
+- `buildCreateCyclePlanPayload()` 复核周期 `1RM / TM`
+- `buildCreateCustomStrengthCyclePayload()` 复核主项 TM 和总周数
 
 ### 计划来源与有效周计划
 
