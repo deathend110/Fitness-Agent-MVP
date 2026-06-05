@@ -3,10 +3,6 @@ const PLAN_HEADER_LEGEND_ITEMS = [
   { label: '主项', tone: 'main' },
   { label: '辅项', tone: 'accessory' },
 ]
-const PLAN_HEADER_VIEW_TABS = [
-  { key: 'week', label: '周视图', isActive: true, isInteractive: false },
-  { key: 'list', label: '列表视图', isActive: false, isInteractive: false },
-]
 const PLAN_SETTINGS_BUTTON = {
   label: '计划设置',
   hint: '打开训练计划设置入口，切换手动计划与周期计划。',
@@ -168,7 +164,6 @@ export function buildPlanHeaderModel(options = {}) {
     weekRangeLabel: formatWeekRangeLabel(weekStartDate, weekEndDate),
     weekBadgeLabel: `第 ${weekMeta.weekNumber} 周`,
     legendItems: PLAN_HEADER_LEGEND_ITEMS,
-    viewTabs: PLAN_HEADER_VIEW_TABS,
     settingsButton: PLAN_SETTINGS_BUTTON,
   }
 }

@@ -126,25 +126,6 @@ function PlanHeaderToolbar({
       </div>
 
       <div className="flex min-w-0 items-center gap-6">
-        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-slate-100 p-0.5">
-          {headerModel.viewTabs.map((tab) => {
-            const tabClassName = tab.isActive
-              ? 'bg-white text-fitloop-orange shadow-sm shadow-black/20'
-              : 'text-slate-500'
-
-            return (
-              <button
-                aria-pressed={tab.isActive}
-                className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${tabClassName}`}
-                key={tab.key}
-                type="button"
-              >
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
-
         <PlanHeaderLegend items={headerModel.legendItems} />
       </div>
     </header>
