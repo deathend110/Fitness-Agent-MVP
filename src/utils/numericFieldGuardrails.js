@@ -147,6 +147,32 @@ export function validateNumericFieldValue(fieldKey, value) {
   return null
 }
 
+/**
+ * 识别应继续保留在受控输入里的中间草稿，避免父层同步时把用户尚未输完的小数形式抹掉。
+ */
+export function isTransientNumericFieldDraft(fieldKey, value) {
+  const guardrail = getNumericFieldGuardrail(fieldKey)
+  if (!guardrail || typeof value !== 'string') {
+    return false
+  }
+
+  const normalizedValue = value.trim()
+  if (!normalizedValue) {
+    return false
+  }
+
+  if (/^-?\d+\.$/.test(normalizedValue) || /^-?\.\d+$/.test(normalizedValue)) {
+    return true
+  }
+
+  const validationError = validateNumericFieldValue(fieldKey, normalizedValue)
+  if (!validationError) {
+    return false
+  }
+
+  return isReachableIntermediateValue(guardrail, normalizedValue)
+}
+
 function isReachableIntermediateValue(guardrail, nextValue) {
   if (typeof nextValue !== 'string') {
     return false
@@ -189,12 +215,24 @@ function isReachableIntermediateValue(guardrail, nextValue) {
     return true
   }
 
-  const digitBudget = `${Math.trunc(guardrail.max)}`.length - normalizedValue.length
-  if (digitBudget < 0) {
+  return canReachValidIntegerPrefix(normalizedValue, guardrail)
+}
+
+function canReachValidIntegerPrefix(normalizedValue, guardrail) {
+  if (!/^\d+$/.test(normalizedValue)) {
     return false
   }
 
-  return parsedValue * 10 ** digitBudget >= guardrail.min
+  const lowerBound = Math.max(0, Math.ceil(guardrail.min))
+  const upperBound = Math.floor(guardrail.max)
+
+  for (let candidate = lowerBound; candidate <= upperBound; candidate += 1) {
+    if (`${candidate}`.startsWith(normalizedValue)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 /**
