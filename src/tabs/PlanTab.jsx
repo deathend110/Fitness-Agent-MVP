@@ -429,6 +429,7 @@ function PlanTab({
   return (
     <div className="space-y-5">
       <PlanHeaderToolbar
+        canEditWeekNumber={!isCycleOverrideMode()}
         headerModel={headerModel}
         onPlanSettingsClick={openPlanSettings}
         onWeekNumberChange={handleWeekNumberChange}

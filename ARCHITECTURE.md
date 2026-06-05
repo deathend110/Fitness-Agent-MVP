@@ -70,6 +70,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [src/tabs/PlanTab.jsx](src/tabs/PlanTab.jsx)
   - 编辑一周训练计划
   - 通过“计划设置”分开管理“设置页当前选择模式”和“真实生效的计划来源”
+  - 手动计划模式允许直接编辑头部周次；周期模式下头部周次只读展示，避免用户修改后被当前周期周次回写覆盖
   - 管理预制周期草稿 `cycleDraft` 与自定义力量草稿 `customStrengthDraft`
   - 管理周期模板选择、开始日期、目标、`1RM / TM`、训练日、启用当前周期、生成下一周、确认推进和停止周期
   - 管理自定义力量周期计划的创建提交，并通过独立 payload builder 调用后端 `/api/cycles`

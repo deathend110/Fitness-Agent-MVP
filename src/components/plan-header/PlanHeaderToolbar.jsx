@@ -5,7 +5,12 @@ import {
   validateNumericFieldValue,
 } from '../../utils/numericFieldGuardrails.js'
 
-function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChange }) {
+function PlanHeaderToolbar({
+  headerModel,
+  onPlanSettingsClick,
+  onWeekNumberChange,
+  canEditWeekNumber = true,
+}) {
   const weekNumber = headerModel.weekMeta?.weekNumber ?? ''
   const weekNumberGuardrail = getNumericFieldGuardrail('plan.weekMeta.weekNumber')
   const [isEditingWeekNumber, setIsEditingWeekNumber] = useState(false)
@@ -29,6 +34,10 @@ function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChang
   }, [isEditingWeekNumber])
 
   function commitWeekNumber() {
+    if (!canEditWeekNumber) {
+      return
+    }
+
     const normalizedWeekNumber = `${weekNumberDraft}`.trim()
     const hasStrictIntegerFormat = /^\d+$/.test(normalizedWeekNumber)
     const validationError = hasStrictIntegerFormat
@@ -80,6 +89,7 @@ function PlanHeaderToolbar({ headerModel, onPlanSettingsClick, onWeekNumberChang
 
         <button
           className="inline-flex items-center gap-1 rounded-md bg-fitloop-orange/10 px-2.5 py-1 text-xs font-bold text-fitloop-orange transition hover:bg-fitloop-orange/15"
+          disabled={!canEditWeekNumber}
           onClick={() => setIsEditingWeekNumber(true)}
           type="button"
         >
