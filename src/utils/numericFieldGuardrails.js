@@ -55,6 +55,10 @@ function parseNumericDraft(value) {
     return null
   }
 
+  if (!/^-?\d+(\.\d*)?$/.test(normalizedValue) && !/^-?\.\d+$/.test(normalizedValue)) {
+    return Number.NaN
+  }
+
   const parsedValue = Number(normalizedValue)
   return Number.isFinite(parsedValue) ? parsedValue : Number.NaN
 }
@@ -128,7 +132,11 @@ export function validateNumericFieldValue(fieldKey, value) {
     return null
   }
 
-  if (!Number.isFinite(parsedValue) || parsedValue < guardrail.min || parsedValue > guardrail.max) {
+  if (!Number.isFinite(parsedValue)) {
+    return `${guardrail.label} 必须填写有效数字`
+  }
+
+  if (parsedValue < guardrail.min || parsedValue > guardrail.max) {
     return `${guardrail.label} 必须在 ${guardrail.min}-${guardrail.max}${guardrail.unit ?? ''} 之间`
   }
 

@@ -164,3 +164,55 @@ test('normalizeTodayLogEntry 会把 step 不合法的最终值清洗为 null，�
     trainingNotes: '',
   })
 })
+
+test('normalizeTodayLogEntry 会拒绝科学计数法和进制字面量，避免伪数字绕过今日日志保存', () => {
+  const entry = normalizeTodayLogEntry({
+    weight: '0b1010000',
+    kcal: '1e3',
+    protein: '180',
+    sleep: '7.5',
+    steps: '0x10',
+    fatigue: '4',
+    tdee: '2500',
+    trainingDone: true,
+    trainingNotes: 'ok',
+  })
+
+  assert.deepEqual(entry, {
+    weight: null,
+    kcal: null,
+    protein: 180,
+    sleep: 7.5,
+    steps: null,
+    fatigue: 4,
+    tdee: 2500,
+    trainingDone: true,
+    trainingNotes: 'ok',
+  })
+})
+
+test('normalizeTodayLogEntry 会接受尾随小数点格式，避免保存时误清空合法草稿', () => {
+  const entry = normalizeTodayLogEntry({
+    weight: '82.',
+    kcal: '2300',
+    protein: '180',
+    sleep: '7.',
+    steps: '9000',
+    fatigue: '4',
+    tdee: '2500',
+    trainingDone: false,
+    trainingNotes: '',
+  })
+
+  assert.deepEqual(entry, {
+    weight: 82,
+    kcal: 2300,
+    protein: 180,
+    sleep: 7,
+    steps: 9000,
+    fatigue: 4,
+    tdee: 2500,
+    trainingDone: false,
+    trainingNotes: '',
+  })
+})

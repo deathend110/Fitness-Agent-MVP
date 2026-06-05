@@ -1,71 +1,70 @@
+import { getNumericFieldInputProps } from './numericFieldGuardrails.js'
 import { formatDecimalDisplay } from './calc.js'
 
+function buildTodayLogField(baseField) {
+  return {
+    ...getNumericFieldInputProps(baseField.guardrailKey),
+    ...baseField,
+  }
+}
+
 const TODAY_LOG_FIELDS = {
-  weight: {
+  weight: buildTodayLogField({
     key: 'weight',
     guardrailKey: 'today.weight',
     label: '体重',
     inputMode: 'decimal',
-    step: '0.1',
     unit: 'kg',
     hint: '用于趋势统计与 BMI 推导',
-  },
-  kcal: {
+  }),
+  kcal: buildTodayLogField({
     key: 'kcal',
     guardrailKey: 'today.kcal',
     label: '热量',
     inputMode: 'numeric',
-    step: '1',
     unit: 'kcal',
     hint: '记录全天总摄入热量',
-  },
-  protein: {
+  }),
+  protein: buildTodayLogField({
     key: 'protein',
     guardrailKey: 'today.protein',
     label: '蛋白质',
     inputMode: 'numeric',
-    step: '1',
     unit: 'g',
     hint: '优先记录全天蛋白质总量',
-  },
-  sleep: {
+  }),
+  sleep: buildTodayLogField({
     key: 'sleep',
     guardrailKey: 'today.sleep',
     label: '睡眠',
     inputMode: 'decimal',
-    step: '0.1',
     unit: 'h',
     hint: '按昨晚到今早的有效睡眠时长记录',
-  },
-  steps: {
+  }),
+  steps: buildTodayLogField({
     key: 'steps',
     guardrailKey: 'today.steps',
     label: '步数',
     inputMode: 'numeric',
-    step: '1',
     unit: '步',
     hint: '用于活动量与 TDEE 判断',
-  },
-  tdee: {
+  }),
+  tdee: buildTodayLogField({
     key: 'tdee',
     guardrailKey: 'today.tdee',
     label: 'TDEE',
     inputMode: 'numeric',
-    step: '1',
     unit: 'kcal',
     hint: '当前实现支持手填或估算来源',
-  },
-  fatigue: {
+  }),
+  fatigue: buildTodayLogField({
     key: 'fatigue',
     guardrailKey: 'today.fatigue',
     label: '疲劳度',
     inputMode: 'numeric',
-    step: '1',
-    min: '1',
-    max: '5',
     unit: '/ 5',
     hint: '使用 1 到 5 记录主观疲劳程度',
-  },
+  }),
 }
 
 function formatSummaryValue(value, suffix = '') {

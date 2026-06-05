@@ -90,6 +90,19 @@ test('ProfileTab 源码为档案页定义浅色渐变头图和分色摘要卡', 
   assert.match(source, /border-amber-200\/80/)
 })
 
+test('ProfileTab 源码会复用共享 targetWeight 与 1RM 字段配置，而不是继续手写 step 和边界', () => {
+  const source = readFileSync('src/tabs/ProfileTab.jsx', 'utf-8')
+
+  assert.match(source, /targetWeightField/)
+  assert.match(source, /min=\{targetWeightField\.min\}/)
+  assert.match(source, /max=\{targetWeightField\.max\}/)
+  assert.match(source, /step=\{targetWeightField\.step\}/)
+  assert.match(source, /inputMode=\{targetWeightField\.inputMode\}/)
+  assert.match(source, /min=\{field\.min\}/)
+  assert.match(source, /max=\{field\.max\}/)
+  assert.match(source, /step=\{field\.step\}/)
+})
+
 test('PlanTab 源码包含手动周期设置流程的关键入口', () => {
   const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
 

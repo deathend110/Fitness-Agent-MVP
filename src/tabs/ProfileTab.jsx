@@ -6,6 +6,7 @@ import {
   oneRmFields,
   profileToDraft,
   sexOptions,
+  targetWeightField,
 } from '../utils/profileForm.js'
 import { buildProfileSummaryCards, getProfileFieldHint } from '../utils/profileView.js'
 
@@ -119,6 +120,8 @@ function ProfileTab({
         <FieldLabel hint={hint} label={field.label} />
         <input
           className="h-12 w-full rounded-2xl border border-fitloop-line bg-fitloop-panel-muted px-4 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
+          max={field.max}
+          min={field.min}
           inputMode={field.inputMode}
           onChange={(event) => updateNestedField('basic', field.key, event.target.value)}
           placeholder={hint || field.label}
@@ -201,11 +204,13 @@ function ProfileTab({
                 />
                 <input
                   className="h-12 w-full rounded-2xl border border-fitloop-line bg-fitloop-panel-muted px-4 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-                  inputMode="numeric"
+                  max={targetWeightField.max}
+                  min={targetWeightField.min}
+                  inputMode={targetWeightField.inputMode}
                   onChange={(event) => updateTopLevelField('targetWeight', event.target.value)}
                   placeholder="目标体重，单位 kg"
-                  step="0.1"
-                  type="number"
+                  step={targetWeightField.step}
+                  type={targetWeightField.type}
                   value={draft.targetWeight}
                 />
               </label>
@@ -244,11 +249,13 @@ function ProfileTab({
                 <FieldLabel hint="单位 kg" label={field.label} />
                 <input
                   className="h-12 w-full rounded-2xl border border-fitloop-line bg-fitloop-panel-muted px-4 text-[15px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
-                  inputMode="numeric"
+                  max={field.max}
+                  min={field.min}
+                  inputMode={field.inputMode}
                   onChange={(event) => updateNestedField('oneRM', field.key, event.target.value)}
                   placeholder="单位 kg"
-                  step="0.1"
-                  type="number"
+                  step={field.step}
+                  type={field.type}
                   value={draft.oneRM[field.key]}
                 />
               </label>

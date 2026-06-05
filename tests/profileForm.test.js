@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { basicFields, draftToProfile, oneRmFields } from '../src/utils/profileForm.js'
+import {
+  basicFields,
+  draftToProfile,
+  oneRmFields,
+  targetWeightField,
+} from '../src/utils/profileForm.js'
 
 test('draftToProfile 会把越界档案数值转成 null，避免非法业务值落库', () => {
   const profile = draftToProfile({
@@ -134,4 +139,112 @@ test('draftToProfile 会把 step 不合法的最终值转成 null，同时保留
     targetWeight: null,
     notes: '',
   })
+})
+
+test('draftToProfile 会拒绝科学计数法和进制字面量，避免伪数字绕过档案保存', () => {
+  const profile = draftToProfile({
+    basic: {
+      name: 'D',
+      sex: 'male',
+      age: '0x20',
+      height: '1e2',
+      weight: '0b1010000',
+      waist: '80',
+    },
+    oneRM: {
+      squat: '140',
+      bench: '0x64',
+      deadlift: '180',
+    },
+    goal: '',
+    targetWeight: '7e1',
+    notes: '',
+  })
+
+  assert.deepEqual(profile, {
+    basic: {
+      name: 'D',
+      sex: 'male',
+      age: null,
+      height: null,
+      weight: null,
+      waist: 80,
+    },
+    oneRM: {
+      squat: 140,
+      bench: null,
+      deadlift: 180,
+    },
+    goal: '',
+    targetWeight: null,
+    notes: '',
+  })
+})
+
+test('draftToProfile 会接受尾随小数点格式，避免保存时误清空合法档案草稿', () => {
+  const profile = draftToProfile({
+    basic: {
+      name: 'E',
+      sex: 'female',
+      age: '30',
+      height: '165.',
+      weight: '60.',
+      waist: '80.',
+    },
+    oneRM: {
+      squat: '140.',
+      bench: '100.',
+      deadlift: '180.',
+    },
+    goal: '',
+    targetWeight: '58.',
+    notes: '',
+  })
+
+  assert.deepEqual(profile, {
+    basic: {
+      name: 'E',
+      sex: 'female',
+      age: 30,
+      height: 165,
+      weight: 60,
+      waist: 80,
+    },
+    oneRM: {
+      squat: 140,
+      bench: 100,
+      deadlift: 180,
+    },
+    goal: '',
+    targetWeight: 58,
+    notes: '',
+  })
+})
+
+test('profileForm 的共享字段配置会暴露输入约束，避免页面层继续手写 step min max', () => {
+  assert.deepEqual(
+    basicFields
+      .filter((field) => field.type === 'number')
+      .map((field) => ({ key: field.key, min: field.min, max: field.max, step: field.step })),
+    [
+      { key: 'age', min: 12, max: 100, step: 1 },
+      { key: 'height', min: 120, max: 250, step: 0.1 },
+      { key: 'weight', min: 25, max: 300, step: 0.1 },
+      { key: 'waist', min: 40, max: 200, step: 0.1 },
+    ],
+  )
+
+  assert.deepEqual(
+    { min: targetWeightField.min, max: targetWeightField.max, step: targetWeightField.step },
+    { min: 25, max: 300, step: 0.1 },
+  )
+
+  assert.deepEqual(
+    oneRmFields.map((field) => ({ key: field.key, min: field.min, max: field.max, step: field.step })),
+    [
+      { key: 'squat', min: 10, max: 500, step: 0.1 },
+      { key: 'bench', min: 5, max: 400, step: 0.1 },
+      { key: 'deadlift', min: 10, max: 500, step: 0.1 },
+    ],
+  )
 })

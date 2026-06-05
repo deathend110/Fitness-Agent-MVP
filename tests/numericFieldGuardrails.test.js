@@ -69,6 +69,21 @@ test('validateNumericFieldValue 会拦截不符合 step 语义的最终值', () 
   )
 })
 
+test('validateNumericFieldValue 会拒绝科学计数法和进制字面量这类伪数字字符串', () => {
+  assert.equal(
+    validateNumericFieldValue('today.kcal', '1e3'),
+    '热量 必须填写有效数字',
+  )
+  assert.equal(
+    validateNumericFieldValue('profile.basic.age', '0x20'),
+    '年龄 必须填写有效数字',
+  )
+  assert.equal(
+    validateNumericFieldValue('today.weight', '0b1010000'),
+    '体重 必须填写有效数字',
+  )
+})
+
 test('共享规则表和单条规则对象是只读的，调用方无法篡改共享配置', () => {
   const originalMin = getNumericFieldGuardrail('plan.exercise.kg').min
 
@@ -171,7 +186,7 @@ test('clampNumericInputDraft 不会把点号中间态误放开到不支持该路
     }),
     {
       nextValue: '',
-      error: '深蹲 1RM 必须在 10-500kg 之间',
+      error: '深蹲 1RM 必须填写有效数字',
     },
   )
 })
