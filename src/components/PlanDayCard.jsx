@@ -57,7 +57,7 @@ function PlanDayCard({
   const visibleEmptyState = showNewExerciseEditor ? null : displayModel.emptyState
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex h-full min-w-0 flex-col" data-day-key={dayKey}>
       <PlanDayCardHeader
         dayLabel={dayLabel}
         displayModel={displayModel}

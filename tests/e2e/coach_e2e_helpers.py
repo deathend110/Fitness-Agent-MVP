@@ -96,8 +96,10 @@ def install_coach_backend_fetch_mock(context, config):
           const nativeFetch = window.fetch.bind(window);
           const encoder = new TextEncoder();
           const jsonClone = (value) => JSON.parse(JSON.stringify(value ?? null));
-
-          const state = {
+          const persistedKey = '__coachMockStatePersisted__';
+          const persistedStateText = window.localStorage.getItem(persistedKey);
+          const existingState = persistedStateText ? JSON.parse(persistedStateText) : null;
+          const state = existingState ?? {
             profile: jsonClone(mockConfig.profile),
             weeklyPlan: jsonClone(mockConfig.weeklyPlan),
             dailyLog: jsonClone(mockConfig.dailyLog ?? {}),
@@ -119,6 +121,12 @@ def install_coach_backend_fetch_mock(context, config):
             nextMessageId: Number.isFinite(mockConfig.nextMessageId) ? mockConfig.nextMessageId : 1000,
           };
 
+          function persistState() {
+            // 让 mock 后端在同一浏览器上下文的 reload 间保留最新状态，便于验证保存类回归。
+            window.localStorage.setItem(persistedKey, JSON.stringify(state));
+          }
+
+          persistState();
           window.__coachMockState = state;
 
           function jsonResponse(payload, status = 200) {
@@ -253,6 +261,7 @@ def install_coach_backend_fetch_mock(context, config):
 
             if (method === 'PUT' && path === '/profile') {
               state.profile = body ?? state.profile;
+              persistState();
               return jsonResponse(state.profile);
             }
 
@@ -262,6 +271,7 @@ def install_coach_backend_fetch_mock(context, config):
 
             if (method === 'PUT' && path === '/weekly-plan') {
               state.weeklyPlan = body ?? state.weeklyPlan;
+              persistState();
               return jsonResponse(state.weeklyPlan);
             }
 
@@ -295,6 +305,7 @@ def install_coach_backend_fetch_mock(context, config):
               state.sessions = [nextSession, ...state.sessions.filter((item) => item.id !== nextSession.id)];
               ensureSessionMessages(nextSession.id);
               ensureSessionDraft(nextSession.id);
+              persistState();
               return jsonResponse(nextSession);
             }
 
@@ -312,6 +323,7 @@ def install_coach_backend_fetch_mock(context, config):
                   ...ensureSessionDraft(sessionId),
                   ...(body ?? {}),
                 };
+                persistState();
                 return jsonResponse({ ok: true });
               }
             }
@@ -330,6 +342,7 @@ def install_coach_backend_fetch_mock(context, config):
                 content: replyScenario.text || '',
                 suggestion: replyScenario.proposal ?? replyScenario.suggestion ?? null,
               });
+              persistState();
               return jsonResponse(replyScenario);
             }
 
@@ -337,6 +350,7 @@ def install_coach_backend_fetch_mock(context, config):
               state.streamCalls.push(body);
               ensureUserMessage(sessionId, body);
               const scenario = state.streamScenarios.shift();
+              persistState();
 
               if (!scenario) {
                 return jsonResponse({ message: 'missing stream scenario' }, 500);
@@ -372,6 +386,7 @@ def install_coach_backend_fetch_mock(context, config):
                       suggestion: streamState.proposal ?? streamState.suggestion ?? null,
                     });
                     streamState.persisted = true;
+                    persistState();
                   }
 
                   function emitNext() {
@@ -408,6 +423,7 @@ def install_coach_backend_fetch_mock(context, config):
                           kind: event.kind,
                           text: typeof event.text === 'string' ? event.text : '',
                         });
+                        persistState();
                       }
 
                       if (event?.kind === 'done') {
@@ -445,11 +461,13 @@ def install_coach_backend_fetch_mock(context, config):
               if (commitResult?.plan) {
                 state.weeklyPlan = jsonClone(commitResult.plan);
               }
+              persistState();
               return jsonResponse(commitResult);
             }
 
             if (method === 'POST' && path === '/tools/plan/ignore') {
               state.ignoreCalls.push(body);
+              persistState();
               return jsonResponse({ ok: true });
             }
 

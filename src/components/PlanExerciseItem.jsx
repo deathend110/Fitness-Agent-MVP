@@ -162,6 +162,7 @@ function PlanExerciseItem({
       className={`rounded-xl border px-3 py-3 shadow-sm shadow-black/20 ${cardModel.cardClassName} ${
         dropActive ? 'ring-2 ring-fitloop-orange/70' : ''
       }`}
+      data-exercise-id={exercise.id}
       draggable={dragEnabled}
       onDragEnd={() => {
         dragStateRef.current.resetDrop()

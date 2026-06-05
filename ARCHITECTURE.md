@@ -74,6 +74,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 管理周期模板选择、开始日期、目标、`1RM / TM`、训练日、启用当前周期、生成下一周、确认推进和停止周期
   - 管理自定义力量周期计划的创建提交，并通过独立 payload builder 调用后端 `/api/cycles`
   - 管理按日训练类型、动作增删改和动作表单状态
+  - 训练计划页的动作排序由 `weeklyPlan[dayKey].exercises` 顺序直接驱动
+  - 同日动作拖拽排序统一通过 `reorderExercisesInDay()` 生成新计划，再交给 `applyPlanMutation()` 写回手动计划或周期 override
   - 日期列头部直接整合星期、日期与动作统计，减少重复标签带来的竖向占用
   - 周期模式激活时展示的是 `effectiveWeeklyPlan` 对应的当前周投影
   - 动作编辑器、周期 1RM/TM、周数编辑和自定义力量周期表单都复用共享数值 guardrail
