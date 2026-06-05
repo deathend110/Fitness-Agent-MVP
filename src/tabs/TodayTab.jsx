@@ -3,6 +3,7 @@ import DailyMetricsPanel from '../components/DailyMetricsPanel.jsx'
 import { getTodayKey, getTodayStr } from '../utils/calc.js'
 import { buildTodayLogPayload, readTodayLogForm } from '../utils/dailyLog.js'
 import { buildDailyMetricsPanelModel } from '../utils/dailyMetricsPanel.js'
+import { clampNumericInputDraft } from '../utils/numericFieldGuardrails.js'
 import { buildTodayLogFieldGroups, buildTodayLogSummaryItems } from '../utils/todayLogView.js'
 import { buildTodayPlanSummary } from '../utils/todayPlan.js'
 import { buildWeightChartModel } from '../utils/weightChart.js'
@@ -20,10 +21,12 @@ function TodayTab({ dailyLog, effectiveWeeklyPlan, profile, onDailyLogChange, on
   const fieldGroups = useMemo(() => buildTodayLogFieldGroups(), [])
   const summaryItems = useMemo(() => buildTodayLogSummaryItems(todayLog), [todayLog])
   const [draft, setDraft] = useState(() => readTodayLogForm(todayLog))
+  const [fieldErrors, setFieldErrors] = useState({})
   const [saveHint, setSaveHint] = useState('')
 
   useEffect(() => {
     setDraft(readTodayLogForm(todayLog))
+    setFieldErrors({})
     setSaveHint('')
   }, [todayDate, todayLog])
 
@@ -33,6 +36,20 @@ function TodayTab({ dailyLog, effectiveWeeklyPlan, profile, onDailyLogChange, on
       [key]: value,
     }))
     setSaveHint('')
+  }
+
+  function updateGuardedDraftField(field, value) {
+    const { nextValue, error } = clampNumericInputDraft({
+      fieldKey: field.guardrailKey,
+      previousValue: draft[field.key],
+      nextValue: value,
+    })
+
+    updateDraftField(field.key, nextValue)
+    setFieldErrors((current) => ({
+      ...current,
+      [field.guardrailKey]: error,
+    }))
   }
 
   function handleSubmit(event) {
@@ -120,17 +137,20 @@ function TodayTab({ dailyLog, effectiveWeeklyPlan, profile, onDailyLogChange, on
                             {field.unit ? <span className="ml-1 text-slate-400">({field.unit})</span> : null}
                           </span>
                           <input
+                            aria-invalid={Boolean(fieldErrors[field.guardrailKey])}
                             className="h-12 w-full rounded-2xl border border-fitloop-line bg-white px-4 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-fitloop-orange"
                             inputMode={field.inputMode}
                             max={field.max}
                             min={field.min}
-                            onChange={(event) => updateDraftField(field.key, event.target.value)}
+                            onChange={(event) => updateGuardedDraftField(field, event.target.value)}
                             placeholder="可留空"
                             step={field.step}
                             type="number"
                             value={draft[field.key]}
                           />
-                          <span className="text-xs leading-6 text-slate-400">{field.hint}</span>
+                          <span className="text-xs leading-6 text-slate-400">
+                            {fieldErrors[field.guardrailKey] ?? field.hint}
+                          </span>
                         </label>
                       ))}
                     </div>

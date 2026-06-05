@@ -7,6 +7,7 @@ import {
   validateNumericFieldValue,
   clampNumericInputDraft,
   getNumericFieldInputProps,
+  isTransientNumericFieldDraft,
 } from '../src/utils/numericFieldGuardrails.js'
 
 test('共享规则层会暴露完整规则表，并返回档案体重和动作 RPE 的范围配置', () => {
@@ -203,4 +204,12 @@ test('clampNumericInputDraft 会继续拦截明显不可能形成合法值的草
       error: '固定重量 必须在 0.5-500kg 之间',
     },
   )
+})
+
+test('isTransientNumericFieldDraft 会识别可继续输入的中间态和格式保留态', () => {
+  assert.equal(isTransientNumericFieldDraft('profile.basic.height', '1'), true)
+  assert.equal(isTransientNumericFieldDraft('profile.basic.height', '165.'), true)
+  assert.equal(isTransientNumericFieldDraft('plan.exercise.kg', '.5'), true)
+  assert.equal(isTransientNumericFieldDraft('profile.basic.height', '165'), false)
+  assert.equal(isTransientNumericFieldDraft('today.kcal', '1e3'), false)
 })

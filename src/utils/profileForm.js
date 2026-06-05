@@ -1,5 +1,6 @@
 import {
   getNumericFieldInputProps,
+  isTransientNumericFieldDraft,
   validateNumericFieldValue,
 } from './numericFieldGuardrails.js'
 
@@ -113,6 +114,35 @@ export function profileToDraft(profile) {
     goal: profile.goal ?? '',
     targetWeight: toInputValue(profile.targetWeight),
     notes: profile.notes ?? '',
+  }
+}
+
+/**
+ * 档案页是受控输入加上游持久态双向同步，外部 profile 回流时要保留用户仍在输入中的数字草稿。
+ */
+export function syncProfileDraft(currentDraft, profile) {
+  const nextDraft = profileToDraft(profile)
+  if (!currentDraft) {
+    return nextDraft
+  }
+
+  return {
+    basic: {
+      ...nextDraft.basic,
+      age: isTransientNumericFieldDraft('profile.basic.age', currentDraft.basic?.age) ? currentDraft.basic.age : nextDraft.basic.age,
+      height: isTransientNumericFieldDraft('profile.basic.height', currentDraft.basic?.height) ? currentDraft.basic.height : nextDraft.basic.height,
+      weight: isTransientNumericFieldDraft('profile.basic.weight', currentDraft.basic?.weight) ? currentDraft.basic.weight : nextDraft.basic.weight,
+      waist: isTransientNumericFieldDraft('profile.basic.waist', currentDraft.basic?.waist) ? currentDraft.basic.waist : nextDraft.basic.waist,
+    },
+    oneRM: {
+      ...nextDraft.oneRM,
+      squat: isTransientNumericFieldDraft('profile.oneRM.squat', currentDraft.oneRM?.squat) ? currentDraft.oneRM.squat : nextDraft.oneRM.squat,
+      bench: isTransientNumericFieldDraft('profile.oneRM.bench', currentDraft.oneRM?.bench) ? currentDraft.oneRM.bench : nextDraft.oneRM.bench,
+      deadlift: isTransientNumericFieldDraft('profile.oneRM.deadlift', currentDraft.oneRM?.deadlift) ? currentDraft.oneRM.deadlift : nextDraft.oneRM.deadlift,
+    },
+    goal: nextDraft.goal,
+    targetWeight: isTransientNumericFieldDraft('profile.targetWeight', currentDraft.targetWeight) ? currentDraft.targetWeight : nextDraft.targetWeight,
+    notes: nextDraft.notes,
   }
 }
 
