@@ -91,6 +91,10 @@ function isReachableIntermediateValue(guardrail, nextValue) {
     return false
   }
 
+  if (normalizedValue === '.') {
+    return guardrail.min < 1 && guardrail.step < 1
+  }
+
   // 小数输入过程中允许保留未完成的小数形式，后续可继续补齐到合法值。
   if (/^\d+\.$/.test(normalizedValue)) {
     const integerPart = Number.parseInt(normalizedValue.slice(0, -1), 10)

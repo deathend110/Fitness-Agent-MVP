@@ -108,6 +108,38 @@ test('clampNumericInputDraft 会放行最终可达合法值的中间态输入', 
     }),
     { nextValue: '0.', error: null },
   )
+
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'plan.exercise.kg',
+      previousValue: '',
+      nextValue: '.',
+    }),
+    { nextValue: '.', error: null },
+  )
+
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'plan.exercise.kg',
+      previousValue: '.',
+      nextValue: '.5',
+    }),
+    { nextValue: '.5', error: null },
+  )
+})
+
+test('clampNumericInputDraft 不会把点号中间态误放开到不支持该路径的字段', () => {
+  assert.deepEqual(
+    clampNumericInputDraft({
+      fieldKey: 'profile.oneRM.squat',
+      previousValue: '',
+      nextValue: '.',
+    }),
+    {
+      nextValue: '',
+      error: '深蹲 1RM 必须在 10-500kg 之间',
+    },
+  )
 })
 
 test('clampNumericInputDraft 会继续拦截明显不可能形成合法值的草稿', () => {
