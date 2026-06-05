@@ -1,4 +1,9 @@
+import { useState } from 'react'
 import CustomStrengthMainLiftEditor from './CustomStrengthMainLiftEditor.jsx'
+import {
+  clampNumericInputDraft,
+  getNumericFieldGuardrail,
+} from '../../utils/numericFieldGuardrails.js'
 import CustomStrengthWeekEditor from './CustomStrengthWeekEditor.jsx'
 import { shouldDisableCustomStrengthCreate } from './customStrengthPlanEditorState.js'
 
@@ -80,10 +85,23 @@ function updateWeekDayType(draft, targetWeekIndex, targetDayIndex, nextType) {
 }
 
 function CustomStrengthPlanEditor({ canCreate, draft, isSubmitting, onChange, onSubmit }) {
+  const [fieldError, setFieldError] = useState(null)
   const isCreateDisabled = shouldDisableCustomStrengthCreate({
     canCreate,
     isSubmitting,
   })
+  const totalWeeksGuardrail = getNumericFieldGuardrail('plan.custom.totalWeeks')
+
+  function updateTotalWeeks(nextValue) {
+    const { nextValue: guardedValue, error } = clampNumericInputDraft({
+      fieldKey: 'plan.custom.totalWeeks',
+      previousValue: `${draft.totalWeeks ?? ''}`,
+      nextValue,
+    })
+
+    setFieldError(error)
+    onChange(resizeWeeks(draft, guardedValue))
+  }
 
   return (
     <div className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
@@ -128,12 +146,18 @@ function CustomStrengthPlanEditor({ canCreate, draft, isSubmitting, onChange, on
         <label className="space-y-1 text-sm">
           <span className="font-medium text-slate-700">周数</span>
           <input
+            aria-invalid={Boolean(fieldError)}
             className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2"
-            min="1"
-            onChange={(event) => onChange(resizeWeeks(draft, event.target.value))}
+            max={totalWeeksGuardrail.max}
+            min={totalWeeksGuardrail.min}
+            onChange={(event) => updateTotalWeeks(event.target.value)}
+            step={totalWeeksGuardrail.step}
             type="number"
             value={draft.totalWeeks}
           />
+          <span className="text-xs text-slate-400">
+            {fieldError ?? `范围 ${totalWeeksGuardrail.min}-${totalWeeksGuardrail.max} 周`}
+          </span>
         </label>
       </div>
 

@@ -113,6 +113,19 @@ test('ProfileTab 源码会为档案数值输入挂接草稿拦截与字段级错
   assert.match(source, /targetWeightField\.guardrailKey|field\.guardrailKey/)
 })
 
+test('训练计划相关源码会为动作编辑器和周期设置挂接共享数值 guardrail', () => {
+  const exerciseEditorSource = readFileSync('src/components/ExerciseEditor.jsx', 'utf-8')
+  const planSettingsSource = readFileSync('src/components/plan-settings/PlanSettingsPanel.jsx', 'utf-8')
+  const customPlanSource = readFileSync('src/components/plan-settings/CustomStrengthPlanEditor.jsx', 'utf-8')
+  const customLiftSource = readFileSync('src/components/plan-settings/CustomStrengthMainLiftEditor.jsx', 'utf-8')
+
+  assert.match(exerciseEditorSource, /getNumericFieldGuardrail/)
+  assert.match(exerciseEditorSource, /aria-invalid=/)
+  assert.match(planSettingsSource, /getNumericFieldGuardrail/)
+  assert.match(customPlanSource, /getNumericFieldGuardrail/)
+  assert.match(customLiftSource, /getNumericFieldGuardrail/)
+})
+
 test('PlanTab 源码包含手动周期设置流程的关键入口', () => {
   const source = readFileSync('src/tabs/PlanTab.jsx', 'utf-8')
 

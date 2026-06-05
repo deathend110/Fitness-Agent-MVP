@@ -1,3 +1,9 @@
+import { useState } from 'react'
+import {
+  clampNumericInputDraft,
+  getNumericFieldGuardrail,
+} from '../../utils/numericFieldGuardrails.js'
+
 const MAIN_LIFT_FIELDS = [
   { key: 'squat', label: '深蹲 TM' },
   { key: 'bench', label: '卧推 TM' },
@@ -7,18 +13,31 @@ const MAIN_LIFT_FIELDS = [
 
 function CustomStrengthMainLiftEditor({ draft, onChange }) {
   const mainLifts = draft?.mainLifts ?? {}
+  const [fieldErrors, setFieldErrors] = useState({})
 
   function handleTmChange(liftKey, value) {
+    const fieldKey = `plan.custom.${liftKey}.tm`
+    const { nextValue, error } = clampNumericInputDraft({
+      fieldKey,
+      previousValue: mainLifts[liftKey]?.tm ?? '',
+      nextValue: value,
+    })
+
     onChange({
       ...draft,
       mainLifts: {
         ...mainLifts,
         [liftKey]: {
           ...(mainLifts[liftKey] ?? {}),
-          tm: value,
+          tm: nextValue,
         },
       },
     })
+
+    setFieldErrors((current) => ({
+      ...current,
+      [fieldKey]: error,
+    }))
   }
 
   return (
@@ -35,11 +54,19 @@ function CustomStrengthMainLiftEditor({ draft, onChange }) {
           <label className="space-y-1 text-sm" key={field.key}>
             <span className="font-medium text-slate-700">{field.label}</span>
             <input
+              aria-invalid={Boolean(fieldErrors[`plan.custom.${field.key}.tm`])}
               className="w-full rounded-lg border border-slate-200 px-3 py-2"
               onChange={(event) => handleTmChange(field.key, event.target.value)}
+              max={getNumericFieldGuardrail(`plan.custom.${field.key}.tm`)?.max}
+              min={getNumericFieldGuardrail(`plan.custom.${field.key}.tm`)?.min}
               placeholder="输入 TM"
+              step={getNumericFieldGuardrail(`plan.custom.${field.key}.tm`)?.step}
+              type="number"
               value={mainLifts[field.key]?.tm ?? ''}
             />
+            <span className="text-xs text-slate-400">
+              {fieldErrors[`plan.custom.${field.key}.tm`] ?? '输入 TM'}
+            </span>
           </label>
         ))}
       </div>
