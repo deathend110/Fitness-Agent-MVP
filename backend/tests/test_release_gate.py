@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from scripts.release_gate import (
+    REAL_PROVIDER_ENV_KEYS,
     build_release_gate_stages,
     collect_release_env_failures,
     write_release_summary,
@@ -84,3 +85,18 @@ def test_browser_core_stage_includes_release_core_journey_script() -> None:
 
     assert "uv run python tests/e2e/release_core_journey.py" in browser_core["commands"]
     assert Path("tests/e2e/release_core_journey.py").exists()
+
+
+def test_real_provider_stage_requires_explicit_env_keys() -> None:
+    assert REAL_PROVIDER_ENV_KEYS == (
+        "BACKEND_HOST",
+        "BACKEND_PORT",
+        "MODEL_PROVIDER_CONFIG_PATH",
+    )
+
+    real_provider_stage = next(
+        stage for stage in build_release_gate_stages() if stage["id"] == "real-provider-smoke"
+    )
+    assert real_provider_stage["commands"] == [
+        "uv run python tests/e2e/coach_real_provider_smoke.py"
+    ]

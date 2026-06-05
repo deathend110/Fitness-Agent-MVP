@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
 from typing import Iterable
+
+
+REAL_PROVIDER_ENV_KEYS = (
+    "BACKEND_HOST",
+    "BACKEND_PORT",
+    "MODEL_PROVIDER_CONFIG_PATH",
+)
 
 
 def build_release_gate_stages() -> list[dict]:
@@ -67,6 +75,13 @@ def build_release_gate_stages() -> list[dict]:
     ]
 
 
+def ensure_real_provider_env() -> None:
+    """真实 provider 冒烟前显式校验必要环境，避免把配置问题误判成业务失败。"""
+    missing_keys = [key for key in REAL_PROVIDER_ENV_KEYS if not os.environ.get(key)]
+    if missing_keys:
+        raise SystemExit("真实 provider 冒烟缺少环境变量: " + ", ".join(missing_keys))
+
+
 def collect_release_env_failures(
     repo_root: Path,
     required_paths: Iterable[str] | None = None,
@@ -100,6 +115,9 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
     """执行单个阶段并把命令输出落到对应日志文件。"""
     normalized_report_dir = Path(report_dir)
     normalized_report_dir.mkdir(parents=True, exist_ok=True)
+
+    if stage["id"] == "real-provider-smoke":
+        ensure_real_provider_env()
 
     started_at = time.time()
     stage_log_path = normalized_report_dir / f"{stage['id']}.log"
