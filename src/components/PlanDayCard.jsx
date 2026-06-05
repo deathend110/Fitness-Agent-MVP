@@ -43,10 +43,10 @@ function PlanDayCard({
   const showDayTypeSection = displayModel.showDayTypeSection !== false
   const dayTypeSectionVariant = displayModel.dayTypeSectionVariant ?? 'full'
   const isCompactRestDay = displayModel.layout === 'rest-compact'
-  // 仅在当前天没有编辑中动作且至少有两个动作时允许排序，避免把其他日期的编辑态误伤成全局禁拖。
+  // 仅在当前卡片真实处于编辑态时才把 dayKey 传入判定，避免其他日期编辑时把本日误判成禁拖。
   const dragEnabled = canReorderPlanDayExercises({
     editingState: {
-      dayKey,
+      dayKey: editingExerciseId ? dayKey : null,
       exerciseId: editingExerciseId,
     },
     dayKey,
