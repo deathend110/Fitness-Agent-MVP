@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from scripts.release_gate import collect_release_env_failures, write_release_summary
+from scripts.release_gate import (
+    build_release_gate_stages,
+    collect_release_env_failures,
+    write_release_summary,
+)
 
 
 def test_collect_release_env_failures_reports_missing_files(tmp_path: Path) -> None:
@@ -51,3 +55,24 @@ def test_write_release_summary_persists_stage_results(tmp_path: Path) -> None:
     assert '"id": "stage-frontend"' in payload
     assert '"status": "failed"' in payload
     assert '"command": "uv run pytest backend/tests -q"' in payload
+
+
+def test_build_release_gate_stages_keeps_required_order() -> None:
+    stages = build_release_gate_stages()
+    stage_ids = [stage["id"] for stage in stages]
+
+    assert stage_ids == [
+        "env-bootstrap",
+        "frontend-quality",
+        "backend-quality",
+        "browser-core",
+        "real-provider-smoke",
+        "browser-stress",
+    ]
+
+    assert stages[0]["commands"] == [
+        "npm install",
+        "uv sync",
+        "uv run python -m playwright install chromium",
+        "uv run python scripts/check-release-env.py",
+    ]
