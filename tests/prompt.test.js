@@ -7,10 +7,25 @@ import {
   demoWeeklyPlan,
 } from '../src/utils/defaultData.js'
 import { getTodayKey } from '../src/utils/calc.js'
+import { buildDailyMetricsSummary } from '../src/utils/dailyMetrics.js'
 import { buildSystemPrompt } from '../src/utils/prompt.js'
 
 test('buildSystemPrompt 会把档案、计划、日志与结构化指标注入到 prompt 文本', () => {
-  const prompt = buildSystemPrompt(demoProfile, demoWeeklyPlan, demoDailyLog)
+  const referenceDate = {
+    todayStr: Object.keys(demoDailyLog).sort().at(-1),
+  }
+  const summary = buildDailyMetricsSummary(
+    demoProfile,
+    demoWeeklyPlan,
+    demoDailyLog,
+    referenceDate,
+  )
+  const prompt = buildSystemPrompt(
+    demoProfile,
+    demoWeeklyPlan,
+    demoDailyLog,
+    referenceDate,
+  )
 
   assert.match(prompt, /基本信息/)
   assert.match(prompt, /三大项 1RM/)
@@ -30,8 +45,14 @@ test('buildSystemPrompt 会把档案、计划、日志与结构化指标注入�
   assert.match(prompt, /深蹲第三组没有按计划完成/)
   assert.match(prompt, /当日 TDEE：\d+kcal/)
   assert.match(prompt, /"bmi":\s*25\.9/)
-  assert.match(prompt, /"calorie_delta_kcal":\s*-39/)
-  assert.match(prompt, /"calorie_status":\s*"balanced"/)
+  assert.match(
+    prompt,
+    new RegExp(`"calorie_delta_kcal":\\s*${summary.calorie.delta}`),
+  )
+  assert.match(
+    prompt,
+    new RegExp(`"calorie_status":\\s*"${summary.calorie.status}"`),
+  )
   assert.match(prompt, /"protein_g_per_kg":\s*2/)
   assert.match(prompt, /"protein_status":\s*"met"/)
   assert.match(prompt, /"sleep_hours":\s*6\.8/)
