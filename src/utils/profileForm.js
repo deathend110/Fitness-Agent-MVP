@@ -1,3 +1,5 @@
+import { validateNumericFieldValue } from './numericFieldGuardrails.js'
+
 export const sexOptions = [
   { value: 'male', label: '男' },
   { value: 'female', label: '女' },
@@ -31,6 +33,26 @@ export function toNumberOrNull(value) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/**
+ * 保存前再次复核数值边界，避免绕过页面输入限制后把异常业务值写入档案。
+ */
+export function toGuardedNumberOrNull(fieldKey, value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const normalizedValue = `${value}`.trim()
+  if (!normalizedValue) {
+    return null
+  }
+
+  if (validateNumericFieldValue(fieldKey, normalizedValue)) {
+    return null
+  }
+
+  return toNumberOrNull(normalizedValue)
+}
+
 export function profileToDraft(profile) {
   return {
     basic: {
@@ -57,18 +79,18 @@ export function draftToProfile(draft) {
     basic: {
       name: draft.basic.name,
       sex: draft.basic.sex,
-      age: toNumberOrNull(draft.basic.age),
-      height: toNumberOrNull(draft.basic.height),
-      weight: toNumberOrNull(draft.basic.weight),
-      waist: toNumberOrNull(draft.basic.waist),
+      age: toGuardedNumberOrNull('profile.basic.age', draft.basic.age),
+      height: toGuardedNumberOrNull('profile.basic.height', draft.basic.height),
+      weight: toGuardedNumberOrNull('profile.basic.weight', draft.basic.weight),
+      waist: toGuardedNumberOrNull('profile.basic.waist', draft.basic.waist),
     },
     oneRM: {
-      squat: toNumberOrNull(draft.oneRM.squat),
-      bench: toNumberOrNull(draft.oneRM.bench),
-      deadlift: toNumberOrNull(draft.oneRM.deadlift),
+      squat: toGuardedNumberOrNull('profile.oneRM.squat', draft.oneRM.squat),
+      bench: toGuardedNumberOrNull('profile.oneRM.bench', draft.oneRM.bench),
+      deadlift: toGuardedNumberOrNull('profile.oneRM.deadlift', draft.oneRM.deadlift),
     },
     goal: draft.goal,
-    targetWeight: toNumberOrNull(draft.targetWeight),
+    targetWeight: toGuardedNumberOrNull('profile.targetWeight', draft.targetWeight),
     notes: draft.notes,
   }
 }

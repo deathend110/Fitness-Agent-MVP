@@ -3,6 +3,7 @@ import { formatDecimalDisplay } from './calc.js'
 const TODAY_LOG_FIELDS = {
   weight: {
     key: 'weight',
+    guardrailKey: 'today.weight',
     label: '体重',
     inputMode: 'decimal',
     step: '0.1',
@@ -11,6 +12,7 @@ const TODAY_LOG_FIELDS = {
   },
   kcal: {
     key: 'kcal',
+    guardrailKey: 'today.kcal',
     label: '热量',
     inputMode: 'numeric',
     step: '1',
@@ -19,6 +21,7 @@ const TODAY_LOG_FIELDS = {
   },
   protein: {
     key: 'protein',
+    guardrailKey: 'today.protein',
     label: '蛋白质',
     inputMode: 'numeric',
     step: '1',
@@ -27,6 +30,7 @@ const TODAY_LOG_FIELDS = {
   },
   sleep: {
     key: 'sleep',
+    guardrailKey: 'today.sleep',
     label: '睡眠',
     inputMode: 'decimal',
     step: '0.1',
@@ -35,6 +39,7 @@ const TODAY_LOG_FIELDS = {
   },
   steps: {
     key: 'steps',
+    guardrailKey: 'today.steps',
     label: '步数',
     inputMode: 'numeric',
     step: '1',
@@ -43,6 +48,7 @@ const TODAY_LOG_FIELDS = {
   },
   tdee: {
     key: 'tdee',
+    guardrailKey: 'today.tdee',
     label: 'TDEE',
     inputMode: 'numeric',
     step: '1',
@@ -51,6 +57,7 @@ const TODAY_LOG_FIELDS = {
   },
   fatigue: {
     key: 'fatigue',
+    guardrailKey: 'today.fatigue',
     label: '疲劳度',
     inputMode: 'numeric',
     step: '1',
