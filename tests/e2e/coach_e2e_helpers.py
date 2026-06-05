@@ -87,17 +87,19 @@ def ensure_vite_dev_server(app_url=APP_URL):
                     process.kill()
 
 
-def install_coach_backend_fetch_mock(context, config):
+def install_coach_backend_fetch_mock(context, config, persisted_state_key=None):
     # 在页面内接管 /api fetch，让流式分块、消息持久化和切页回页共用同一份状态。
     context.add_init_script(
         """
         (() => {
           const mockConfig = %s;
+          const persistedStateKey = %s;
           const nativeFetch = window.fetch.bind(window);
           const encoder = new TextEncoder();
           const jsonClone = (value) => JSON.parse(JSON.stringify(value ?? null));
-          const persistedKey = '__coachMockStatePersisted__';
-          const persistedStateText = window.localStorage.getItem(persistedKey);
+          const persistedStateText = persistedStateKey
+            ? window.localStorage.getItem(persistedStateKey)
+            : null;
           const existingState = persistedStateText ? JSON.parse(persistedStateText) : null;
           const state = existingState ?? {
             profile: jsonClone(mockConfig.profile),
@@ -122,8 +124,12 @@ def install_coach_backend_fetch_mock(context, config):
           };
 
           function persistState() {
-            // 让 mock 后端在同一浏览器上下文的 reload 间保留最新状态，便于验证保存类回归。
-            window.localStorage.setItem(persistedKey, JSON.stringify(state));
+            if (!persistedStateKey) {
+              return;
+            }
+
+            // 仅在调用方显式要求时才跨 reload 持久化 mock 状态，避免放大 shared helper 默认语义。
+            window.localStorage.setItem(persistedStateKey, JSON.stringify(state));
           }
 
           persistState();
@@ -475,7 +481,10 @@ def install_coach_backend_fetch_mock(context, config):
           };
         })();
         """
-        % json.dumps(config, ensure_ascii=False)
+        % (
+            json.dumps(config, ensure_ascii=False),
+            json.dumps(persisted_state_key, ensure_ascii=False),
+        )
     )
 
 

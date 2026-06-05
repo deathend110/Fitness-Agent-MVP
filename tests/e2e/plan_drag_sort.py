@@ -6,6 +6,8 @@ from playwright.sync_api import expect, sync_playwright
 
 from coach_e2e_helpers import APP_URL, ensure_vite_dev_server, install_coach_backend_fetch_mock
 
+PERSISTED_STATE_KEY = "fitloop:e2e:plan-drag-sort:mock-state"
+
 
 PROFILE = {
     "basic": {
@@ -118,7 +120,11 @@ def run_app_with_mock_state():
             browser = playwright.chromium.launch(headless=True)
             context = browser.new_context(viewport={"width": 1440, "height": 960})
             seed_local_storage(context)
-            install_coach_backend_fetch_mock(context, build_mock_config())
+            install_coach_backend_fetch_mock(
+                context,
+                build_mock_config(),
+                persisted_state_key=PERSISTED_STATE_KEY,
+            )
             page = context.new_page()
 
             try:
@@ -135,17 +141,33 @@ def test_plan_drag_sort_persists():
 
         monday_cards = page.locator('[data-day-key="Monday"] [data-exercise-id]')
         expect(monday_cards).to_have_count(2, timeout=10_000)
-        before_first = monday_cards.nth(0).text_content()
-        before_second = monday_cards.nth(1).text_content()
+        before_ids = monday_cards.evaluate_all(
+            "(nodes) => nodes.map((node) => node.getAttribute('data-exercise-id'))"
+        )
+        assert before_ids == ["monday-squat", "monday-rdl"]
+        expect(monday_cards.nth(0)).to_contain_text("深蹲", timeout=10_000)
+        expect(monday_cards.nth(1)).to_contain_text("罗马尼亚硬拉", timeout=10_000)
 
         page.drag_and_drop(
             '[data-day-key="Monday"] [data-exercise-id="monday-rdl"]',
             '[data-day-key="Monday"] [data-exercise-id="monday-squat"]',
         )
 
-        expect(monday_cards.nth(0)).to_contain_text(before_second.strip(), timeout=10_000)
-        after_first = monday_cards.nth(0).text_content()
-        assert after_first == before_second
+        page.wait_for_function(
+            """
+            () => {
+              const ids = Array.from(
+                document.querySelectorAll('[data-day-key="Monday"] [data-exercise-id]')
+              ).map((node) => node.getAttribute('data-exercise-id'));
+              return ids.join(',') === 'monday-rdl,monday-squat';
+            }
+            """
+        )
+        after_ids = monday_cards.evaluate_all(
+            "(nodes) => nodes.map((node) => node.getAttribute('data-exercise-id'))"
+        )
+        assert after_ids == ["monday-rdl", "monday-squat"]
+        expect(monday_cards.nth(0)).to_contain_text("罗马尼亚硬拉", timeout=10_000)
         page.wait_for_function(
             """
             () => window.__coachMockState.weeklyPlan?.Monday?.exercises?.[0]?.id === 'monday-rdl'
@@ -154,14 +176,13 @@ def test_plan_drag_sort_persists():
 
         page.reload()
         page.get_by_role("button", name="训练计划").click()
-        expect(page.locator('[data-day-key="Monday"] [data-exercise-id]')).to_have_count(
-            2,
-            timeout=10_000,
+        reloaded_cards = page.locator('[data-day-key="Monday"] [data-exercise-id]')
+        expect(reloaded_cards).to_have_count(2, timeout=10_000)
+        reloaded_ids = reloaded_cards.evaluate_all(
+            "(nodes) => nodes.map((node) => node.getAttribute('data-exercise-id'))"
         )
-        reloaded_first = (
-            page.locator('[data-day-key="Monday"] [data-exercise-id]').nth(0).text_content()
-        )
-        assert reloaded_first == before_second
+        assert reloaded_ids == ["monday-rdl", "monday-squat"]
+        expect(reloaded_cards.nth(0)).to_contain_text("罗马尼亚硬拉", timeout=10_000)
 
 
 def main():
