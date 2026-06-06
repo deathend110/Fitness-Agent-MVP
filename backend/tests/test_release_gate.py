@@ -118,3 +118,12 @@ def test_browser_stress_stage_requires_task5_script_suite() -> None:
     assert Path("tests/e2e/today_log_fuzz.py").exists()
     assert Path("tests/e2e/plan_mutation_stress.py").exists()
     assert Path("tests/e2e/navigation_recovery_stress.py").exists()
+
+
+def test_release_gate_docs_cover_commands_and_architecture() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8").lower()
+    architecture = Path("ARCHITECTURE.md").read_text(encoding="utf-8").lower()
+
+    assert "run-release-gate.ps1" in readme
+    assert "coach_real_provider_smoke.py" in readme
+    assert "release gate" in architecture or "发布门禁" in architecture
