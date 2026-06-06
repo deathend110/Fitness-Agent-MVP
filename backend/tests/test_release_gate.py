@@ -1,10 +1,15 @@
 from pathlib import Path
+import subprocess
+import sys
+from types import SimpleNamespace
 
 from scripts.release_gate import (
     REAL_PROVIDER_ENV_KEYS,
     build_release_gate_stages,
     collect_release_env_failures,
+    decode_process_output,
     main,
+    run_stage,
     write_release_summary,
 )
 
@@ -142,3 +147,42 @@ def test_main_reads_sys_argv_when_no_explicit_argv(monkeypatch) -> None:
 
     assert main() == 7
     assert captured["called"] is True
+
+
+def test_check_release_env_script_runs_from_repo_root() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "scripts/check-release-env.py"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "release gate env check passed" in result.stdout.lower()
+
+
+def test_decode_process_output_handles_none_and_bytes() -> None:
+    assert decode_process_output(None) == ""
+    assert decode_process_output("plain text") == "plain text"
+    assert decode_process_output("中文输出".encode("utf-8")) == "中文输出"
+
+
+def test_run_stage_writes_log_even_when_process_output_is_missing(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "scripts.release_gate.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=None, stderr=""),
+    )
+
+    stage = {
+        "id": "fake-stage",
+        "label": "假阶段",
+        "commands": ["echo noop"],
+    }
+    result = run_stage(stage, tmp_path, tmp_path / "reports")
+    log_path = tmp_path / "reports" / "fake-stage.log"
+
+    assert result["status"] == "passed"
+    assert log_path.exists()
+    assert "$ echo noop" in log_path.read_text(encoding="utf-8")

@@ -112,6 +112,23 @@ def write_release_summary(report_dir: Path, stage_rows: list[dict]) -> Path:
     return summary_path
 
 
+def decode_process_output(payload: bytes | str | None) -> str:
+    """兼容 Windows 下命令输出编码波动，统一把日志内容收敛成可写入文本。"""
+    if payload is None:
+        return ""
+
+    if isinstance(payload, str):
+        return payload
+
+    for encoding in ("utf-8", "gbk", sys.getdefaultencoding()):
+        try:
+            return payload.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+
+    return payload.decode("utf-8", errors="replace")
+
+
 def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
     """执行单个阶段并把命令输出落到对应日志文件。"""
     normalized_report_dir = Path(report_dir)
@@ -130,12 +147,11 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
                 command,
                 cwd=repo_root,
                 shell=True,
-                text=True,
                 capture_output=True,
             )
             handle.write(f"$ {command}\n")
-            handle.write(completed.stdout)
-            handle.write(completed.stderr)
+            handle.write(decode_process_output(completed.stdout))
+            handle.write(decode_process_output(completed.stderr))
 
             if completed.returncode != 0:
                 return {

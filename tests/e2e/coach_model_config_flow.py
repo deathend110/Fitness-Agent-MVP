@@ -2,6 +2,7 @@ import json
 from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
+from coach_e2e_helpers import ensure_vite_dev_server
 
 
 APP_URL = "http://127.0.0.1:5173"
@@ -280,117 +281,118 @@ def main():
     save_calls = []
     stream_calls = []
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 1440, "height": 900})
-        seed_local_storage(context)
-        page = context.new_page()
-        install_backend_mock(page, test_calls, discover_calls, save_calls, stream_calls)
+    with ensure_vite_dev_server(APP_URL) as app_url:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            seed_local_storage(context)
+            page = context.new_page()
+            install_backend_mock(page, test_calls, discover_calls, save_calls, stream_calls)
 
-        page.goto(APP_URL)
-        page.get_by_role("button", name="AI 教练").click()
-        wait_until_coach_ready(page)
+            page.goto(app_url)
+            page.get_by_role("button", name="AI 教练").click()
+            wait_until_coach_ready(page)
 
-        page.get_by_role("button", name="模型设置").click()
-        dialog = page.get_by_text("模型与供应商设置")
-        expect(dialog).to_be_visible(timeout=10_000)
+            page.get_by_role("button", name="模型设置").click()
+            dialog = page.get_by_text("模型与供应商设置")
+            expect(dialog).to_be_visible(timeout=10_000)
 
-        page.get_by_label("展示名称").nth(0).fill("DeepSeek 实验账号")
-        page.get_by_label("Base URL").nth(0).fill("https://api.deepseek.com/v1")
-        page.get_by_label("接口协议").nth(0).select_option("responses")
-        page.get_by_label("Base URL 拼接模式").nth(0).select_option("append_v1")
-        page.get_by_label("API Key").nth(0).fill("sk-new-deepseek")
+            page.get_by_label("展示名称").nth(0).fill("DeepSeek 实验账号")
+            page.get_by_label("Base URL").nth(0).fill("https://api.deepseek.com/v1")
+            page.get_by_label("接口协议").nth(0).select_option("responses")
+            page.get_by_label("Base URL 拼接模式").nth(0).select_option("append_v1")
+            page.get_by_label("API Key").nth(0).fill("sk-new-deepseek")
 
-        page.get_by_role("button", name="测试连接").nth(0).click()
-        expect(page.get_by_text("连接成功，发现 2 个模型。")).to_be_visible(timeout=10_000)
+            page.get_by_role("button", name="测试连接").nth(0).click()
+            expect(page.get_by_text("连接成功，发现 2 个模型。")).to_be_visible(timeout=10_000)
 
-        page.get_by_role("button", name="发现模型").nth(0).click()
-        expect(page.get_by_text("已同步 2 个远端模型，可按需关闭不想展示的项。")).to_be_visible(
-            timeout=10_000
-        )
+            page.get_by_role("button", name="发现模型").nth(0).click()
+            expect(page.get_by_text("已同步 2 个远端模型，可按需关闭不想展示的项。")).to_be_visible(
+                timeout=10_000
+            )
 
-        page.get_by_label("默认模型").select_option(DISCOVERED_DEFAULT_MODEL)
-        page.get_by_role("button", name="保存配置").click()
+            page.get_by_label("默认模型").select_option(DISCOVERED_DEFAULT_MODEL)
+            page.get_by_role("button", name="保存配置").click()
 
-        expect(page.get_by_text("模型与供应商设置")).not_to_be_visible(timeout=10_000)
-        expect(page.locator("#coach-model-select")).to_have_value(DISCOVERED_DEFAULT_MODEL)
-        expect(page.locator("header")).to_contain_text("DeepSeek 实验账号 / DeepSeek V4 Pro")
+            expect(page.get_by_text("模型与供应商设置")).not_to_be_visible(timeout=10_000)
+            expect(page.locator("#coach-model-select")).to_have_value(DISCOVERED_DEFAULT_MODEL)
+            expect(page.locator("header")).to_contain_text("DeepSeek 实验账号 / DeepSeek V4 Pro")
 
-        page.locator("textarea").fill(USER_MESSAGE)
-        page.get_by_role("button", name="发送消息").click()
-        expect(page.get_by_text(REPLY_TEXT, exact=True)).to_be_visible(timeout=10_000)
+            page.locator("textarea").fill(USER_MESSAGE)
+            page.get_by_role("button", name="发送消息").click()
+            expect(page.get_by_text(REPLY_TEXT, exact=True)).to_be_visible(timeout=10_000)
 
-        assert len(test_calls) == 1, test_calls
-        assert test_calls[0] == {
-            "id": "provider_deepseek_main",
-            "type": "openai_compatible",
-            "label": "DeepSeek 实验账号",
-            "enabled": True,
-            "baseUrl": "https://api.deepseek.com/v1",
-            "selectedModels": [
-                {
-                    "remoteId": "deepseek-v4-flash",
-                    "label": "DeepSeek V4 Flash",
-                    "enabled": True,
-                }
-            ],
-            "wireApi": "responses",
-            "apiPathMode": "append_v1",
-            "apiKey": "sk-new-deepseek",
-        }, test_calls
+            assert len(test_calls) == 1, test_calls
+            assert test_calls[0] == {
+                "id": "provider_deepseek_main",
+                "type": "openai_compatible",
+                "label": "DeepSeek 实验账号",
+                "enabled": True,
+                "baseUrl": "https://api.deepseek.com/v1",
+                "selectedModels": [
+                    {
+                        "remoteId": "deepseek-v4-flash",
+                        "label": "DeepSeek V4 Flash",
+                        "enabled": True,
+                    }
+                ],
+                "wireApi": "responses",
+                "apiPathMode": "append_v1",
+                "apiKey": "sk-new-deepseek",
+            }, test_calls
 
-        assert len(discover_calls) == 1, discover_calls
-        assert discover_calls[0] == test_calls[0], discover_calls
+            assert len(discover_calls) == 1, discover_calls
+            assert discover_calls[0] == test_calls[0], discover_calls
 
-        assert len(save_calls) == 1, save_calls
-        assert save_calls[0] == {
-            "version": 1,
-            "defaultModelRef": DISCOVERED_DEFAULT_MODEL,
-            "providers": [
-                {
-                    "id": "provider_deepseek_main",
-                    "type": "openai_compatible",
-                    "label": "DeepSeek 实验账号",
-                    "enabled": True,
-                    "baseUrl": "https://api.deepseek.com/v1",
-                    "selectedModels": [
-                        {
-                            "remoteId": "deepseek-v4-flash",
-                            "label": "DeepSeek V4 Flash",
-                            "enabled": True,
-                        },
-                        {
-                            "remoteId": "deepseek-v4-pro",
-                            "label": "DeepSeek V4 Pro",
-                            "enabled": True,
-                        },
-                    ],
-                    "wireApi": "responses",
-                    "apiPathMode": "append_v1",
-                    "apiKey": "sk-new-deepseek",
-                },
-                {
-                    "id": "provider_gemini_main",
-                    "type": "gemini_native",
-                    "label": "Gemini 主账号",
-                    "enabled": True,
-                    "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
-                    "selectedModels": [
-                        {
-                            "remoteId": "gemini-2.5-flash",
-                            "label": "Gemini 2.5 Flash",
-                            "enabled": True,
-                        }
-                    ],
-                },
-            ],
-        }, save_calls
+            assert len(save_calls) == 1, save_calls
+            assert save_calls[0] == {
+                "version": 1,
+                "defaultModelRef": DISCOVERED_DEFAULT_MODEL,
+                "providers": [
+                    {
+                        "id": "provider_deepseek_main",
+                        "type": "openai_compatible",
+                        "label": "DeepSeek 实验账号",
+                        "enabled": True,
+                        "baseUrl": "https://api.deepseek.com/v1",
+                        "selectedModels": [
+                            {
+                                "remoteId": "deepseek-v4-flash",
+                                "label": "DeepSeek V4 Flash",
+                                "enabled": True,
+                            },
+                            {
+                                "remoteId": "deepseek-v4-pro",
+                                "label": "DeepSeek V4 Pro",
+                                "enabled": True,
+                            },
+                        ],
+                        "wireApi": "responses",
+                        "apiPathMode": "append_v1",
+                        "apiKey": "sk-new-deepseek",
+                    },
+                    {
+                        "id": "provider_gemini_main",
+                        "type": "gemini_native",
+                        "label": "Gemini 主账号",
+                        "enabled": True,
+                        "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+                        "selectedModels": [
+                            {
+                                "remoteId": "gemini-2.5-flash",
+                                "label": "Gemini 2.5 Flash",
+                                "enabled": True,
+                            }
+                        ],
+                    },
+                ],
+            }, save_calls
 
-        assert len(stream_calls) == 1, stream_calls
-        assert stream_calls[0]["model"] == DISCOVERED_DEFAULT_MODEL, stream_calls
-        assert stream_calls[0]["userInput"] == USER_MESSAGE, stream_calls
+            assert len(stream_calls) == 1, stream_calls
+            assert stream_calls[0]["model"] == DISCOVERED_DEFAULT_MODEL, stream_calls
+            assert stream_calls[0]["userInput"] == USER_MESSAGE, stream_calls
 
-        browser.close()
+            browser.close()
 
 
 if __name__ == "__main__":
