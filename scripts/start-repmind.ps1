@@ -23,7 +23,9 @@ $killScript = Join-Path $repoRoot 'scripts\kill-repmind.ps1'
 $logDir = Join-Path $repoRoot 'tests\reports\local-launch'
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $frontendLog = Join-Path $logDir "frontend-$timestamp.log"
+$frontendErrorLog = Join-Path $logDir "frontend-$timestamp.err.log"
 $backendLog = Join-Path $logDir "backend-$timestamp.log"
+$backendErrorLog = Join-Path $logDir "backend-$timestamp.err.log"
 $backendProcess = $null
 $frontendProcess = $null
 
@@ -108,7 +110,7 @@ try {
         'backend.run_dev_server'
     ) -WorkingDirectory $repoRoot `
       -RedirectStandardOutput $backendLog `
-      -RedirectStandardError $backendLog `
+      -RedirectStandardError $backendErrorLog `
       -WindowStyle Hidden `
       -PassThru
 
@@ -123,7 +125,7 @@ try {
         '--strictPort'
     ) -WorkingDirectory $repoRoot `
       -RedirectStandardOutput $frontendLog `
-      -RedirectStandardError $frontendLog `
+      -RedirectStandardError $frontendErrorLog `
       -WindowStyle Hidden `
       -PassThru
 
