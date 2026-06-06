@@ -396,7 +396,7 @@ function App() {
         {hasVisitedCoachTab ? (
           <div
             aria-hidden={activeTab.id !== 'coach'}
-            className={activeTab.id === 'coach' ? '' : 'hidden'}
+            className={activeTab.id === 'coach' ? 'h-full min-h-0' : 'hidden h-full min-h-0'}
           >
             {renderCoachTab()}
           </div>
