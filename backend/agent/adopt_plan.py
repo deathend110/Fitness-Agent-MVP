@@ -134,7 +134,8 @@ def build_day_plan_replace_proposal(
     summary: str,
     day_plan: dict[str, Any],
 ) -> StoredPlanProposal:
-    normalized_day_plan = normalize_day_plan_payload(day_plan)
+    current_day_plan = _read_day_plan(current_plan, day)
+    normalized_day_plan = normalize_day_plan_payload(day_plan, current_day_plan=current_day_plan)
     validation = validate_day_plan_replace(current_plan, day, normalized_day_plan)
     proposal_id = uuid4().hex
     proposal = StoredPlanProposal(
@@ -359,9 +360,81 @@ def _normalize_tier(exercise: dict[str, Any], note: str) -> str:
     return "accessory"
 
 
-def _normalize_planned_exercise(exercise: dict[str, Any], fallback_id: Any = None) -> dict[str, Any]:
+def _build_load_conflict_note(note: str, *, pct: int | float | None, kg: int | float | None) -> str:
+    if pct is None or kg is None:
+        return note
+    conflict_text = f"负重冲突：同时收到 pct={pct} 与 kg={kg}，已按百分比处方保留 pct。"
+    if conflict_text in note:
+        return note
+    if note:
+        return f"{note}；{conflict_text}"
+    return conflict_text
+
+
+def _build_inherit_load_note(note: str) -> str:
+    inherit_text = "未提供新负重，暂沿用原计划负重。"
+    if inherit_text in note:
+        return note
+    if note:
+        return f"{note}；{inherit_text}"
+    return inherit_text
+
+
+def _normalize_load_mode(
+    *,
+    explicit_load_mode: str,
+    explicit_ref_1rm: str | None,
+    explicit_pct: int | float | None,
+    explicit_kg: int | float | None,
+    inherited_load_mode: str,
+    inherited_ref_1rm: str | None,
+    inherited_pct: int | float | None,
+    inherited_kg: int | float | None,
+) -> str:
+    if explicit_load_mode == "percentage":
+        return "percentage"
+    if explicit_load_mode == "fixed":
+        return "fixed"
+    if explicit_ref_1rm or explicit_pct is not None:
+        return "percentage"
+    if explicit_kg is not None:
+        return "fixed"
+    if inherited_load_mode == "percentage":
+        return "percentage"
+    if inherited_load_mode == "fixed":
+        return "fixed"
+    if inherited_ref_1rm or inherited_pct is not None:
+        return "percentage"
+    if inherited_kg is not None:
+        return "fixed"
+    return "fixed"
+
+
+def _has_any_explicit_load_signal(
+    *,
+    explicit_load_mode: str,
+    explicit_ref_1rm: str | None,
+    explicit_pct: int | float | None,
+    explicit_kg: int | float | None,
+) -> bool:
+    return bool(
+        explicit_load_mode
+        or explicit_ref_1rm
+        or explicit_pct is not None
+        or explicit_kg is not None
+    )
+
+
+def _normalize_planned_exercise(
+    exercise: dict[str, Any],
+    fallback_id: Any = None,
+    inherited_exercise: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     template = deepcopy(exercise.get("template")) if _is_plain_object(exercise.get("template")) else {}
     instance = deepcopy(exercise.get("instance")) if _is_plain_object(exercise.get("instance")) else {}
+    inherited = inherited_exercise if _is_plain_object(inherited_exercise) else {}
+    inherited_template = deepcopy(inherited.get("template")) if _is_plain_object(inherited.get("template")) else {}
+    inherited_instance = deepcopy(inherited.get("instance")) if _is_plain_object(inherited.get("instance")) else {}
     name = _read_string_value(exercise.get("name"), exercise.get("exerciseName"))
     sets = _read_number_value(exercise.get("sets"), template.get("sets"))
     reps = _read_number_value(exercise.get("reps"))
@@ -376,9 +449,20 @@ def _normalize_planned_exercise(exercise: dict[str, Any], fallback_id: Any = Non
     normalized_reps = reps
     if normalized_reps is None and time_value is not None:
         normalized_reps = time_value
-    ref_1rm = _read_string_value(exercise.get("ref1RM"), template.get("ref1RM")) or None
-    pct = _read_number_value(exercise.get("pct"), instance.get("pct"))
-    kg = _read_number_value(exercise.get("kg"), instance.get("kg"))
+    explicit_load_mode = _read_string_value(exercise.get("loadMode"), template.get("loadMode"))
+    inherited_load_mode = _read_string_value(inherited.get("loadMode"), inherited_template.get("loadMode"))
+    explicit_ref_1rm = _read_string_value(exercise.get("ref1RM"), template.get("ref1RM")) or None
+    inherited_ref_1rm = _read_string_value(inherited.get("ref1RM"), inherited_template.get("ref1RM")) or None
+    explicit_pct = _read_number_value(exercise.get("pct"), instance.get("pct"))
+    inherited_pct = _read_number_value(inherited.get("pct"), inherited_instance.get("pct"))
+    explicit_kg = _read_number_value(exercise.get("kg"), instance.get("kg"))
+    inherited_kg = _read_number_value(inherited.get("kg"), inherited_instance.get("kg"))
+    should_inherit_full_load_block = not _has_any_explicit_load_signal(
+        explicit_load_mode=explicit_load_mode,
+        explicit_ref_1rm=explicit_ref_1rm,
+        explicit_pct=explicit_pct,
+        explicit_kg=explicit_kg,
+    )
     rpe = _normalize_rpe(_read_number_value(exercise.get("rpe"), instance.get("rpe")))
     reps_text = (
         str(normalized_reps)
@@ -388,11 +472,38 @@ def _normalize_planned_exercise(exercise: dict[str, Any], fallback_id: Any = Non
             or (str(normalized_reps) if normalized_reps is not None else "")
         )
     )
-    load_mode = (
-        "percentage"
-        if ref_1rm or _read_string_value(template.get("loadMode")) == "percentage"
-        else "fixed"
+    load_mode = _normalize_load_mode(
+        explicit_load_mode=explicit_load_mode,
+        explicit_ref_1rm=explicit_ref_1rm,
+        explicit_pct=explicit_pct,
+        explicit_kg=explicit_kg,
+        inherited_load_mode=inherited_load_mode,
+        inherited_ref_1rm=inherited_ref_1rm,
+        inherited_pct=inherited_pct,
+        inherited_kg=inherited_kg,
     )
+    ref_1rm = explicit_ref_1rm or inherited_ref_1rm if load_mode == "percentage" else None
+    pct = (
+        explicit_pct
+        if explicit_pct is not None
+        else inherited_pct
+        if should_inherit_full_load_block and load_mode == "percentage"
+        else None
+    )
+    kg = (
+        explicit_kg
+        if explicit_kg is not None
+        else inherited_kg
+        if should_inherit_full_load_block and load_mode == "fixed"
+        else None
+    )
+    note = _build_load_conflict_note(
+        note,
+        pct=explicit_pct if load_mode == "percentage" else None,
+        kg=explicit_kg if explicit_pct is not None and explicit_kg is not None else None,
+    )
+    if should_inherit_full_load_block and inherited and (ref_1rm or pct is not None or kg is not None):
+        note = _build_inherit_load_note(note)
 
     # 采纳链路需要保留旧版扁平字段和新版 template/instance，避免 AI 后续建议找不到字段。
     normalized = {
@@ -507,11 +618,46 @@ def _normalize_change_value(
     return True, new_value, ""
 
 
-def normalize_day_plan_payload(day_plan: dict[str, Any] | None) -> dict[str, Any]:
+def _read_day_plan(weekly_plan: dict[str, Any] | None, day: str | None) -> dict[str, Any]:
+    safe_plan = weekly_plan if _is_plain_object(weekly_plan) else {}
+    day_key = day.strip() if isinstance(day, str) else ""
+    return safe_plan.get(day_key) if _is_plain_object(safe_plan.get(day_key)) else {}
+
+
+def _build_unique_inherited_lookup(current_day_plan: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    safe_day_plan = current_day_plan if _is_plain_object(current_day_plan) else {}
+    current_exercises = safe_day_plan.get("exercises") if isinstance(safe_day_plan.get("exercises"), list) else []
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for exercise in current_exercises:
+        if not _is_plain_object(exercise):
+            continue
+        exercise_name = _read_string_value(exercise.get("name"))
+        if not exercise_name:
+            continue
+        grouped.setdefault(exercise_name, []).append(exercise)
+
+    # 只对唯一命中的动作开放继承，避免同名多动作时把错误负重静默带进 proposal/commit。
+    return {
+        exercise_name: matches[0]
+        for exercise_name, matches in grouped.items()
+        if len(matches) == 1
+    }
+
+
+def normalize_day_plan_payload(
+    day_plan: dict[str, Any] | None,
+    *,
+    current_day_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     safe_day_plan = day_plan if _is_plain_object(day_plan) else {}
     safe_exercises = safe_day_plan.get("exercises") if isinstance(safe_day_plan.get("exercises"), list) else []
+    inherited_lookup = _build_unique_inherited_lookup(current_day_plan)
     normalized_exercises = [
-        _normalize_planned_exercise(exercise, exercise.get("id") or f"proposal-{index}")
+        _normalize_planned_exercise(
+            exercise,
+            exercise.get("id") or f"proposal-{index}",
+            inherited_lookup.get(_read_string_value(exercise.get("name"), exercise.get("exerciseName"))),
+        )
         for index, exercise in enumerate(safe_exercises)
         if _is_plain_object(exercise)
     ]
@@ -613,7 +759,8 @@ def adopt_day_plan_replace(
             f"未找到 {day_key or '目标日期'} 的训练计划，无法采纳该建议。",
         )
 
-    normalized_day_plan = normalize_day_plan_payload(day_plan)
+    current_day_plan = _read_day_plan(safe_plan, day_key)
+    normalized_day_plan = normalize_day_plan_payload(day_plan, current_day_plan=current_day_plan)
     if not isinstance(normalized_day_plan.get("exercises"), list):
         return _build_failure_result(safe_plan, "单日训练计划格式不合法，无法采纳该建议。")
 

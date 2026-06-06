@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 import json
 from typing import Any, Callable, Literal
 
@@ -68,6 +69,11 @@ class DayPlanExerciseArgs(BaseModel):
     name: str
     # tier 加枚举，弱模型不会随意造值
     tier: Literal["main", "accessory", "warmup"] = "accessory"
+    # 显式暴露负重模式相关字段，降低模型在替换整日计划时遗漏处方来源的概率。
+    loadMode: Literal["percentage", "fixed"] | None = None
+    ref1RM: str | None = None
+    pct: float | None = None
+    kg: float | None = None
     sets: float | None = None
     reps: float | None = None
     rpe: float | None = None
@@ -100,7 +106,7 @@ class RegisteredTool:
     handler: Callable[[AsyncSession, BaseModel], Any]
 
     def to_tool_definition(self) -> dict[str, Any]:
-        schema = self.args_model.model_json_schema()
+        schema = _inline_local_schema_refs(self.args_model.model_json_schema())
         schema["additionalProperties"] = False
         schema.setdefault("required", list(schema.get("properties", {}).keys()))
         return {
@@ -368,3 +374,34 @@ async def _maybe_await(value: Any) -> Any:
     if hasattr(value, "__await__"):
         return await value
     return value
+
+
+def _inline_local_schema_refs(schema: dict[str, Any]) -> dict[str, Any]:
+    defs = schema.get("$defs", {}) if isinstance(schema, dict) else {}
+    inlined = _resolve_schema_refs(schema, defs)
+    if isinstance(inlined, dict):
+        inlined.pop("$defs", None)
+    return inlined if isinstance(inlined, dict) else {}
+
+
+def _resolve_schema_refs(node: Any, defs: dict[str, Any]) -> Any:
+    if isinstance(node, list):
+        return [_resolve_schema_refs(item, defs) for item in node]
+
+    if not isinstance(node, dict):
+        return node
+
+    if "$ref" in node:
+        ref_name = str(node["$ref"]).split("/")[-1]
+        resolved = deepcopy(defs.get(ref_name, {}))
+        merged = {
+            **resolved,
+            **{key: value for key, value in node.items() if key != "$ref"},
+        }
+        return _resolve_schema_refs(merged, defs)
+
+    return {
+        key: _resolve_schema_refs(value, defs)
+        for key, value in node.items()
+        if key != "$defs"
+    }

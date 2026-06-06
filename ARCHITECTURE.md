@@ -262,6 +262,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [backend/agent/tool_calling.py](backend/agent/tool_calling.py)
   - 定义工具注册表、工具参数模型和工具处理函数
+  - `propose_day_plan_replace` 的嵌套动作 schema 会显式暴露 `loadMode / ref1RM / pct / kg`
+  - 工具定义导出前会内联本地 `$ref`，避免上游直接消费 schema 时丢失嵌套动作字段
 
 - [backend/agent/tool_loop.py](backend/agent/tool_loop.py)
   - 负责多轮工具回环执行
@@ -270,6 +272,8 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - [backend/agent/adopt_plan.py](backend/agent/adopt_plan.py)
   - 负责构建 proposal、commit proposal、ignore proposal
+  - `day_plan_replace` 的 proposal 卡生成与最终 commit 共用同一条归一化链路，避免卡片展示和落库结果不一致
+  - 当新卡整块缺失负重字段时，只在“当前日存在唯一同名动作”时沿用原负重块；若已显式给出部分新负重信号，则只补来源字段，不静默继承旧 `pct/kg`
 
 - [backend/agent/response_parser.py](backend/agent/response_parser.py)
   - 负责从模型回复中解析纯文本与 suggestion
@@ -427,10 +431,14 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 1. 模型返回待确认 proposal 卡
 2. 前端点击采纳
 3. [src/api/backendClient.js](src/api/backendClient.js) 中的 `commitPlanChange()` 调用 `POST /api/tools/plan/commit`
-4. 后端校验 proposal 并根据当前来源选择写回位置：
+4. 后端先按与 proposal 卡相同的规则归一化 `day_plan_replace`：
+   - 整块缺失负重字段时，仅对唯一同名动作允许沿用原负重
+   - 已显式给出 `pct/kg/loadMode/ref1RM` 中任一信号时，只补来源字段，不偷带旧数值
+   - 同名动作不唯一时不做静默继承
+5. 后端校验 proposal 并根据当前来源选择写回位置：
    - `manual`：写回 `weekly_plan_day`
    - `cycle`：写回当前周期周快照的 `override_plan`
-5. 同步把相关 assistant 消息中的 suggestion 状态更新为 `committed`
+6. 同步把相关 assistant 消息中的 suggestion 状态更新为 `committed`
 
 ## 存储结构
 

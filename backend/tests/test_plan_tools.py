@@ -103,6 +103,36 @@ def build_weekly_plan() -> dict:
     }
 
 
+def build_ambiguous_name_weekly_plan() -> dict:
+    plan = build_weekly_plan()
+    plan["Monday"]["exercises"] = [
+        {
+            "id": "sq-top",
+            "name": "深蹲",
+            "tier": "main",
+            "template": {"loadMode": "percentage", "ref1RM": "squat", "sets": 1, "repsText": "1"},
+            "instance": {"pct": 0.85, "rpe": 8.5},
+            "ref1RM": "squat",
+            "pct": 0.85,
+            "rpe": 8.5,
+            "sets": 1,
+            "reps": 1,
+        },
+        {
+            "id": "sq-backoff",
+            "name": "深蹲",
+            "tier": "main",
+            "template": {"loadMode": "fixed", "sets": 3, "repsText": "5"},
+            "instance": {"kg": 100, "rpe": 7},
+            "kg": 100,
+            "rpe": 7,
+            "sets": 3,
+            "reps": 5,
+        },
+    ]
+    return plan
+
+
 def build_change(new_value=0.7) -> list[dict]:
     return [{"action": "update", "exerciseName": "深蹲", "field": "pct", "newValue": new_value}]
 
@@ -222,6 +252,40 @@ def test_build_day_plan_replace_proposal_preserves_day_plan_payload() -> None:
     assert proposal.validation.ok is True
 
 
+def test_build_day_plan_replace_proposal_inherits_missing_load_block_from_unique_match() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="把深蹲改轻一点",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "sets": 3,
+                    "reps": 5,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["template"]["ref1RM"] == "squat"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] == 0.75
+    assert exercise["instance"]["pct"] == 0.75
+    assert exercise["kg"] is None
+    assert "暂沿用原计划负重" in exercise["note"]
+
+
 def test_commit_day_plan_replace_overwrites_target_day() -> None:
     plan = build_weekly_plan()
     proposal = build_day_plan_replace_proposal(
@@ -242,6 +306,254 @@ def test_commit_day_plan_replace_overwrites_target_day() -> None:
     assert committed.next_plan["Monday"]["type"] == "腿日"
     assert committed.next_plan["Monday"]["exercises"][0]["sets"] == 3
     assert committed.next_plan["Monday"]["exercises"][0]["rpe"] == 7
+
+
+def test_commit_day_plan_replace_inherits_missing_load_block_from_unique_match() -> None:
+    plan = build_weekly_plan()
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="把深蹲改轻一点",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "sets": 3,
+                    "reps": 5,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    committed = commit_plan_proposal(
+        current_plan=plan,
+        proposal_id=proposal.proposal_id,
+        confirmed_by_user=True,
+    )
+
+    exercise = committed.next_plan["Monday"]["exercises"][0]
+
+    assert committed.ok is True
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["template"]["ref1RM"] == "squat"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] == 0.75
+    assert exercise["instance"]["pct"] == 0.75
+    assert exercise["kg"] is None
+    assert "暂沿用原计划负重" in exercise["note"]
+
+
+def test_commit_day_plan_replace_inherits_same_name_percentage_load_source() -> None:
+    plan = build_weekly_plan()
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="把深蹲改轻一点",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "sets": 3,
+                    "reps": 5,
+                    "pct": 0.7,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    committed = commit_plan_proposal(
+        current_plan=plan,
+        proposal_id=proposal.proposal_id,
+        confirmed_by_user=True,
+    )
+
+    exercise = committed.next_plan["Monday"]["exercises"][0]
+
+    assert committed.ok is True
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["template"]["ref1RM"] == "squat"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] == 0.7
+    assert exercise["instance"]["pct"] == 0.7
+    assert exercise["kg"] is None
+    assert "暂沿用原计划负重" not in exercise["note"]
+
+
+def test_build_day_plan_replace_proposal_only_backfills_source_for_explicit_pct() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="把深蹲改轻一点",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "pct": 0.7,
+                    "sets": 3,
+                    "reps": 5,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["template"]["ref1RM"] == "squat"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] == 0.7
+    assert exercise["instance"]["pct"] == 0.7
+    assert "暂沿用原计划负重" not in exercise["note"]
+
+
+def test_build_day_plan_replace_proposal_does_not_inherit_old_pct_when_only_ref1rm_is_explicit() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="只指定了参考 1RM",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "ref1RM": "squat",
+                    "sets": 3,
+                    "reps": 5,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["template"]["ref1RM"] == "squat"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] is None
+    assert exercise["instance"]["pct"] is None
+    assert "暂沿用原计划负重" not in exercise["note"]
+
+
+def test_build_day_plan_replace_proposal_does_not_inherit_old_kg_when_fixed_mode_has_no_kg() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="只指定 fixed 模式",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "loadMode": "fixed",
+                    "sets": 3,
+                    "reps": 5,
+                    "rpe": 7,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "fixed"
+    assert exercise["template"]["ref1RM"] is None
+    assert exercise["ref1RM"] is None
+    assert exercise["kg"] is None
+    assert exercise["instance"]["kg"] is None
+    assert "暂沿用原计划负重" not in exercise["note"]
+
+
+def test_build_day_plan_replace_proposal_skips_inherit_when_name_is_ambiguous() -> None:
+    plan = build_ambiguous_name_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="深蹲微调",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "sets": 2,
+                    "reps": 5,
+                    "note": "动作名重复时不要误继承",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "fixed"
+    assert exercise["template"]["ref1RM"] is None
+    assert exercise["ref1RM"] is None
+    assert exercise["pct"] is None
+    assert exercise["kg"] is None
+
+
+def test_build_day_plan_replace_proposal_resolves_pct_and_kg_conflict_deterministically() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="深蹲同时给了百分比和重量",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "ref1RM": "squat",
+                    "pct": 0.7,
+                    "kg": 100,
+                    "sets": 3,
+                    "reps": 5,
+                    "note": "恢复周主项",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] == 0.7
+    assert exercise["kg"] is None
+    assert "kg=100" in exercise["note"]
 
 
 def test_gemini_style_day_plan_replace_preserves_name_and_duration_note() -> None:

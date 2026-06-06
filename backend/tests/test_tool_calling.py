@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+import json
 from pathlib import Path
 
 import pytest
@@ -110,6 +111,38 @@ def test_default_tool_registry_exports_deepseek_compatible_strict_schema() -> No
     assert all(tool["type"] == "function" for tool in tools)
     assert all(tool["function"]["parameters"]["additionalProperties"] is False for tool in tools)
     assert tools[names.index("get_daily_log")]["function"]["parameters"]["required"] == ["date"]
+
+
+def test_day_plan_replace_schema_exposes_weight_fields_for_nested_exercises() -> None:
+    registry = build_default_tool_registry()
+    exported_parameters = []
+    exported_parameters.append(
+        next(
+            tool["parameters"]
+            for tool in registry.describe_tools()
+            if tool["name"] == "propose_day_plan_replace"
+        )
+    )
+    exported_parameters.append(
+        next(
+            tool["function"]["parameters"]
+            for tool in registry.to_deepseek_tools()
+            if tool["function"]["name"] == "propose_day_plan_replace"
+        )
+    )
+
+    for parameters in exported_parameters:
+        dumped = json.dumps(parameters, ensure_ascii=False)
+        exercise_properties = parameters["properties"]["dayPlan"]["properties"]["exercises"]["items"]["properties"]
+
+        assert "$ref" not in dumped
+        assert "$defs" not in dumped
+        assert "type" in parameters["properties"]["dayPlan"]
+        assert "properties" in parameters["properties"]["dayPlan"]
+        assert any(option.get("type") == "string" for option in exercise_properties["ref1RM"]["anyOf"])
+        assert any(option.get("type") == "number" for option in exercise_properties["pct"]["anyOf"])
+        assert any(option.get("type") == "number" for option in exercise_properties["kg"]["anyOf"])
+        assert "percentage" in exercise_properties["loadMode"]["anyOf"][0]["enum"]
 
 
 def test_tool_argument_validation_rejects_unknown_fields_and_invalid_date() -> None:
