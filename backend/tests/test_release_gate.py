@@ -202,23 +202,28 @@ def test_real_provider_stage_missing_env_returns_structured_failure_and_updates_
         monkeypatch.delenv(key, raising=False)
 
     stage_result = run_stage(real_provider_stage, tmp_path, report_dir)
+    command_log = stage_result["command"]
 
     assert stage_result["status"] == "failed"
-    assert stage_result["command"] == "uv run python tests/e2e/coach_real_provider_smoke.py"
+    assert command_log == "uv run python tests/e2e/coach_real_provider_smoke.py"
     assert "BACKEND_HOST" in stage_result["error"]
     assert "MODEL_PROVIDER_CONFIG_PATH" in stage_result["error"]
 
     stage_log = report_dir / "real-provider-smoke.log"
+    stage_log_text = stage_log.read_text(encoding="utf-8")
     assert stage_log.exists()
-    assert "真实 provider 冒烟缺少环境变量" in stage_log.read_text(encoding="utf-8")
+    assert stage_log_text.startswith(f"$ {command_log}")
+    assert "真实 provider 冒烟缺少环境变量" in stage_log_text
 
     env_bootstrap_stage = build_release_gate_stages()[0]
     monkeypatch.setattr(
         "scripts.release_gate.build_release_gate_stages",
         lambda: [env_bootstrap_stage, real_provider_stage],
     )
+    executed_commands: list[str] = []
 
     def fake_run(command: str, cwd: Path, shell: bool, capture_output: bool) -> SimpleNamespace:
+        executed_commands.append(command)
         assert command in env_bootstrap_stage["commands"]
         return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
 
@@ -233,5 +238,6 @@ def test_real_provider_stage_missing_env_returns_structured_failure_and_updates_
     failed_stage = summary_payload["stages"][-1]
     assert failed_stage["id"] == "real-provider-smoke"
     assert failed_stage["status"] == "failed"
-    assert failed_stage["command"] == "uv run python tests/e2e/coach_real_provider_smoke.py"
+    assert failed_stage["command"] == command_log
     assert "BACKEND_PORT" in failed_stage["error"]
+    assert command_log not in executed_commands

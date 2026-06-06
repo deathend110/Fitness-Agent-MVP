@@ -145,6 +145,8 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
             except SystemExit as exc:
                 error_message = str(exc)
                 # 真实 provider 缺配置时要按阶段失败落盘，避免 summary 保留上一次结果。
+                if last_command:
+                    handle.write(f"$ {last_command}\n")
                 handle.write(error_message + "\n")
                 return {
                     "id": stage["id"],
