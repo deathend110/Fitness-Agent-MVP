@@ -327,7 +327,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [scripts/release_gate.py](scripts/release_gate.py)
   - 发布门禁编排器
   - 定义六阶段固定顺序：`env-bootstrap -> frontend-quality -> backend-quality -> browser-core -> real-provider-smoke -> browser-stress`
-  - 负责逐阶段执行命令、在 `real-provider-smoke` 前校验 `BACKEND_HOST / BACKEND_PORT / MODEL_PROVIDER_CONFIG_PATH`、以及把结果写入 `tests/reports/release-gate/summary.json`
+  - 负责逐阶段执行命令、在 `real-provider-smoke` 前补齐 worktree 的 `.env / backend/.env`、校验并继承真实 provider 配置、自动自举后端，再把结果写入 `tests/reports/release-gate/summary.json`
 
 ### 测试分层
 
@@ -352,7 +352,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 - 真实 provider smoke 层
   - `tests/e2e/coach_real_provider_smoke.py`
-  - 只验证真实模型 provider 配置下的最小可用路径，用来区分“业务逻辑回归”与“外部模型环境缺失”
+  - 先复用统一 helper 自动拉起真实后端，再验证真实模型 provider 配置下的最小可用路径，用来区分“业务逻辑回归”与“外部模型环境缺失”
 
 - 压力与扰动层
   - `tests/e2e/profile_input_fuzz.py`

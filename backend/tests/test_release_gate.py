@@ -10,6 +10,7 @@ from scripts.release_gate import (
     collect_release_env_failures,
     decode_process_output,
     main,
+    prepare_real_provider_workspace,
     run_stage,
     write_release_summary,
 )
@@ -189,7 +190,7 @@ def test_run_stage_writes_log_even_when_process_output_is_missing(monkeypatch, t
     assert "$ echo noop" in log_path.read_text(encoding="utf-8")
 
 
-def test_real_provider_stage_missing_env_returns_structured_failure_and_updates_summary(
+def test_real_provider_stage_missing_env_files_returns_structured_failure_and_updates_summary(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -206,14 +207,14 @@ def test_real_provider_stage_missing_env_returns_structured_failure_and_updates_
 
     assert stage_result["status"] == "failed"
     assert command_log == "uv run python tests/e2e/coach_real_provider_smoke.py"
-    assert "BACKEND_HOST" in stage_result["error"]
-    assert "MODEL_PROVIDER_CONFIG_PATH" in stage_result["error"]
+    assert ".env" in stage_result["error"]
+    assert "backend/.env" in stage_result["error"]
 
     stage_log = report_dir / "real-provider-smoke.log"
     stage_log_text = stage_log.read_text(encoding="utf-8")
     assert stage_log.exists()
     assert stage_log_text.startswith(f"$ {command_log}")
-    assert "真实 provider 冒烟缺少环境变量" in stage_log_text
+    assert "真实 provider 冒烟缺少环境文件" in stage_log_text
 
     env_bootstrap_stage = build_release_gate_stages()[0]
     monkeypatch.setattr(
@@ -239,5 +240,164 @@ def test_real_provider_stage_missing_env_returns_structured_failure_and_updates_
     assert failed_stage["id"] == "real-provider-smoke"
     assert failed_stage["status"] == "failed"
     assert failed_stage["command"] == command_log
-    assert "BACKEND_PORT" in failed_stage["error"]
+    assert "backend/.env" in failed_stage["error"]
     assert command_log not in executed_commands
+
+
+def test_prepare_real_provider_workspace_reports_missing_required_provider_key(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "backend").mkdir(parents=True)
+    (tmp_path / ".env").write_text(
+        "VITE_API_BASE_URL=http://127.0.0.1:8000/api\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "backend" / ".env").write_text(
+        "\n".join(
+            [
+                "BACKEND_HOST=127.0.0.1",
+                "BACKEND_PORT=8000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("MODEL_PROVIDER_CONFIG_PATH", raising=False)
+
+    try:
+        prepare_real_provider_workspace(tmp_path)
+    except SystemExit as exc:
+        assert "MODEL_PROVIDER_CONFIG_PATH" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("expected prepare_real_provider_workspace to fail")
+
+
+def test_prepare_real_provider_workspace_bootstraps_missing_env_files_from_main_repo(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "repo-root"
+    worktree_root = source_root / ".worktrees" / "release-gate"
+
+    (source_root / "backend" / "config").mkdir(parents=True)
+    worktree_backend_dir = worktree_root / "backend"
+    worktree_backend_dir.mkdir(parents=True)
+
+    (source_root / ".env").write_text(
+        "VITE_API_BASE_URL=http://127.0.0.1:8000/api\n",
+        encoding="utf-8",
+    )
+    (source_root / "backend" / ".env").write_text(
+        "\n".join(
+            [
+                "BACKEND_HOST=127.0.0.1",
+                "BACKEND_PORT=8000",
+                "MODEL_PROVIDER_CONFIG_PATH=./config/model_providers.real.json",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (source_root / "backend" / "config" / "model_providers.real.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+
+    prepared = prepare_real_provider_workspace(worktree_root)
+
+    assert (worktree_root / ".env").read_text(encoding="utf-8") == (
+        source_root / ".env"
+    ).read_text(encoding="utf-8")
+    assert (worktree_root / "backend" / ".env").read_text(encoding="utf-8") == (
+        source_root / "backend" / ".env"
+    ).read_text(encoding="utf-8")
+    assert prepared["backend_host"] == "127.0.0.1"
+    assert prepared["backend_port"] == 8000
+    assert prepared["model_provider_config_path"] == str(
+        (worktree_root / "backend" / "config" / "model_providers.real.json").resolve()
+    )
+
+
+def test_run_stage_real_provider_smoke_enters_runtime_bootstrap_context(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    real_provider_stage = next(
+        stage for stage in build_release_gate_stages() if stage["id"] == "real-provider-smoke"
+    )
+    report_dir = tmp_path / "tests" / "reports" / "release-gate"
+    entered = {"value": False}
+    exited = {"value": False}
+    executed_commands: list[str] = []
+
+    class FakeRuntimeBootstrap:
+        def __enter__(self) -> dict[str, object]:
+            entered["value"] = True
+            return {
+                "backend_host": "127.0.0.1",
+                "backend_port": 8000,
+                "model_provider_config_path": str(tmp_path / "backend" / "config" / "model_providers.json"),
+            }
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            exited["value"] = True
+
+    monkeypatch.setattr(
+        "scripts.release_gate.ensure_real_provider_runtime",
+        lambda repo_root: FakeRuntimeBootstrap(),
+    )
+    monkeypatch.setattr(
+        "scripts.release_gate.subprocess.run",
+        lambda command, cwd, shell, capture_output: (
+            executed_commands.append(command)
+            or SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        ),
+    )
+
+    result = run_stage(real_provider_stage, tmp_path, report_dir)
+
+    assert result["status"] == "passed"
+    assert entered["value"] is True
+    assert exited["value"] is True
+    assert executed_commands == ["uv run python tests/e2e/coach_real_provider_smoke.py"]
+
+
+def test_run_stage_real_provider_smoke_prepares_workspace_before_bootstrap(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    real_provider_stage = next(
+        stage for stage in build_release_gate_stages() if stage["id"] == "real-provider-smoke"
+    )
+    report_dir = tmp_path / "tests" / "reports" / "release-gate"
+    prepared = {"value": False}
+    received_repo_root = {"value": None}
+
+    class FakeRuntimeBootstrap:
+        def __enter__(self) -> dict[str, object]:
+            return {
+                "backend_host": "127.0.0.1",
+                "backend_port": 8000,
+                "model_provider_config_path": str(tmp_path / "backend" / "config" / "model_providers.json"),
+            }
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    def fake_ensure_real_provider_runtime(repo_root: Path):
+        prepared["value"] = True
+        received_repo_root["value"] = repo_root
+        return FakeRuntimeBootstrap()
+
+    monkeypatch.setattr(
+        "scripts.release_gate.ensure_real_provider_runtime",
+        fake_ensure_real_provider_runtime,
+    )
+    monkeypatch.setattr(
+        "scripts.release_gate.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=b"", stderr=b""),
+    )
+
+    result = run_stage(real_provider_stage, tmp_path, report_dir)
+
+    assert result["status"] == "passed"
+    assert prepared["value"] is True
+    assert received_repo_root["value"] == tmp_path

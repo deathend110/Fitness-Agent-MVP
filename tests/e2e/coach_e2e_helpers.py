@@ -6,6 +6,7 @@ import subprocess
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 from urllib.request import urlopen
 
 
@@ -13,6 +14,10 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 APP_HOST = "127.0.0.1"
 APP_PORT = 5173
 APP_URL = f"http://{APP_HOST}:{APP_PORT}"
+BACKEND_HOST = "127.0.0.1"
+BACKEND_PORT = 8000
+BACKEND_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
+BACKEND_HEALTH_URL = f"{BACKEND_URL}/api/health"
 
 
 def _is_port_open(host, port):
@@ -35,6 +40,22 @@ def wait_for_app_ready(app_url=APP_URL, timeout_seconds=45):
             time.sleep(0.5)
 
     raise RuntimeError(f"等待前端开发服务器启动超时：{app_url}；最后错误：{last_error}")
+
+
+def wait_for_backend_ready(backend_url=BACKEND_HEALTH_URL, timeout_seconds=45):
+    deadline = time.time() + timeout_seconds
+    last_error = None
+
+    while time.time() < deadline:
+        try:
+            with urlopen(backend_url, timeout=1.5) as response:
+                if response.status < 500:
+                    return
+        except Exception as error:  # pragma: no cover
+            last_error = error
+            time.sleep(0.5)
+
+    raise RuntimeError(f"等待后端服务启动超时：{backend_url}；最后错误：{last_error}")
 
 
 @contextmanager
@@ -70,6 +91,57 @@ def ensure_vite_dev_server(app_url=APP_URL):
     try:
         wait_for_app_ready(app_url)
         yield app_url
+    finally:
+        if process.poll() is None:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:  # pragma: no cover
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+
+
+@contextmanager
+def ensure_backend_dev_server(
+    host: str = BACKEND_HOST,
+    port: int = BACKEND_PORT,
+    env: dict[str, str] | None = None,
+) -> Iterator[str]:
+    backend_url = f"http://{host}:{port}/api/health"
+
+    if _is_port_open(host, port):
+        wait_for_backend_ready(backend_url)
+        yield f"http://{host}:{port}"
+        return
+
+    uv_executable = shutil.which("uv")
+    if not uv_executable:
+        raise RuntimeError("未找到 uv，无法自动启动后端开发服务器。")
+
+    process = subprocess.Popen(
+        [
+            uv_executable,
+            "run",
+            "python",
+            "-m",
+            "backend.run_dev_server",
+        ],
+        cwd=ROOT_DIR,
+        env={**os.environ, "REPMIND_BACKEND_RELOAD": "0", **(env or {})},
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+    )
+
+    try:
+        wait_for_backend_ready(backend_url)
+        yield f"http://{host}:{port}"
     finally:
         if process.poll() is None:
             if os.name == "nt":

@@ -5,7 +5,7 @@ import os
 
 from playwright.sync_api import Page, expect, sync_playwright
 
-from coach_e2e_helpers import APP_URL, ensure_vite_dev_server
+from coach_e2e_helpers import APP_URL, ensure_backend_dev_server, ensure_vite_dev_server
 
 
 REAL_PROVIDER_ENV_KEYS = (
@@ -79,28 +79,37 @@ def wait_for_reply(page: Page) -> None:
 def main() -> None:
     ensure_required_env()
 
-    with ensure_vite_dev_server(APP_URL) as app_url:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            context = browser.new_context(viewport={"width": 1440, "height": 960})
-            seed_local_storage(context)
-            page = context.new_page()
+    with ensure_backend_dev_server(
+        host=os.environ["BACKEND_HOST"],
+        port=int(os.environ["BACKEND_PORT"]),
+        env={
+            "BACKEND_HOST": os.environ["BACKEND_HOST"],
+            "BACKEND_PORT": os.environ["BACKEND_PORT"],
+            "MODEL_PROVIDER_CONFIG_PATH": os.environ["MODEL_PROVIDER_CONFIG_PATH"],
+        },
+    ):
+        with ensure_vite_dev_server(APP_URL) as app_url:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                context = browser.new_context(viewport={"width": 1440, "height": 960})
+                seed_local_storage(context)
+                page = context.new_page()
 
-            page.goto(app_url)
-            page.get_by_role("button", name="AI 教练").click()
+                page.goto(app_url)
+                page.get_by_role("button", name="AI 教练").click()
 
-            composer = page.locator("textarea").first
-            expect(composer).to_be_visible(timeout=20_000)
-            expect(
-                page.get_by_text("请先完善档案中的姓名、当前体重、训练目标和深蹲 1RM，再使用 AI 教练。")
-            ).not_to_be_visible(timeout=10_000)
+                composer = page.locator("textarea").first
+                expect(composer).to_be_visible(timeout=20_000)
+                expect(
+                    page.get_by_text("请先完善档案中的姓名、当前体重、训练目标和深蹲 1RM，再使用 AI 教练。")
+                ).not_to_be_visible(timeout=10_000)
 
-            composer.fill(PROMPT)
-            page.get_by_role("button", name="发送消息").click()
-            expect(page.get_by_text("思考中")).to_be_visible(timeout=20_000)
-            wait_for_reply(page)
+                composer.fill(PROMPT)
+                page.get_by_role("button", name="发送消息").click()
+                expect(page.get_by_text("思考中")).to_be_visible(timeout=20_000)
+                wait_for_reply(page)
 
-            browser.close()
+                browser.close()
 
 
 if __name__ == "__main__":

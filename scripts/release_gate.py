@@ -2,17 +2,25 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable
+
+from tests.e2e.coach_e2e_helpers import ensure_backend_dev_server
 
 
 REAL_PROVIDER_ENV_KEYS = (
     "BACKEND_HOST",
     "BACKEND_PORT",
     "MODEL_PROVIDER_CONFIG_PATH",
+)
+WORKTREE_ENV_FILES = (
+    ".env",
+    "backend/.env",
 )
 
 
@@ -83,6 +91,143 @@ def ensure_real_provider_env() -> None:
         raise SystemExit("真实 provider 冒烟缺少环境变量: " + ", ".join(missing_keys))
 
 
+def discover_main_repo_root(repo_root: Path) -> Path | None:
+    normalized_root = Path(repo_root).resolve()
+    try:
+        worktrees_index = normalized_root.parts.index(".worktrees")
+    except ValueError:
+        return None
+    return Path(*normalized_root.parts[:worktrees_index])
+
+
+def copy_env_file_if_missing(repo_root: Path, relative_path: str, source_root: Path | None) -> None:
+    target_path = Path(repo_root) / relative_path
+    if target_path.exists() or source_root is None:
+        return
+
+    source_path = source_root / relative_path
+    if not source_path.exists():
+        return
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, target_path)
+
+
+def copy_supporting_file_if_missing(
+    repo_root: Path,
+    source_root: Path | None,
+    target_path: Path,
+    source_path: Path,
+) -> None:
+    if target_path.exists() or source_root is None or not source_path.exists():
+        return
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, target_path)
+
+
+def parse_env_file(env_path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not env_path.exists():
+        return values
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, raw_value = line.split("=", 1)
+        values[key.strip()] = raw_value.strip().strip("\"'")
+    return values
+
+
+def prepare_real_provider_workspace(repo_root: Path) -> dict[str, object]:
+    normalized_root = Path(repo_root).resolve()
+    source_root = discover_main_repo_root(normalized_root)
+
+    for relative_path in WORKTREE_ENV_FILES:
+        copy_env_file_if_missing(normalized_root, relative_path, source_root)
+
+    env_path = normalized_root / ".env"
+    backend_env_path = normalized_root / "backend" / ".env"
+    missing_files = [
+        relative_path
+        for relative_path, path in (
+            (".env", env_path),
+            ("backend/.env", backend_env_path),
+        )
+        if not path.exists()
+    ]
+    if missing_files:
+        raise SystemExit(
+            "真实 provider 冒烟缺少环境文件: "
+            + ", ".join(missing_files)
+            + "；请先在主仓库或当前 worktree 提供可用配置。"
+        )
+
+    backend_env = parse_env_file(backend_env_path)
+    backend_host = backend_env.get("BACKEND_HOST") or os.environ.get("BACKEND_HOST") or "127.0.0.1"
+    raw_backend_port = backend_env.get("BACKEND_PORT") or os.environ.get("BACKEND_PORT") or "8000"
+    model_provider_config_path = (
+        backend_env.get("MODEL_PROVIDER_CONFIG_PATH")
+        or os.environ.get("MODEL_PROVIDER_CONFIG_PATH")
+        or ""
+    )
+
+    try:
+        backend_port = int(raw_backend_port)
+    except ValueError as exc:
+        raise SystemExit(f"真实 provider 冒烟的 BACKEND_PORT 非法: {raw_backend_port}") from exc
+
+    os.environ["BACKEND_HOST"] = backend_host
+    os.environ["BACKEND_PORT"] = str(backend_port)
+
+    if not model_provider_config_path:
+        raise SystemExit("真实 provider 冒烟缺少环境变量: MODEL_PROVIDER_CONFIG_PATH")
+
+    config_path = Path(model_provider_config_path)
+    if not config_path.is_absolute():
+        relative_config_path = Path("backend") / config_path
+        target_config_path = (normalized_root / relative_config_path).resolve()
+        source_config_path = (
+            (source_root / relative_config_path).resolve() if source_root is not None else target_config_path
+        )
+        copy_supporting_file_if_missing(
+            normalized_root,
+            source_root,
+            target_config_path,
+            source_config_path,
+        )
+        config_path = target_config_path
+    if not config_path.exists():
+        raise SystemExit(
+            "真实 provider 冒烟缺少 provider 配置文件: "
+            f"{config_path}"
+        )
+
+    os.environ["MODEL_PROVIDER_CONFIG_PATH"] = str(config_path)
+    return {
+        "backend_host": backend_host,
+        "backend_port": backend_port,
+        "model_provider_config_path": str(config_path),
+    }
+
+
+@contextmanager
+def ensure_real_provider_runtime(repo_root: Path):
+    runtime = prepare_real_provider_workspace(repo_root)
+    backend_env = {
+        "BACKEND_HOST": str(runtime["backend_host"]),
+        "BACKEND_PORT": str(runtime["backend_port"]),
+        "MODEL_PROVIDER_CONFIG_PATH": str(runtime["model_provider_config_path"]),
+    }
+
+    with ensure_backend_dev_server(
+        host=str(runtime["backend_host"]),
+        port=int(runtime["backend_port"]),
+        env=backend_env,
+    ):
+        yield runtime
+
+
 def collect_release_env_failures(
     repo_root: Path,
     required_paths: Iterable[str] | None = None,
@@ -141,10 +286,30 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
     with stage_log_path.open("w", encoding="utf-8") as handle:
         if stage["id"] == "real-provider-smoke":
             try:
-                ensure_real_provider_env()
+                runtime_context = ensure_real_provider_runtime(repo_root)
+                with runtime_context:
+                    for command in stage["commands"]:
+                        completed = subprocess.run(
+                            command,
+                            cwd=repo_root,
+                            shell=True,
+                            capture_output=True,
+                        )
+                        handle.write(f"$ {command}\n")
+                        handle.write(decode_process_output(completed.stdout))
+                        handle.write(decode_process_output(completed.stderr))
+
+                        if completed.returncode != 0:
+                            return {
+                                "id": stage["id"],
+                                "label": stage["label"],
+                                "status": "failed",
+                                "duration_seconds": round(time.time() - started_at, 2),
+                                "command": command,
+                            }
             except SystemExit as exc:
                 error_message = str(exc)
-                # 真实 provider 缺配置时要按阶段失败落盘，避免 summary 保留上一次结果。
+                # 真实 provider 缺配置或自举失败时要按阶段失败落盘，避免 summary 保留上一次结果。
                 if last_command:
                     handle.write(f"$ {last_command}\n")
                 handle.write(error_message + "\n")
@@ -156,26 +321,26 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
                     "command": last_command,
                     "error": error_message,
                 }
+        else:
+            for command in stage["commands"]:
+                completed = subprocess.run(
+                    command,
+                    cwd=repo_root,
+                    shell=True,
+                    capture_output=True,
+                )
+                handle.write(f"$ {command}\n")
+                handle.write(decode_process_output(completed.stdout))
+                handle.write(decode_process_output(completed.stderr))
 
-        for command in stage["commands"]:
-            completed = subprocess.run(
-                command,
-                cwd=repo_root,
-                shell=True,
-                capture_output=True,
-            )
-            handle.write(f"$ {command}\n")
-            handle.write(decode_process_output(completed.stdout))
-            handle.write(decode_process_output(completed.stderr))
-
-            if completed.returncode != 0:
-                return {
-                    "id": stage["id"],
-                    "label": stage["label"],
-                    "status": "failed",
-                    "duration_seconds": round(time.time() - started_at, 2),
-                    "command": command,
-                }
+                if completed.returncode != 0:
+                    return {
+                        "id": stage["id"],
+                        "label": stage["label"],
+                        "status": "failed",
+                        "duration_seconds": round(time.time() - started_at, 2),
+                        "command": command,
+                    }
 
     return {
         "id": stage["id"],
