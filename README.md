@@ -83,6 +83,20 @@ npm run dev:backend
 npm run dev:all
 ```
 
+Windows 一键快捷启动：
+
+```powershell
+.\start-repmind.bat
+```
+
+说明：
+
+- 支持从仓库根目录双击，或通过桌面快捷方式从任意位置触发
+- 依赖本机已安装 `node`、`npm`、`uv`
+- 启动成功后会自动打开默认浏览器到 `http://127.0.0.1:5173`
+- 启动器窗口会持续输出前后端日志
+- 如需停止当前项目相关本地进程，可执行 `npm run stop:all`
+
 停止当前项目相关本地进程：
 
 ```powershell

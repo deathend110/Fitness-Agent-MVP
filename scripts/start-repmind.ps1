@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 # 基于脚本目录反推仓库根目录，避免依赖外部启动时的当前工作目录。
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -133,6 +133,20 @@ try {
     Wait-HttpReady -Url $frontendUrl -Process $frontendProcess -Name '前端'
 
     Start-Process $frontendUrl
+
+    # 服务就绪后在同一窗口明确输出访问入口、日志位置和停止方式，便于双击启动后的现场验收。
+    Write-Host ''
+    Write-Host 'RepMind 已启动'
+    Write-Host "前端：$frontendUrl"
+    Write-Host "后端健康检查：$backendHealthUrl"
+    Write-Host "前端日志：$frontendLog"
+    Write-Host "后端日志：$backendLog"
+    Write-Host '停止服务：npm run stop:all'
+    Write-Host ''
+    Write-Host '以下开始持续输出启动日志，按 Ctrl+C 可关闭当前窗口。'
+
+    # 单窗口持续尾随前后端标准输出日志，满足本地快捷启动的可见性目标。
+    Get-Content -Path @($backendLog, $frontendLog) -Wait
 } catch {
     Stop-LaunchProcesses -Processes @($backendProcess, $frontendProcess)
     throw

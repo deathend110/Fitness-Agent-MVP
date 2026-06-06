@@ -326,6 +326,21 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 
 当前仓库把发布前验证收敛为一套固定顺序的 release gate，用于把环境准备、单测、后端回归、浏览器主链路、真实 provider 冒烟和高强度扰动统一到同一份报告里。
 
+## 本地快捷启动
+
+- [start-repmind.bat](start-repmind.bat)
+  - Windows 双击入口
+  - 只负责基于脚本相对路径调用 PowerShell 启动器
+
+- [scripts/start-repmind.ps1](scripts/start-repmind.ps1)
+  - 负责解析仓库根目录、检查 `node / npm / uv`、调用 `kill-repmind.ps1` 清理旧进程
+  - 负责后台启动 Vite 与 FastAPI、轮询 `http://127.0.0.1:5173` 和 `http://127.0.0.1:8000/api/health`
+  - 服务就绪后自动打开默认浏览器，并在单个启动器窗口中持续输出日志
+
+- [scripts/kill-repmind.ps1](scripts/kill-repmind.ps1)
+  - 负责清理本项目相关的本地 node、uv、python 启动残留
+  - 为快捷启动脚本提供幂等的预清场能力，降低端口占用和重复启动风险
+
 ### 门禁编排层
 
 - [scripts/run-release-gate.ps1](scripts/run-release-gate.ps1)
