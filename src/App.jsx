@@ -39,6 +39,7 @@ function loadInitialState(key, fallback) {
 
 function App() {
   const [activeTabId, setActiveTabId] = useState('profile')
+  const [hasVisitedCoachTab, setHasVisitedCoachTab] = useState(false)
   const [profile, setProfile] = useState(() => loadInitialState(storageKeys.profile, defaultProfile))
   const [weeklyPlan, setWeeklyPlan] = useState(() =>
     normalizeWeeklyPlan(loadInitialState(storageKeys.weeklyPlan, defaultWeeklyPlan)),
@@ -262,8 +263,16 @@ function App() {
   }
 
   function handleOpenCoachTab() {
+    setHasVisitedCoachTab(true)
     setActiveTabId('coach')
   }
+
+  useEffect(() => {
+    if (activeTabId === 'coach') {
+      // AI 教练存在发送中和流式中的页内状态，切换到其他 tab 时不能卸载。
+      setHasVisitedCoachTab(true)
+    }
+  }, [activeTabId])
 
   function handleDismissMigrationPrompt() {
     setMigrationPrompt((currentPrompt) => ({
@@ -291,7 +300,7 @@ function App() {
     return result
   }
 
-  function renderActiveTab(tabId) {
+  function renderMainTab(tabId) {
     switch (tabId) {
       case 'profile':
         return (
@@ -333,17 +342,6 @@ function App() {
             profile={profile}
           />
         )
-      case 'coach':
-        return (
-          <CoachTab
-            chatHistory={chatHistory}
-            dailyLog={dailyLog}
-            effectiveWeeklyPlan={effectiveWeeklyPlan}
-            onChatHistoryChange={setChatHistory}
-            onWeeklyPlanChange={handleWeeklyPlanChange}
-            profile={profile}
-          />
-        )
       default:
         return (
           <ProfileTab
@@ -358,6 +356,19 @@ function App() {
           />
         )
     }
+  }
+
+  function renderCoachTab() {
+    return (
+      <CoachTab
+        chatHistory={chatHistory}
+        dailyLog={dailyLog}
+        effectiveWeeklyPlan={effectiveWeeklyPlan}
+        onChatHistoryChange={setChatHistory}
+        onWeeklyPlanChange={handleWeeklyPlanChange}
+        profile={profile}
+      />
+    )
   }
 
   // 壳层元信息与业务内容拆开，后续 V1.5 页面换肤只需替换承载层或 tab 本身。
@@ -381,7 +392,15 @@ function App() {
         tabs={appShellTabs}
       >
         {/* App 统一注入状态；训练主数据优先来自后端，chatHistory 仍只保留在本地。 */}
-        {renderActiveTab(activeTab.id)}
+        {activeTab.id === 'coach' ? null : renderMainTab(activeTab.id)}
+        {hasVisitedCoachTab ? (
+          <div
+            aria-hidden={activeTab.id !== 'coach'}
+            className={activeTab.id === 'coach' ? '' : 'hidden'}
+          >
+            {renderCoachTab()}
+          </div>
+        ) : null}
       </AppShell>
     </div>
   )

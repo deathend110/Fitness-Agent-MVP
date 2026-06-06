@@ -36,6 +36,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 负责把 `profile / weeklyPlan / dailyLog` 的改动异步回写后端
   - 当当前来源为 `manual` 时，负责同步 `weeklyPlan -> effectiveWeeklyPlan`
   - 负责 localStorage 首次迁移提示与导入后端入口
+  - 在用户访问过 AI 教练后保持 `CoachTab` 挂载，避免页内 tab 切换卸载发送中的聊天状态
 
 ### 前端 API 层
 
@@ -120,6 +121,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 通过 `requestCoachReply / requestCoachReplyStream / startBackgroundCoachReply` 驱动聊天链路
   - 把 `effectiveWeeklyPlan` 作为当前训练计划上下文发给后端
   - 负责 proposal 卡确认、忽略、消息元数据合并和会话恢复
+  - 页面不再依赖“重新挂载后重新水合”来保住发送中 UI，而是与 `App` 配合保持发送中的本地状态连续存在
 
 ### 前端状态与本地缓存
 
@@ -142,6 +144,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - `profile / weeklyPlan / planSource / effectiveWeeklyPlan / activeCyclePlan / dailyLog` 的主数据源是后端 SQLite，本地只做缓存和降级展示
 - `chatHistory` 仍保留为前端兼容缓存，但真实会话与消息已由后端 `chat_session / chat_message` 承担
 - 活动会话 id、后台任务信息属于纯前端恢复状态，不写入后端业务表
+- AI 教练发送中的 `isSending / streamStatusLabel / streamingText` 仍属于页内瞬时状态；当前通过保持 `CoachTab` 挂载来跨应用内 tab 切换连续保留
 
 ### 前端数值输入约束
 
@@ -410,6 +413,14 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
    - 流式：`delta -> proposal? -> suggestion? -> done`
    - 非流式：`{ text, suggestion, proposal }`
 9. 成功完成后写入 `chat_message`，必要时写入 `usage_record` 和 `tool_call_log`
+
+应用内页签切换的补充说明：
+
+1. 用户在 AI 教练页发送消息后，最后一条 user 消息会先进入 `App` 维护的 `chatHistory`
+2. `CoachTab` 内部的 `isSending / streamStatusLabel / streamingText` 继续驱动“思考中”占位
+3. 当用户切到“训练计划 / 今日日志 / 我的档案”等页签时，`App` 会把已访问过的 `CoachTab` 隐藏而不是卸载
+4. 因此应用内 tab 切换不会触发会话重载覆盖发送态，也不需要依赖 `pagehide / visibilitychange` 去补后台任务锚点
+5. 如果真实回复完成或后台任务状态变化，`CoachTab` 再按原有链路更新消息列表与占位状态
 
 ### 计划卡写回
 
