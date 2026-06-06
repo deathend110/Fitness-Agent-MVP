@@ -2,6 +2,7 @@ import json
 from urllib.parse import urlparse
 
 from playwright.sync_api import expect, sync_playwright
+from coach_e2e_helpers import ensure_vite_dev_server
 
 
 APP_URL = "http://127.0.0.1:5173"
@@ -168,40 +169,41 @@ def main():
     sessions = [dict(item) for item in SESSIONS]
     created_sessions = []
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 1440, "height": 900})
-        page = context.new_page()
-        install_backend_mock(page, sessions, created_sessions)
+    with ensure_vite_dev_server(APP_URL) as app_url:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1440, "height": 900})
+            page = context.new_page()
+            install_backend_mock(page, sessions, created_sessions)
 
-        page.goto(APP_URL)
-        page.get_by_role("button", name="AI 教练").click()
+            page.goto(app_url)
+            page.get_by_role("button", name="AI 教练").click()
 
-        expect(session_switch_button(page, "腿日复盘")).to_be_visible(timeout=10_000)
-        expect(session_switch_button(page, "默认对话")).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("腿日复盘的问题")).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("腿日复盘的回答")).to_be_visible(timeout=10_000)
+            expect(session_switch_button(page, "腿日复盘")).to_be_visible(timeout=10_000)
+            expect(session_switch_button(page, "默认对话")).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("腿日复盘的问题")).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("腿日复盘的回答")).to_be_visible(timeout=10_000)
 
-        session_switch_button(page, "默认对话").click()
-        expect(page.get_by_text("默认会话的问题")).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("腿日复盘的问题")).not_to_be_visible(timeout=10_000)
+            session_switch_button(page, "默认对话").click()
+            expect(page.get_by_text("默认会话的问题")).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("腿日复盘的问题")).not_to_be_visible(timeout=10_000)
 
-        page.get_by_role("button", name="新建对话").click()
-        expect(session_switch_button(page, "新对话")).to_be_visible(timeout=10_000)
-        expect(session_switch_button(page, "腿日复盘")).to_be_visible(timeout=10_000)
-        expect(session_switch_button(page, "默认对话")).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("默认会话的问题")).not_to_be_visible(timeout=10_000)
+            page.get_by_role("button", name="新建对话").click()
+            expect(session_switch_button(page, "新对话")).to_be_visible(timeout=10_000)
+            expect(session_switch_button(page, "腿日复盘")).to_be_visible(timeout=10_000)
+            expect(session_switch_button(page, "默认对话")).to_be_visible(timeout=10_000)
+            expect(page.get_by_text("默认会话的问题")).not_to_be_visible(timeout=10_000)
 
-        assert created_sessions == [
-            {
-                "id": 3,
-                "title": "新对话",
-                "createdAt": "2026-06-01T11:00:00Z",
-                "updatedAt": "2026-06-01T11:00:00Z",
-            }
-        ]
+            assert created_sessions == [
+                {
+                    "id": 3,
+                    "title": "新对话",
+                    "createdAt": "2026-06-01T11:00:00Z",
+                    "updatedAt": "2026-06-01T11:00:00Z",
+                }
+            ]
 
-        browser.close()
+            browser.close()
 
 
 if __name__ == "__main__":

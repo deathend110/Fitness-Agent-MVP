@@ -314,6 +314,59 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 - [backend/files/parsers/](backend/files/parsers/)
   - 负责 Markdown、DOCX、Excel、图片摘要解析
 
+## Release Gate / 发布门禁
+
+当前仓库把发布前验证收敛为一套固定顺序的 release gate，用于把环境准备、单测、后端回归、浏览器主链路、真实 provider 冒烟和高强度扰动统一到同一份报告里。
+
+### 门禁编排层
+
+- [scripts/run-release-gate.ps1](scripts/run-release-gate.ps1)
+  - PowerShell 总入口
+  - 只负责切到仓库根目录，并调用 `uv run python scripts/release_gate.py run-all`
+
+- [scripts/release_gate.py](scripts/release_gate.py)
+  - 发布门禁编排器
+  - 定义六阶段固定顺序：`env-bootstrap -> frontend-quality -> backend-quality -> browser-core -> real-provider-smoke -> browser-stress`
+  - 负责逐阶段执行命令、在 `real-provider-smoke` 前补齐 worktree 的 `.env / backend/.env`、校验并继承真实 provider 配置、自动自举后端，再把结果写入 `tests/reports/release-gate/summary.json`
+
+### 测试分层
+
+- 环境与规范层
+  - `scripts/check-release-env.py`
+  - 用于在真正跑回归前确认文档、环境文件和关键 E2E 脚本是否齐备
+
+- 前后端质量层
+  - `npm test`
+  - `npm run build`
+  - `uv run pytest backend/tests -q`
+  - 这层负责尽早拦住单元测试、构建和后端接口契约回归
+
+- 浏览器核心 E2E 层
+  - `tests/e2e/release_core_journey.py`
+  - `tests/e2e/coach_browser_smoke.py`
+  - `tests/e2e/plan_drag_sort.py`
+  - `tests/e2e/coach_commit_full_flow.py`
+  - `tests/e2e/coach_session_history.py`
+  - `tests/e2e/coach_model_config_flow.py`
+  - 这组脚本覆盖从页面启动、档案/计划/日志主路径，到 AI 教练会话、模型配置、建议采纳写回的核心闭环
+
+- 真实 provider smoke 层
+  - `tests/e2e/coach_real_provider_smoke.py`
+  - 先复用统一 helper 自动拉起真实后端，再验证真实模型 provider 配置下的最小可用路径，用来区分“业务逻辑回归”与“外部模型环境缺失”
+
+- 压力与扰动层
+  - `tests/e2e/profile_input_fuzz.py`
+  - `tests/e2e/today_log_fuzz.py`
+  - `tests/e2e/plan_mutation_stress.py`
+  - `tests/e2e/navigation_recovery_stress.py`
+  - 这层主要打边界输入、计划频繁修改、页面导航恢复与持久化韧性，属于发布前的稳定性补充验证
+
+### 报告输出
+
+- 发布门禁所有阶段都把 stdout / stderr 落盘到 `tests/reports/release-gate/<stage-id>.log`
+- 汇总文件 `tests/reports/release-gate/summary.json` 记录每一阶段的执行结果和最后一条命令
+- 主 agent 或人工复核时，可以只先看 `summary.json` 判断停在哪一层，再进入对应日志排错
+
 ## 数据流
 
 ### 档案、周计划、今日日志

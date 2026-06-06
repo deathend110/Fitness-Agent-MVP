@@ -169,6 +169,39 @@ uv run python -m playwright install chromium
 uv run python "G:\AI Tools\codex-skills\webapp-testing\scripts\with_server.py" --server "npm run dev:all" --port 5173 -- uv run python tests\e2e\coach_browser_smoke.py
 ```
 
+发布门禁总入口：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-release-gate.ps1
+```
+
+也可以直接调用 Python 编排器：
+
+```powershell
+uv run python scripts\release_gate.py run-all
+```
+
+发布门禁固定按六个阶段执行：
+
+1. `env-bootstrap`：执行 `npm install`、`uv sync`、Playwright Chromium 安装和 `scripts/check-release-env.py`
+2. `frontend-quality`：执行 `npm test` 与 `npm run build`
+3. `backend-quality`：执行 `uv run pytest backend/tests -q`
+4. `browser-core`：执行核心 E2E，包括 `release_core_journey.py`、`coach_browser_smoke.py`、拖拽排序与 AI 采纳主链路
+5. `real-provider-smoke`：执行 `uv run python tests/e2e/coach_real_provider_smoke.py`
+6. `browser-stress`：执行输入扰动、日志扰动、计划变更和导航恢复压力脚本
+
+真实 AI 冒烟前提：
+
+- 需要在当前 shell 或 `.env` 中提供 `BACKEND_HOST`、`BACKEND_PORT`、`MODEL_PROVIDER_CONFIG_PATH`
+- `MODEL_PROVIDER_CONFIG_PATH` 指向一个可用的 provider 配置文件，且对应 API Key 已在本地就绪
+- 如果缺少上述环境，`coach_real_provider_smoke.py` 所在阶段会被明确拦截，这属于外部环境阻塞，不代表核心功能回归失败
+
+发布门禁报告目录：
+
+- 阶段日志与汇总输出到 `tests/reports/release-gate/`
+- `summary.json` 记录每个阶段的 `id / label / status / duration_seconds / command`
+- 同目录下还会生成按阶段命名的 `.log` 文件，便于排查某一条门禁命令的失败原因
+
 ## Demo 路径
 
 1. 启动 `npm run dev:all`
