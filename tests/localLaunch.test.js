@@ -9,8 +9,9 @@ test('start-repmind.bat 会通过脚本相对路径调用 PowerShell 启动器',
   assert.match(source, /set\s+"SCRIPT_DIR=%~dp0"/i)
   assert.match(
     source,
-    /powershell(?:\.exe)?\s+-NoProfile\s+-ExecutionPolicy\s+Bypass\s+-File\s+"%SCRIPT_DIR%scripts\\start-repmind\.ps1"/i,
+    /"%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe"\s+-NoProfile\s+-ExecutionPolicy\s+Bypass\s+-File\s+"%SCRIPT_DIR%scripts\\start-repmind\.ps1"/i,
   )
+  assert.match(source, /exit\s+\/b\s+%ERRORLEVEL%/i)
 })
 
 test('start-repmind.ps1 会基于自身路径反推出仓库根目录并切换工作目录', () => {
