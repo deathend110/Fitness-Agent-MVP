@@ -100,6 +100,7 @@ def install_daily_log_put_mock(context) -> None:
         """
         (() => {
           const previousFetch = window.fetch.bind(window);
+          const persistedStateKey = %s;
 
           window.fetch = async (input, init = {}) => {
             const requestUrl = typeof input === 'string' ? input : input?.url || '';
@@ -113,6 +114,10 @@ def install_daily_log_put_mock(context) -> None:
                 ...(window.__coachMockState.dailyLog || {}),
                 [date]: payload,
               };
+              window.localStorage.setItem(
+                persistedStateKey,
+                JSON.stringify(window.__coachMockState),
+              );
 
               return new Response(JSON.stringify(payload), {
                 status: 200,
@@ -124,6 +129,7 @@ def install_daily_log_put_mock(context) -> None:
           };
         })();
         """
+        % json.dumps(PERSISTED_STATE_KEY, ensure_ascii=False)
     )
 
 

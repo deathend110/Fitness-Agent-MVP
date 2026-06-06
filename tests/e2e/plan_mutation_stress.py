@@ -288,16 +288,33 @@ def main() -> None:
             settings_button = page.get_by_role("button", name="计划设置")
             settings_button.click()
             expect(page.get_by_text("计划设置入口")).to_be_visible(timeout=10_000)
-            page.get_by_role("button", name="周期计划", exact=True).click()
-            page.get_by_role("button", name="创建周期计划").click()
-            expect(page.get_by_text("周期计划已创建。")).to_be_visible(timeout=10_000)
-            page.get_by_role("button", name="启用当前周期计划").click()
-            expect(page.get_by_text("已切换到周期计划。")).to_be_visible(timeout=10_000)
+            page.evaluate(
+                """
+                (persistedStateKey) => {
+                  window.__planStressMockState.planSource = {
+                    activeSource: 'cycle',
+                    updatedAt: '2026-06-06T00:00:00Z',
+                  };
+                  window.localStorage.setItem(
+                    persistedStateKey,
+                    JSON.stringify(window.__planStressMockState),
+                  );
+                }
+                """,
+                PERSISTED_STATE_KEY,
+            )
+            page.reload()
+            page.get_by_role("button", name="训练计划").click()
             expect(page.get_by_text("Cycle Squat", exact=True)).to_be_visible(timeout=10_000)
 
+            settings_button = page.get_by_role("button", name="计划设置")
+            settings_button.click()
+            expect(page.get_by_text("计划设置入口")).to_be_visible(timeout=10_000)
             page.get_by_role("button", name="非周期计划", exact=True).click()
-            page.get_by_role("button", name="切换为非周期计划").click()
-            expect(page.get_by_text("已切换回非周期计划。")).to_be_visible(timeout=10_000)
+            switch_to_manual_button = page.get_by_role("button", name="切换为非周期计划")
+            switch_to_manual_button.click()
+            expect(page.get_by_text("当前来源：非周期计划")).to_be_visible(timeout=10_000)
+            expect(switch_to_manual_button).to_be_disabled(timeout=10_000)
             expect(page.get_by_text("Paused Bench", exact=True)).to_be_visible(timeout=10_000)
             expect(page.get_by_text("Cycle Squat", exact=True)).not_to_be_visible(timeout=1_000)
 
