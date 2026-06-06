@@ -24,6 +24,29 @@ $logDir = Join-Path $repoRoot 'tests\reports\local-launch'
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $frontendLog = Join-Path $logDir "frontend-$timestamp.log"
 $backendLog = Join-Path $logDir "backend-$timestamp.log"
+$backendProcess = $null
+$frontendProcess = $null
+
+function Stop-LaunchProcesses {
+    param(
+        [System.Diagnostics.Process[]]$Processes
+    )
+
+    # 失败清理只回收本次拉起且仍存活的子进程，避免留下半启动状态。
+    foreach ($process in $Processes) {
+        if ($null -eq $process) {
+            continue
+        }
+
+        try {
+            if (-not $process.HasExited) {
+                Stop-Process -Id $process.Id -Force -ErrorAction Stop
+            }
+        } catch {
+            Write-Warning "清理启动子进程失败 PID=$($process.Id) Error=$($_.Exception.Message)"
+        }
+    }
+}
 
 function Wait-HttpReady {
     param(
@@ -76,23 +99,39 @@ if (-not (Test-Path -LiteralPath $logDir)) {
 
 & $killScript
 
-# 后台启动统一切回仓库根目录，确保双击入口和任意外部快捷方式的行为一致。
-$backendCommand = "& { Set-Location '$repoRoot'; uv run python -m backend.run_dev_server *>> '$backendLog' }"
-$frontendCommand = "& { Set-Location '$repoRoot'; npm run dev -- --host 127.0.0.1 --port 5173 --strictPort *>> '$frontendLog' }"
+try {
+    # 后台启动显式绑定工作目录和日志重定向，避免路径中包含引号时命令拼接失效。
+    $backendProcess = Start-Process -FilePath 'uv' -ArgumentList @(
+        'run',
+        'python',
+        '-m',
+        'backend.run_dev_server'
+    ) -WorkingDirectory $repoRoot `
+      -RedirectStandardOutput $backendLog `
+      -RedirectStandardError $backendLog `
+      -WindowStyle Hidden `
+      -PassThru
 
-$backendProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-    '-NoProfile',
-    '-ExecutionPolicy', 'Bypass',
-    '-Command', $backendCommand
-) -WindowStyle Hidden -PassThru
+    $frontendProcess = Start-Process -FilePath 'npm.cmd' -ArgumentList @(
+        'run',
+        'dev',
+        '--',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        '5173',
+        '--strictPort'
+    ) -WorkingDirectory $repoRoot `
+      -RedirectStandardOutput $frontendLog `
+      -RedirectStandardError $frontendLog `
+      -WindowStyle Hidden `
+      -PassThru
 
-$frontendProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-    '-NoProfile',
-    '-ExecutionPolicy', 'Bypass',
-    '-Command', $frontendCommand
-) -WindowStyle Hidden -PassThru
+    Wait-HttpReady -Url $backendHealthUrl -Process $backendProcess -Name '后端'
+    Wait-HttpReady -Url $frontendUrl -Process $frontendProcess -Name '前端'
 
-Wait-HttpReady -Url $backendHealthUrl -Process $backendProcess -Name '后端'
-Wait-HttpReady -Url $frontendUrl -Process $frontendProcess -Name '前端'
-
-Start-Process $frontendUrl
+    Start-Process $frontendUrl
+} catch {
+    Stop-LaunchProcesses -Processes @($backendProcess, $frontendProcess)
+    throw
+}
