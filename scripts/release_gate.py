@@ -10,6 +10,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from tests.e2e.coach_e2e_helpers import ensure_backend_dev_server
 
 
@@ -18,6 +22,9 @@ REAL_PROVIDER_ENV_KEYS = (
     "BACKEND_PORT",
     "MODEL_PROVIDER_CONFIG_PATH",
 )
+DEFAULT_MODEL_PROVIDER_CONFIG_PATH = "./config/model_providers.json"
+RELEASE_GATE_PROVIDER_CONFIG_PATH = "backend/config/model_providers.release-gate.json"
+RELEASE_GATE_RUNTIME_DIR = "tests/reports/release-gate/runtime"
 WORKTREE_ENV_FILES = (
     ".env",
     "backend/.env",
@@ -125,6 +132,32 @@ def copy_supporting_file_if_missing(
     shutil.copyfile(source_path, target_path)
 
 
+def write_supporting_file(
+    target_path: Path,
+    source_path: Path,
+) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, target_path)
+
+
+def prepare_release_gate_runtime_storage(repo_root: Path) -> dict[str, str]:
+    runtime_root = (Path(repo_root) / RELEASE_GATE_RUNTIME_DIR).resolve()
+    if runtime_root.exists():
+        shutil.rmtree(runtime_root)
+
+    data_dir = runtime_root / "backend-data"
+    uploads_dir = data_dir / "uploads"
+    database_path = data_dir / "repmind.release-gate.db"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    return {
+        "runtime_root": str(runtime_root),
+        "data_dir": str(data_dir),
+        "uploads_dir": str(uploads_dir),
+        "database_url": f"sqlite+aiosqlite:///{database_path.as_posix()}",
+    }
+
+
 def parse_env_file(env_path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not env_path.exists():
@@ -142,6 +175,7 @@ def parse_env_file(env_path: Path) -> dict[str, str]:
 def prepare_real_provider_workspace(repo_root: Path) -> dict[str, object]:
     normalized_root = Path(repo_root).resolve()
     source_root = discover_main_repo_root(normalized_root)
+    runtime_storage = prepare_release_gate_runtime_storage(normalized_root)
 
     for relative_path in WORKTREE_ENV_FILES:
         copy_env_file_if_missing(normalized_root, relative_path, source_root)
@@ -166,11 +200,13 @@ def prepare_real_provider_workspace(repo_root: Path) -> dict[str, object]:
     backend_env = parse_env_file(backend_env_path)
     backend_host = backend_env.get("BACKEND_HOST") or os.environ.get("BACKEND_HOST") or "127.0.0.1"
     raw_backend_port = backend_env.get("BACKEND_PORT") or os.environ.get("BACKEND_PORT") or "8000"
-    model_provider_config_path = (
+    configured_provider_config_path = (
         backend_env.get("MODEL_PROVIDER_CONFIG_PATH")
         or os.environ.get("MODEL_PROVIDER_CONFIG_PATH")
         or ""
     )
+    using_default_provider_config = not configured_provider_config_path
+    model_provider_config_path = configured_provider_config_path or DEFAULT_MODEL_PROVIDER_CONFIG_PATH
 
     try:
         backend_port = int(raw_backend_port)
@@ -180,9 +216,6 @@ def prepare_real_provider_workspace(repo_root: Path) -> dict[str, object]:
     os.environ["BACKEND_HOST"] = backend_host
     os.environ["BACKEND_PORT"] = str(backend_port)
 
-    if not model_provider_config_path:
-        raise SystemExit("真实 provider 冒烟缺少环境变量: MODEL_PROVIDER_CONFIG_PATH")
-
     config_path = Path(model_provider_config_path)
     if not config_path.is_absolute():
         relative_config_path = Path("backend") / config_path
@@ -190,24 +223,43 @@ def prepare_real_provider_workspace(repo_root: Path) -> dict[str, object]:
         source_config_path = (
             (source_root / relative_config_path).resolve() if source_root is not None else target_config_path
         )
-        copy_supporting_file_if_missing(
-            normalized_root,
-            source_root,
-            target_config_path,
-            source_config_path,
-        )
-        config_path = target_config_path
+        if using_default_provider_config and source_root is not None and source_config_path.exists():
+            # worktree 里默认 JSON 很可能是之前本地调试或 bootstrap 生成的陈旧快照；
+            # 真实 provider 门禁需要优先对齐主仓库当前默认 provider 配置，但又不能覆写用户文件。
+            runtime_config_path = (normalized_root / RELEASE_GATE_PROVIDER_CONFIG_PATH).resolve()
+            write_supporting_file(runtime_config_path, source_config_path)
+            config_path = runtime_config_path
+        else:
+            copy_supporting_file_if_missing(
+                normalized_root,
+                source_root,
+                target_config_path,
+                source_config_path,
+            )
+            config_path = target_config_path
+    else:
+        # 绝对路径只在显式配置时使用；缺文件时仍允许后端按 legacy DeepSeek 配置 bootstrap 首份 JSON。
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
     if not config_path.exists():
-        raise SystemExit(
-            "真实 provider 冒烟缺少 provider 配置文件: "
-            f"{config_path}"
-        )
+        if using_default_provider_config:
+            # release gate 与真实后端保持一致：默认 provider JSON 缺失时不在入口提前失败，
+            # 而是把目标路径交给后端，由运行时按 legacy 配置生成首份文件。
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            raise SystemExit(
+                "真实 provider 冒烟缺少 provider 配置文件: "
+                f"{config_path}"
+            )
 
     os.environ["MODEL_PROVIDER_CONFIG_PATH"] = str(config_path)
     return {
         "backend_host": backend_host,
         "backend_port": backend_port,
         "model_provider_config_path": str(config_path),
+        "database_url": runtime_storage["database_url"],
+        "data_dir": runtime_storage["data_dir"],
+        "uploads_dir": runtime_storage["uploads_dir"],
     }
 
 
@@ -218,12 +270,16 @@ def ensure_real_provider_runtime(repo_root: Path):
         "BACKEND_HOST": str(runtime["backend_host"]),
         "BACKEND_PORT": str(runtime["backend_port"]),
         "MODEL_PROVIDER_CONFIG_PATH": str(runtime["model_provider_config_path"]),
+        "DATABASE_URL": str(runtime["database_url"]),
+        "DATA_DIR": str(runtime["data_dir"]),
+        "UPLOADS_DIR": str(runtime["uploads_dir"]),
     }
 
     with ensure_backend_dev_server(
         host=str(runtime["backend_host"]),
         port=int(runtime["backend_port"]),
         env=backend_env,
+        force_restart=True,
     ):
         yield runtime
 
@@ -307,7 +363,7 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
                                 "duration_seconds": round(time.time() - started_at, 2),
                                 "command": command,
                             }
-            except SystemExit as exc:
+            except (SystemExit, RuntimeError) as exc:
                 error_message = str(exc)
                 # 真实 provider 缺配置或自举失败时要按阶段失败落盘，避免 summary 保留上一次结果。
                 if last_command:

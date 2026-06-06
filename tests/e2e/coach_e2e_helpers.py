@@ -58,6 +58,113 @@ def wait_for_backend_ready(backend_url=BACKEND_HEALTH_URL, timeout_seconds=45):
     raise RuntimeError(f"等待后端服务启动超时：{backend_url}；最后错误：{last_error}")
 
 
+def wait_for_port_release(host: str, port: int, timeout_seconds: float = 10.0) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not _is_port_open(host, port):
+            return
+        time.sleep(0.25)
+
+    raise RuntimeError(f"后端端口 {host}:{port} 在指定时间内未释放，无法安全重启。")
+
+
+def stop_process_tree(process_id: int) -> None:
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process_id), "/T", "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+
+    try:  # pragma: no cover
+        os.kill(process_id, 15)
+    except OSError:
+        return
+
+
+def find_listening_process_id(host: str, port: int) -> int | None:
+    try:
+        import psutil
+    except ImportError:  # pragma: no cover
+        return find_listening_process_id_via_powershell(host, port)
+
+    normalized_host = str(host or "").strip()
+    for connection in psutil.net_connections(kind="inet"):
+        if connection.status != psutil.CONN_LISTEN:
+            continue
+        if not connection.laddr:
+            continue
+
+        local_host = getattr(connection.laddr, "ip", "")
+        local_port = getattr(connection.laddr, "port", None)
+        if local_port != port:
+            continue
+        if normalized_host not in {"", "0.0.0.0"} and local_host not in {normalized_host, "0.0.0.0", "::"}:
+            continue
+        if connection.pid is None:
+            continue
+        return int(connection.pid)
+
+    return None
+
+
+def find_listening_process_id_via_powershell(host: str, port: int) -> int | None:
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        (
+            "Get-NetTCPConnection -State Listen -LocalPort "
+            f"{port} -ErrorAction SilentlyContinue | "
+            "Select-Object LocalAddress,OwningProcess | ConvertTo-Json -Compress"
+        ),
+    ]
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        return None
+
+    payload = (completed.stdout or "").strip()
+    if not payload:
+        return None
+
+    try:
+        entries = json.loads(payload)
+    except json.JSONDecodeError:  # pragma: no cover
+        return None
+
+    if isinstance(entries, dict):
+        entries = [entries]
+    if not isinstance(entries, list):
+        return None
+
+    normalized_host = str(host or "").strip()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        local_address = str(entry.get("LocalAddress") or "").strip()
+        if normalized_host not in {"", "0.0.0.0"} and local_address not in {
+            normalized_host,
+            "0.0.0.0",
+            "::",
+            "::1",
+        }:
+            continue
+        owning_process = entry.get("OwningProcess")
+        try:
+            return int(owning_process)
+        except (TypeError, ValueError):
+            continue
+
+    return None
+
+
 @contextmanager
 def ensure_vite_dev_server(app_url=APP_URL):
     # E2E 统一自举前端，避免依赖手工先启动 5173 导致验证不可复现。
@@ -113,13 +220,26 @@ def ensure_backend_dev_server(
     host: str = BACKEND_HOST,
     port: int = BACKEND_PORT,
     env: dict[str, str] | None = None,
+    force_restart: bool = False,
 ) -> Iterator[str]:
     backend_url = f"http://{host}:{port}/api/health"
 
     if _is_port_open(host, port):
-        wait_for_backend_ready(backend_url)
-        yield f"http://{host}:{port}"
-        return
+        if force_restart:
+            listening_pid = find_listening_process_id(host, port)
+            if listening_pid is None:
+                raise RuntimeError(
+                    f"检测到后端端口 {host}:{port} 已被占用，但无法定位进程，无法安全重启。"
+                )
+            stop_process_tree(listening_pid)
+            wait_for_port_release(host, port)
+        else:
+            wait_for_backend_ready(backend_url)
+            yield f"http://{host}:{port}"
+            return
+
+    if _is_port_open(host, port):
+        raise RuntimeError(f"后端端口 {host}:{port} 仍被占用，真实后端自举未接管成功。")
 
     uv_executable = shutil.which("uv")
     if not uv_executable:
@@ -144,19 +264,7 @@ def ensure_backend_dev_server(
         yield f"http://{host}:{port}"
     finally:
         if process.poll() is None:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:  # pragma: no cover
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+            stop_process_tree(process.pid)
 
 
 def install_coach_backend_fetch_mock(context, config, persisted_state_key=None):

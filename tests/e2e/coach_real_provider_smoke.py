@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from urllib.request import Request, urlopen
 
 from playwright.sync_api import Page, expect, sync_playwright
 
@@ -59,6 +60,35 @@ def seed_local_storage(context) -> None:
     )
 
 
+def put_backend_json(base_url: str, path: str, payload: dict) -> None:
+    request = Request(
+        f"{base_url}{path}",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="PUT",
+    )
+    with urlopen(request, timeout=15) as response:
+        if response.status >= 400:  # pragma: no cover
+            raise RuntimeError(f"写入真实后端失败：{path} -> HTTP {response.status}")
+
+
+def seed_backend_state(base_url: str) -> None:
+    # 真实 provider 冒烟必须走真实后端上下文注入链路，因此先通过 API 写入最小可用数据，
+    # 避免前端首屏拉取空档案/空计划后把本地注入状态覆盖掉。
+    put_backend_json(
+        base_url,
+        "/api/profile",
+        {
+            "basic": PROFILE["basic"],
+            "oneRm": PROFILE["oneRM"],
+            "goal": PROFILE["goal"],
+            "targetWeight": PROFILE["targetWeight"],
+            "notes": PROFILE["notes"],
+        },
+    )
+    put_backend_json(base_url, "/api/weekly-plan", WEEKLY_PLAN)
+
+
 def wait_for_reply(page: Page) -> None:
     messages = page.locator("article.group")
     page.wait_for_function(
@@ -73,7 +103,30 @@ def wait_for_reply(page: Page) -> None:
         """,
         timeout=120_000,
     )
-    expect(messages).to_have_count(2, timeout=30_000)
+    page.wait_for_function(
+        """
+        () => document.querySelectorAll('article.group').length >= 2
+        """,
+        timeout=30_000,
+    )
+
+
+def wait_until_composer_ready(page: Page) -> None:
+    expect(page.locator("textarea").first).to_be_visible(timeout=20_000)
+    expect(
+        page.get_by_text("请先完善档案中的姓名、当前体重、训练目标和深蹲 1RM，再使用 AI 教练。")
+    ).not_to_be_visible(timeout=10_000)
+    # 真实后端场景下会先异步恢复默认会话与 draft；等模型下拉拿到有效值后再输入，
+    # 避免 draft 水合晚到把刚填入的 prompt 覆盖掉，导致发送按钮一直禁用。
+    page.wait_for_function(
+        """
+        () => {
+          const select = document.querySelector('#coach-model-select');
+          return Boolean(select && typeof select.value === 'string' && select.value.trim());
+        }
+        """,
+        timeout=20_000,
+    )
 
 
 def main() -> None:
@@ -87,7 +140,9 @@ def main() -> None:
             "BACKEND_PORT": os.environ["BACKEND_PORT"],
             "MODEL_PROVIDER_CONFIG_PATH": os.environ["MODEL_PROVIDER_CONFIG_PATH"],
         },
+        force_restart=True,
     ):
+        seed_backend_state(f"http://{os.environ['BACKEND_HOST']}:{os.environ['BACKEND_PORT']}")
         with ensure_vite_dev_server(APP_URL) as app_url:
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch(headless=True)
@@ -99,12 +154,9 @@ def main() -> None:
                 page.get_by_role("button", name="AI 教练").click()
 
                 composer = page.locator("textarea").first
-                expect(composer).to_be_visible(timeout=20_000)
-                expect(
-                    page.get_by_text("请先完善档案中的姓名、当前体重、训练目标和深蹲 1RM，再使用 AI 教练。")
-                ).not_to_be_visible(timeout=10_000)
-
+                wait_until_composer_ready(page)
                 composer.fill(PROMPT)
+                expect(page.get_by_role("button", name="发送消息")).to_be_enabled(timeout=10_000)
                 page.get_by_role("button", name="发送消息").click()
                 expect(page.get_by_text("思考中")).to_be_visible(timeout=20_000)
                 wait_for_reply(page)
