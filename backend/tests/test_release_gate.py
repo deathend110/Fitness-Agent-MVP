@@ -100,3 +100,21 @@ def test_real_provider_stage_requires_explicit_env_keys() -> None:
     assert real_provider_stage["commands"] == [
         "uv run python tests/e2e/coach_real_provider_smoke.py"
     ]
+
+
+def test_browser_stress_stage_requires_task5_script_suite() -> None:
+    browser_stress_stage = next(
+        stage for stage in build_release_gate_stages() if stage["id"] == "browser-stress"
+    )
+
+    assert browser_stress_stage["commands"] == [
+        "uv run python tests/e2e/profile_input_fuzz.py",
+        "uv run python tests/e2e/today_log_fuzz.py",
+        "uv run python tests/e2e/plan_mutation_stress.py",
+        "uv run python tests/e2e/navigation_recovery_stress.py",
+    ]
+
+    assert Path("tests/e2e/profile_input_fuzz.py").exists()
+    assert Path("tests/e2e/today_log_fuzz.py").exists()
+    assert Path("tests/e2e/plan_mutation_stress.py").exists()
+    assert Path("tests/e2e/navigation_recovery_stress.py").exists()
