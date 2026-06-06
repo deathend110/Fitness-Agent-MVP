@@ -274,6 +274,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
   - 负责构建 proposal、commit proposal、ignore proposal
   - `day_plan_replace` 的 proposal 卡生成与最终 commit 共用同一条归一化链路，避免卡片展示和落库结果不一致
   - 当新卡整块缺失负重字段时，只在“当前日存在唯一同名动作”时沿用原负重块；若已显式给出部分新负重信号，则只补来源字段，不静默继承旧 `pct/kg`
+  - 若同一动作同时给出百分比与固定重量信号，会按显式 `loadMode` 或可判定的主信号保留一侧，并把冲突决策写入 `note`
 
 - [backend/agent/response_parser.py](backend/agent/response_parser.py)
   - 负责从模型回复中解析纯文本与 suggestion
@@ -434,6 +435,7 @@ RepMind MVP 由前端 React 应用和本地 FastAPI 后端组成。
 4. 后端先按与 proposal 卡相同的规则归一化 `day_plan_replace`：
    - 整块缺失负重字段时，仅对唯一同名动作允许沿用原负重
    - 已显式给出 `pct/kg/loadMode/ref1RM` 中任一信号时，只补来源字段，不偷带旧数值
+   - 如果同一动作同时给出百分比与固定重量信号，后端保留一侧并把冲突说明写入备注，避免静默丢重量
    - 同名动作不唯一时不做静默继承
 5. 后端校验 proposal 并根据当前来源选择写回位置：
    - `manual`：写回 `weekly_plan_day`

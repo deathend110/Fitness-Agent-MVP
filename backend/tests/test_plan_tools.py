@@ -556,6 +556,107 @@ def test_build_day_plan_replace_proposal_resolves_pct_and_kg_conflict_determinis
     assert "kg=100" in exercise["note"]
 
 
+def test_build_day_plan_replace_proposal_preserves_explicit_fixed_mode_with_kg_only() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="深蹲显式改成固定重量",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "loadMode": "fixed",
+                    "kg": 100,
+                    "sets": 3,
+                    "reps": 5,
+                    "note": "固定重量恢复周主项",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "fixed"
+    assert exercise["ref1RM"] is None
+    assert exercise["pct"] is None
+    assert exercise["kg"] == 100
+    assert exercise["instance"]["kg"] == 100
+
+
+def test_build_day_plan_replace_proposal_preserves_explicit_percentage_mode_with_kg_conflict_note() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="深蹲显式百分比但混入固定重量",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "loadMode": "percentage",
+                    "kg": 100,
+                    "sets": 3,
+                    "reps": 5,
+                    "note": "混合信号",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "percentage"
+    assert exercise["ref1RM"] == "squat"
+    assert exercise["pct"] is None
+    assert exercise["kg"] is None
+    assert "kg=100" in exercise["note"]
+
+
+def test_build_day_plan_replace_proposal_preserves_explicit_fixed_mode_with_pct_conflict_note() -> None:
+    plan = build_weekly_plan()
+
+    proposal = build_day_plan_replace_proposal(
+        current_plan=plan,
+        session_id=1,
+        day="Monday",
+        summary="深蹲显式固定重量但混入百分比",
+        day_plan={
+            "type": "strength",
+            "exercises": [
+                {
+                    "name": "深蹲",
+                    "tier": "main",
+                    "loadMode": "fixed",
+                    "pct": 0.7,
+                    "kg": 100,
+                    "sets": 3,
+                    "reps": 5,
+                    "note": "混合信号",
+                }
+            ],
+        },
+    )
+
+    exercise = proposal.card["dayPlan"]["exercises"][0]
+
+    assert exercise["template"]["loadMode"] == "fixed"
+    assert exercise["ref1RM"] is None
+    assert exercise["pct"] is None
+    assert exercise["kg"] == 100
+    assert exercise["instance"]["kg"] == 100
+    assert "pct=0.7" in exercise["note"]
+
+
 def test_gemini_style_day_plan_replace_preserves_name_and_duration_note() -> None:
     plan = build_weekly_plan()
     proposal = build_day_plan_replace_proposal(

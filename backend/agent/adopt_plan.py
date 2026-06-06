@@ -360,10 +360,22 @@ def _normalize_tier(exercise: dict[str, Any], note: str) -> str:
     return "accessory"
 
 
-def _build_load_conflict_note(note: str, *, pct: int | float | None, kg: int | float | None) -> str:
-    if pct is None or kg is None:
+def _build_load_conflict_note(
+    note: str,
+    *,
+    load_mode: str,
+    explicit_pct: int | float | None,
+    explicit_kg: int | float | None,
+) -> str:
+    conflict_text = ""
+    if load_mode == "percentage" and explicit_kg is not None:
+        suffix = f"pct={explicit_pct}" if explicit_pct is not None else "百分比模式"
+        conflict_text = f"负重冲突：同时收到 {suffix} 与 kg={explicit_kg}，已按百分比处方保留百分比侧。"
+    elif load_mode == "fixed" and explicit_pct is not None:
+        suffix = f"kg={explicit_kg}" if explicit_kg is not None else "固定重量模式"
+        conflict_text = f"负重冲突：同时收到 pct={explicit_pct} 与 {suffix}，已按固定重量处方保留 kg 侧。"
+    if not conflict_text:
         return note
-    conflict_text = f"负重冲突：同时收到 pct={pct} 与 kg={kg}，已按百分比处方保留 pct。"
     if conflict_text in note:
         return note
     if note:
@@ -499,8 +511,9 @@ def _normalize_planned_exercise(
     )
     note = _build_load_conflict_note(
         note,
-        pct=explicit_pct if load_mode == "percentage" else None,
-        kg=explicit_kg if explicit_pct is not None and explicit_kg is not None else None,
+        load_mode=load_mode,
+        explicit_pct=explicit_pct,
+        explicit_kg=explicit_kg,
     )
     if should_inherit_full_load_block and inherited and (ref_1rm or pct is not None or kg is not None):
         note = _build_inherit_load_note(note)
