@@ -4,6 +4,7 @@ from scripts.release_gate import (
     REAL_PROVIDER_ENV_KEYS,
     build_release_gate_stages,
     collect_release_env_failures,
+    main,
     write_release_summary,
 )
 
@@ -127,3 +128,17 @@ def test_release_gate_docs_cover_commands_and_architecture() -> None:
     assert "run-release-gate.ps1" in readme
     assert "coach_real_provider_smoke.py" in readme
     assert "release gate" in architecture or "发布门禁" in architecture
+
+
+def test_main_reads_sys_argv_when_no_explicit_argv(monkeypatch) -> None:
+    captured = {"called": False}
+
+    def fake_run_all() -> int:
+        captured["called"] = True
+        return 7
+
+    monkeypatch.setattr("scripts.release_gate.run_all", fake_run_all)
+    monkeypatch.setattr("sys.argv", ["scripts/release_gate.py", "run-all"])
+
+    assert main() == 7
+    assert captured["called"] is True

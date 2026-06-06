@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Iterable
@@ -172,7 +173,7 @@ def run_all() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = argv or []
+    args = list(argv) if argv is not None else sys.argv[1:]
     if args and args[0] == "check-env":
         repo_root = Path(__file__).resolve().parents[1]
         failures = collect_release_env_failures(

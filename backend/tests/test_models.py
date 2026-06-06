@@ -26,6 +26,9 @@ from backend.schemas import ActiveCyclePlanSchema
 from backend.db.seed import DEFAULT_PLAN_SOURCE_STATE_ID, DEFAULT_PROFILE_ID, seed_if_empty
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 @pytest.mark.asyncio
 async def test_models_round_trip_preserves_profile_weekly_plan_and_daily_log(tmp_path: Path):
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'models.db'}"
@@ -477,7 +480,7 @@ def test_alembic_upgrade_head_creates_cycle_plan_tables_and_constraints(tmp_path
 
     result = subprocess.run(
         ["uv", "run", "alembic", "-c", "backend/alembic.ini", "upgrade", "head"],
-        cwd=r"g:\VSCODE-G\Fitness Agent MVP\.worktrees\cycle-plan-mode",
+        cwd=REPO_ROOT,
         env=env,
         capture_output=True,
         text=True,
