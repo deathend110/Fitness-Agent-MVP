@@ -110,11 +110,11 @@
 - 如缺少浏览器内核，使用 `uv run python -m playwright install chromium` 安装。
 - 本地 Web 自动化优先使用 Playwright，并通过自动启动 dev server 的方式验证真实页面行为。
 
-验证结果应能用于课程报告中的 TDD 或最小验证方案，包括测试记录、手动验收清单、截图或日志。
+验证结果应能用 TDD 或最小验证方案，包括测试记录、手动验收清单、截图或日志。
 
 ## 协作要求
 
 - 不随意删除用户已有文档和内容。
 - 修改已有文件前先理解当前结构。
-- 遇到需求冲突时，以课程 MVP 要求和当前 SDD 文档为准。
-- 后续实现应持续对齐 `docs/idea.md`、`docs/plan.md`、`docs/fitness_coach_mvp_spec.md` 和课程要求文档。
+- 遇到需求冲突时，以git worktree的代码实际状态和最新的开发文档为主。
+- 后续实现应持续对齐 `docs/idea.md`、`docs/plan.md`、`docs/fitness_coach_mvp_spec.md` 和要求文档。
