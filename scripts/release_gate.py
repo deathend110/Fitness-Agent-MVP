@@ -134,14 +134,27 @@ def run_stage(stage: dict, repo_root: Path, report_dir: Path) -> dict:
     normalized_report_dir = Path(report_dir)
     normalized_report_dir.mkdir(parents=True, exist_ok=True)
 
-    if stage["id"] == "real-provider-smoke":
-        ensure_real_provider_env()
-
     started_at = time.time()
     stage_log_path = normalized_report_dir / f"{stage['id']}.log"
     last_command = stage["commands"][-1] if stage["commands"] else ""
 
     with stage_log_path.open("w", encoding="utf-8") as handle:
+        if stage["id"] == "real-provider-smoke":
+            try:
+                ensure_real_provider_env()
+            except SystemExit as exc:
+                error_message = str(exc)
+                # 真实 provider 缺配置时要按阶段失败落盘，避免 summary 保留上一次结果。
+                handle.write(error_message + "\n")
+                return {
+                    "id": stage["id"],
+                    "label": stage["label"],
+                    "status": "failed",
+                    "duration_seconds": round(time.time() - started_at, 2),
+                    "command": last_command,
+                    "error": error_message,
+                }
+
         for command in stage["commands"]:
             completed = subprocess.run(
                 command,

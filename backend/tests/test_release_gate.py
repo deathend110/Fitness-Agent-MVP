@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -186,3 +187,51 @@ def test_run_stage_writes_log_even_when_process_output_is_missing(monkeypatch, t
     assert result["status"] == "passed"
     assert log_path.exists()
     assert "$ echo noop" in log_path.read_text(encoding="utf-8")
+
+
+def test_real_provider_stage_missing_env_returns_structured_failure_and_updates_summary(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    real_provider_stage = next(
+        stage for stage in build_release_gate_stages() if stage["id"] == "real-provider-smoke"
+    )
+    report_dir = tmp_path / "tests" / "reports" / "release-gate"
+
+    for key in REAL_PROVIDER_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+    stage_result = run_stage(real_provider_stage, tmp_path, report_dir)
+
+    assert stage_result["status"] == "failed"
+    assert stage_result["command"] == "uv run python tests/e2e/coach_real_provider_smoke.py"
+    assert "BACKEND_HOST" in stage_result["error"]
+    assert "MODEL_PROVIDER_CONFIG_PATH" in stage_result["error"]
+
+    stage_log = report_dir / "real-provider-smoke.log"
+    assert stage_log.exists()
+    assert "真实 provider 冒烟缺少环境变量" in stage_log.read_text(encoding="utf-8")
+
+    env_bootstrap_stage = build_release_gate_stages()[0]
+    monkeypatch.setattr(
+        "scripts.release_gate.build_release_gate_stages",
+        lambda: [env_bootstrap_stage, real_provider_stage],
+    )
+
+    def fake_run(command: str, cwd: Path, shell: bool, capture_output: bool) -> SimpleNamespace:
+        assert command in env_bootstrap_stage["commands"]
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    monkeypatch.setattr("scripts.release_gate.subprocess.run", fake_run)
+    monkeypatch.setattr("scripts.release_gate.__file__", str(tmp_path / "scripts" / "release_gate.py"))
+
+    exit_code = main(["run-all"])
+
+    assert exit_code == 1
+
+    summary_payload = json.loads((report_dir / "summary.json").read_text(encoding="utf-8"))
+    failed_stage = summary_payload["stages"][-1]
+    assert failed_stage["id"] == "real-provider-smoke"
+    assert failed_stage["status"] == "failed"
+    assert failed_stage["command"] == "uv run python tests/e2e/coach_real_provider_smoke.py"
+    assert "BACKEND_PORT" in failed_stage["error"]
